@@ -8268,3 +8268,109 @@ fn unicode_adjacency_pitch_matches_emitted_ink() -> Result<(), String> {
     );
     Ok(())
 }
+
+#[test]
+fn bilingual_punctuation_stays_with_neighbor_when_long_words_wrap()
+    -> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 32_000, height: 36_000,
+    };
+    for (text, expected) in [
+        ("abcde¿fg", ["abcde", "¿fg"]),
+        ("abcde¡fg", ["abcde", "¡fg"]),
+        ("abcdef?g", ["abcde", "f?g"]),
+        ("abcdef!g", ["abcde", "f!g"]),
+        ("abcdef.!", ["abcde", "f.!"]),
+    ] {
+        for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+            let source = FlowSource::new(format, text)?;
+            let (runs, marks, pages) = super::layout_flow_with_region(
+                &source, &paper, None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            let actual = runs.iter().map(|run| run.text.as_str())
+                .collect::<Vec<_>>();
+            if actual != expected || !marks.is_empty() || pages != 1 {
+                return Err(format!(
+                    "{format:?} punctuation wrap for {text:?}: {actual:?}"
+                ));
+            }
+            for run in &runs {
+                if run.origin_um.0 != region.left + 2_500
+                    || run.origin_um.1 < region.top + 2_500
+                    || run.origin_um.1 >= region.top + region.height
+                {
+                    return Err(format!(
+                        "punctuation wrap escaped region: {run:?}"
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn seeded_bilingual_long_words_keep_punctuation_inside_physical_rows()
+    -> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let mut seed = 0x9b7e_35d1u32;
+    for sample in 0..512usize {
+        seed = seed.wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223);
+        let prefix = 3usize + usize::try_from(seed % 19)
+            .map_err(|error| error.to_string())?;
+        seed = seed.wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223);
+        let suffix = 3usize + usize::try_from(seed % 19)
+            .map_err(|error| error.to_string())?;
+        let (opening, closing) = if seed & 1 == 0 {
+            ("¿", "?")
+        } else {
+            ("¡", "!")
+        };
+        let text = format!(
+            "{}{}n\u{303}{}{}ñ", "a".repeat(prefix), opening,
+            "b".repeat(suffix), closing,
+        );
+        let region = super::FlowRegion {
+            left: 30_000, top: 40_000,
+            width: 32_000 + u32::try_from(sample % 4)
+                .map_err(|error| error.to_string())? * 3_000,
+            height: 36_000,
+        };
+        for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+            let source = FlowSource::new(format, &text)?;
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &source, &paper, None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            let reconstructed = rows.iter().map(|row| row.text.as_str())
+                .collect::<String>();
+            if reconstructed != text || !marks.is_empty()
+                || pages == 0 || rows.len() < 2 {
+                return Err(format!(
+                    "sample {sample} lost Unicode text on {format:?}: {rows:?}"
+                ));
+            }
+            for row in &rows {
+                if row.text.ends_with(opening)
+                    || row.text.starts_with(closing)
+                    || row.page > pages
+                    || row.origin_um.0 != region.left + 2_500
+                    || row.origin_um.1 < region.top + 2_500
+                    || row.origin_um.1 >= region.top + region.height {
+                    return Err(format!(
+                        "sample {sample} orphaned punctuation: {row:?}"
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}

@@ -9076,6 +9076,109 @@ fn flow_wraps_long_unicode_words_by_exact_grapheme_and_preserves_ink() {
 }
 
 #[test]
+fn bilingual_punctuation_wrapping_matches_direct_native_pdf_and_png_ink() {
+    let paper = NotebookProfile::default();
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 32_000, height: 36_000,
+    };
+    let glyphs = ["a", "b", "c", "d", "e", "f", "g", "¿", "¡",
+        "?", "!", ".", "ñ", "n\u{303}"];
+    for (format, text) in [
+        (FlowFormat::Plain, "abcde¿n\u{303}g"),
+        (FlowFormat::Markdown, "abcdef?ñ"),
+        (FlowFormat::Plain, "abcde¡fg"),
+        (FlowFormat::Markdown, "abcdef.!"),
+    ] {
+        let source = FlowSource::new(format, text)
+            .expect("bilingual source admitted");
+        let (rows, ornaments, pages) = layout_flow_with_region(
+            &source, &paper, None, HeadingDecoration::default(),
+            Some(region),
+        ).expect("bounded Unicode line breaking");
+        assert_eq!(pages, 1);
+        assert!(ornaments.is_empty());
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows.iter().map(|row| row.text.as_str())
+            .collect::<String>(), text, "exact source ink retained");
+        if text.contains("n\u{303}") {
+            assert!(rows.iter().any(|row| row.text.contains("n\u{303}")),
+                "decomposed accent cannot break between physical rows");
+        }
+        for export_format in ["pdf", "png"] {
+            let mut baseline = args(&[
+                "--printed-sheet", "true", "--export-paper", export_format,
+            ]);
+            if export_format == "png" {
+                baseline.extend(args(&["--dpi", "72"]));
+            }
+            for glyph in glyphs {
+                baseline.extend(args(&[
+                    "--glyph-stroke", glyph, "500", "500", "1800",
+                    "2800", "250", "#204060",
+                ]));
+            }
+            let mut flowing = baseline.clone();
+            flowing.extend(args(&[
+                if format == FlowFormat::Plain {
+                    "--flow-text"
+                } else {
+                    "--flow-markdown"
+                },
+                text,
+                "--flow-region", "30000", "40000", "32000", "36000",
+            ]));
+            let mut direct = baseline;
+            for row in &rows {
+                direct.extend(args(&[
+                    "--place-text", &row.page.to_string(),
+                    &row.origin_um.0.to_string(),
+                    &row.origin_um.1.to_string(), &row.text,
+                ]));
+            }
+            let actual = execute_notebook(&flowing)
+                .expect("real bilingual flow export").expect("physical bytes");
+            let expected = execute_notebook(&direct)
+                .expect("independent direct ink export")
+                .expect("physical bytes");
+            assert_eq!(actual, expected, "{export_format} exact ink parity");
+            assert_eq!(actual, execute_notebook(&flowing)
+                .expect("deterministic replay").expect("physical bytes"));
+        }
+    }
+}
+
+#[test]
+fn bilingual_punctuation_flow_refuses_missing_ink_before_replacing_exports() {
+    for format in ["pdf", "png"] {
+        let output = test_path().with_extension(format);
+        let name = output.to_str().expect("owned export path");
+        fs::write(&output, b"preserve previously accepted page")
+            .expect("selected output sentinel");
+        let mut command = args(&[
+            "--printed-sheet", "true", "--export-paper", format,
+            "--flow-text", "abcde¿fg",
+            "--flow-region", "30000", "40000", "32000", "36000",
+        ]);
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        for glyph in ["a", "b", "c", "d", "e", "f", "g"] {
+            command.extend(args(&[
+                "--glyph-stroke", glyph, "500", "500", "1800", "2800",
+                "250", "#204060",
+            ]));
+        }
+        command.extend(args(&["--output", name, "--replace"]));
+        let error = execute_notebook(&command)
+            .expect_err("missing inverted punctuation cannot invent ink");
+        assert!(error.contains("U+00BF"), "{error}");
+        assert_eq!(fs::read(&output).expect("target unchanged"),
+            b"preserve previously accepted page");
+        fs::remove_file(output).expect("remove test-owned target");
+    }
+}
+
+#[test]
 fn flow_refuses_overflow_missing_shapes_and_mutation_before_commit() {
     let target = test_path().with_extension("pdf");
     let filename = target.to_str().expect("owned target");

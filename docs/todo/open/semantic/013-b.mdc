@@ -188,6 +188,35 @@ or calibrated pen-path model. It does not add a browser ruler editor, change
 the shared page-profile schema, implement bilingual line breaking or supply
 missing-glyph fallbacks. The P2-013 end-to-end criterion remains open.
 
+## English/Spanish punctuation ties for long words (partial) — 2026-11-13
+
+The native `atrament-profiles notebook` plain/Markdown flow compositor now
+keeps Spanish `¿`/`¡` openers with their following exact Unicode grapheme
+and common closing punctuation with its preceding grapheme when a long
+unspaced word would otherwise wrap through those pairs. Consecutive closing
+marks form the same measured group. The physical row's actual pen-contour,
+384-byte and 96-grapheme limits still win; when an indivisible group cannot
+fit the selected row or a narrowed continuation, the compositor reuses the
+previous individual-grapheme fallback rather than rejecting otherwise
+printable source text. Ordinary ASCII-space word breaks and authored
+NFC/NFD glyph identities are unchanged.
+
+A red-before/green-after native test proves physical boundary corrections
+in plain and Markdown flow. A deterministic 512-sample bilingual oracle
+checks exact source reconstruction and unstranded opening/closing marks
+across different physical widths, including decomposed `n` plus tilde.
+Real native PDF and transparent PNG exports of selected text compare
+byte-for-byte to independently placed authored pen strokes; missing
+inverted-question ink refuses before replacing either export type. The
+full source-flow test module also passes, including narrow ordered-list
+cases that initially exposed a regression in strict group admission.
+
+This is bounded visual punctuation protection within overflowing words,
+not dictionary hyphenation, locale identification, semantic language tags,
+full Unicode line-breaking conformance or persisted notebook flow. Exact
+unsupported glyphs still need authored shapes or an explicit chosen
+fallback. The broader P2-013 acceptance criterion remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

@@ -1504,14 +1504,19 @@ impl Layout<'_> {
                 &mut row, &mut width, &mut count, pending_spaces, cap,
             )?;
             pending_spaces = 0;
-            for (grapheme, advance, slot) in glyphs {
+            // Wrap overlong words only between measured ink clusters.
+            let mut glyph_index = 0usize;
+            while glyph_index < glyphs.len() {
+                let mut cluster = next_punctuation_cluster(
+                    &glyphs, glyph_index, cap,
+                )?;
                 if !row.is_empty()
-                    && (width.checked_add(slot).is_none_or(|end| end > cap)
-                        || count == MAX_LINE_GRAPHEMES
-                        || row
-                            .len()
-                            .checked_add(grapheme.len())
-                            .is_none_or(|length| length > 384))
+                    && (width.checked_add(cluster.extent_um)
+                        .is_none_or(|end| end > cap)
+                        || count.checked_add(cluster.count)
+                            .is_none_or(|end| end > MAX_LINE_GRAPHEMES)
+                        || row.len().checked_add(cluster.bytes)
+                            .is_none_or(|end| end > 384))
                 {
                     if matches!(style, LineStyle::Heading(_)) {
                         return Err("heading exceeds one-line fixed region"
@@ -1526,25 +1531,18 @@ impl Layout<'_> {
                     )?;
                     first = false;
                     (width, row_ink_extent, count) = (0, 0, 0);
+                    // A hanging indent may reduce this row's space.
+                    cluster = next_punctuation_cluster(
+                        &glyphs, glyph_index, cap,
+                    )?;
                 }
-                // A numbered item narrows its continuation to the
-                // measured hanging indent. Recheck against that new cap
-                // after a wrap, before accepting the next authored shape.
-                if slot > cap {
-                    return Err(
-                        "glyph exceeds horizontal printable region".into()
-                    );
-                }
-                if grapheme.len() > 384 {
-                    return Err("flow grapheme exceeds line byte limit".into());
-                }
-                row_ink_extent = row_ink_extent.max(width.checked_add(slot)
-                    .ok_or("flow glyph contour overflow")?);
-                row.push_str(grapheme);
-                width = width
-                    .checked_add(advance)
-                    .ok_or("flow glyph advance overflow")?;
-                count = count.checked_add(1).ok_or("flow line too long")?;
+                let selected = glyphs.get(glyph_index..cluster.end)
+                    .ok_or("flow punctuation selection outside word")?;
+                append_cluster_ink(
+                    &mut row, &mut width, &mut row_ink_extent,
+                    &mut count, cap, selected,
+                )?;
+                glyph_index = cluster.end;
             }
         }
         self.write_last_row(row, start_x, width, style, first, protect_body)?;
@@ -1977,6 +1975,13 @@ impl Layout<'_> {
 
 type MeasuredGrapheme<'text> = (&'text str, u32, u32);
 
+struct PunctuationCluster {
+    bytes: usize,
+    count: usize,
+    end: usize,
+    extent_um: u32,
+}
+
 fn append_spaces(
     row: &mut String,
     width: &mut u32,
@@ -2127,6 +2132,81 @@ fn measured_ordered_label<'text>(
         );
     }
     Ok((indent, marker))
+}
+
+// An indivisible cluster is advisory. If a real row cannot hold the
+// joined ink, fall back to the original single-grapheme layout rather
+// than newly refusing printable source text. Never invent glyph shapes.
+fn append_cluster_ink(
+    row: &mut String, advance_um: &mut u32,
+    row_ink_extent: &mut u32, count: &mut usize,
+    cap: u32, glyphs: &[MeasuredGrapheme<'_>],
+) -> Result<(), String> {
+    for &(grapheme, advance, slot) in glyphs {
+        if slot > cap {
+            return Err("glyph exceeds horizontal printable region".into());
+        }
+        if grapheme.len() > 384 {
+            return Err("flow grapheme exceeds line byte limit".into());
+        }
+        *row_ink_extent = (*row_ink_extent).max(advance_um.checked_add(slot)
+            .ok_or("flow glyph contour overflow")?);
+        row.push_str(grapheme);
+        *advance_um = advance_um.checked_add(advance)
+            .ok_or("flow glyph advance overflow")?;
+        *count = count.checked_add(1).ok_or("flow line too long")?;
+    }
+    Ok(())
+}
+
+fn next_punctuation_cluster(
+    glyphs: &[MeasuredGrapheme<'_>], from: usize, cap: u32,
+) -> Result<PunctuationCluster, String> {
+    let &(first, _, first_extent) = glyphs.get(from)
+        .ok_or("flow punctuation start outside word")?;
+    let mut end = from.checked_add(1)
+        .ok_or("flow punctuation offset overflow")?;
+    let mut previous = first;
+    while let Some(&(next, _, _)) = glyphs.get(end) {
+        if !punctuation_pair_stays_together(previous, next) {
+            break;
+        }
+        previous = next;
+        end = end.checked_add(1)
+            .ok_or("flow punctuation offset overflow")?;
+    }
+    let selected = glyphs.get(from..end)
+        .ok_or("flow punctuation cluster boundary refused")?;
+    let (mut advance_um, mut extent_um, mut bytes) =
+        (0u32, 0u32, 0usize);
+    for &(grapheme, advance, slot) in selected {
+        extent_um = extent_um.max(advance_um.checked_add(slot)
+            .ok_or("flow punctuation contour overflow")?);
+        advance_um = advance_um.checked_add(advance)
+            .ok_or("flow punctuation advance overflow")?;
+        bytes = bytes.checked_add(grapheme.len())
+            .ok_or("flow punctuation byte overflow")?;
+    }
+    if selected.len() > 1 && (extent_um > cap
+        || selected.len() > MAX_LINE_GRAPHEMES || bytes > 384) {
+        return Ok(PunctuationCluster {
+            bytes: first.len(), count: 1, end: from.checked_add(1)
+                .ok_or("flow punctuation fallback offset overflow")?,
+            extent_um: first_extent,
+        });
+    }
+    Ok(PunctuationCluster {
+        bytes, count: selected.len(), end, extent_um,
+    })
+}
+
+// Prevent bad visual breaks inside overlong English/Spanish words. Exact
+// Unicode grapheme comparison does not normalize authored NFC/NFD ink.
+// Other punctuation stays ordinary text and ASCII spaces remain breakable.
+fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
+    matches!(previous, "¿" | "¡")
+        || matches!(next, "?" | "!" | "." | "," | ";" | ":"
+            | ")" | "]" | "}" | "»")
 }
 
 // Flowing prose reserves a preceding compressed glyph's nominal ink contour.
