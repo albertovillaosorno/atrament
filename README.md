@@ -628,6 +628,28 @@ output; combined insets must leave at least 4 mm for a prose row. Invalid
 or duplicate settings fail in source-independent preflight; failed physical
 admission leaves a selected existing output intact.
 
+For a little more space to the right of Markdown list labels and quote
+rules, select `--flow-list-quote-inset-um 6000`. This adds 6 mm to the
+existing 6 mm offset of each bullet, ordered item, checkbox task and
+one-level blockquote, including their wrapped continuation rows.
+The actual bullet dashes, checkbox outlines and vertical quote rules
+move together with the authored text; numbered labels remain handwritten.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-list-quote-inset-um 6000 \
+  --export-paper pdf --output indented-lists.pdf
+```
+
+The value is an additional 0–12,000 micrometres; default zero preserves
+the previous exact physical output. This export-only option requires
+Markdown flow and does not move headings, normal prose, thematic rules,
+fenced code, or literal indented rows. It may be combined with the
+independent prose left/right insets, and all selected sheet/region
+constraints still apply. A narrow region that cannot hold 4 mm of
+list/quote text refuses before replacing an existing file.
+
 The CLI continues content on the next physical page when needed;
 `--pages` and `--png-page` still refuse impossible selections. Invalid,
 overlapping-margins or too-small areas refuse before any selected file

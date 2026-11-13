@@ -4297,3 +4297,18 @@ physical inset wrapping and page turns, actual deterministic PDF/PNG/ink
 TSV output, early CLI/typed rejection and atomic existing-PDF protection.
 No persisted paragraph style, new nested Markdown semantics or complete
 saved-notebook flow is implied by this optional export-only constraint.
+
+## Selected Markdown list and quote inset (partial) — 2026-11-12
+
+The native CLI now accepts `--flow-list-quote-inset-um 0..12000`,
+adding physical indentation to one-level bullet, numbered, checkbox
+task and quoted Markdown rows. Their synthetic ornaments move with the
+authored text, including continuation rows on subsequent pages.
+The omitted or explicit zero setting preserves previous export bytes.
+
+Four native tests cover unchanged prose/title/code anchors, measured
+structural wrapping across pages, real deterministic PDF/transparent
+PNG/versioned ink TSV exports, typed bounds, preflight and atomic
+existing-file preservation on too-narrow fixed regions. This does not
+add nested Markdown lists, saved semantic block styles or a completed
+notebook-to-handwriting export journey.

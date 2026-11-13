@@ -185,6 +185,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--flow-paragraph-gap-um GAP_UM (0..12000, Markdown only)] \
     [--flow-body-inset-um INSET_UM (0..12000, Markdown only)] \
     [--flow-body-right-inset-um INSET_UM (0..12000, Markdown only)] \
+    [--flow-list-quote-inset-um INSET_UM (0..12000, Markdown only)] \
     [--handwriting-profile ink.json (requires glyph shapes)] \
     [--output FILE [--replace]]\n\
     Flow requires --export-paper pdf|png or --emit-ink-file; text is not \
@@ -227,7 +228,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     from 0..12 mm; default is 4 mm. Plain rows are unchanged. \
     --flow-body-inset-um shifts Markdown prose right 0..12 mm; \
     --flow-body-right-inset-um reserves 0..12 mm to its right. \
-    Titles, list markers, quotes and literal code stay unchanged; \
+    Titles and literal code stay unchanged by those prose insets; \
+    --flow-list-quote-inset-um shifts list/quote ink 0..12 mm right. \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
     PDF page count includes the last manual ink page, with or without \
@@ -392,6 +394,15 @@ impl NotebookFlagPreflight {
         self.unique(option, &diagnostic)
     }
 
+    fn select_list_quote_inset(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<usize, String> {
+        self.unique("--flow-list-quote-inset-um",
+            "--flow-list-quote-inset-um may appear only once")?;
+        let _inset = parse_notebook_flow_list_quote_inset(iter)?;
+        Ok(0)
+    }
+
     fn select_option(
         &mut self, option: &str, iter: &mut Iter<'_, String>,
     ) -> Result<Option<usize>, String> {
@@ -478,6 +489,8 @@ impl NotebookFlagPreflight {
                     iter, option == "--flow-body-right-inset-um")?;
                 0
             }
+            "--flow-list-quote-inset-um" =>
+                self.select_list_quote_inset(iter)?,
             "--flow-pitch-um" => {
                 self.unique(option, "--flow-pitch-um may appear only once")?;
                 let _pitch = parse_notebook_flow_pitch(iter)?;
@@ -548,6 +561,8 @@ impl NotebookFlagPreflight {
                     .then_some(0),
                 body_inset: has("--flow-body-inset-um").then_some(0),
                 body_right_inset: has("--flow-body-right-inset-um")
+                    .then_some(0),
+                list_quote_inset: has("--flow-list-quote-inset-um")
                     .then_some(0),
             }, self.heading, self.export_format,
         )?;
@@ -2092,10 +2107,13 @@ fn parse_notebook_flow_body_inset(
     Ok(inset)
 }
 
-fn select_body_inset(
+fn select_flow_inset(
     iter: &mut Iter<'_, String>, typography: &mut FlowTypography,
     option: &str,
 ) -> Result<(), String> {
+    if option == "--flow-list-quote-inset-um" {
+        return select_list_quote_inset(iter, typography);
+    }
     let right = option == "--flow-body-right-inset-um";
     let selected = if right { &mut typography.body_right_inset }
         else { &mut typography.body_inset };
@@ -2103,6 +2121,34 @@ fn select_body_inset(
         return Err(format!("{option} may appear only once"));
     }
     *selected = Some(parse_notebook_flow_body_inset(iter, right)?);
+    Ok(())
+}
+
+fn parse_notebook_flow_list_quote_inset(
+    iter: &mut Iter<'_, String>,
+) -> Result<u32, String> {
+    let raw = iter.next()
+        .ok_or("--flow-list-quote-inset-um requires 0..12000 um")?;
+    if raw.is_empty() || !raw.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err("flow list/quote inset must be within 0..12000 um".into());
+    }
+    let inset = raw.parse::<u32>()
+        .map_err(|_error| "flow list/quote inset must be within 0..12000 um")?;
+    if inset > 12_000 {
+        return Err("flow list/quote inset must be within 0..12000 um".into());
+    }
+    Ok(inset)
+}
+
+fn select_list_quote_inset(
+    iter: &mut Iter<'_, String>, typography: &mut FlowTypography,
+) -> Result<(), String> {
+    if typography.list_quote_inset.is_some() {
+        return Err("--flow-list-quote-inset-um may appear only once".into());
+    }
+    typography.list_quote_inset = Some(
+        parse_notebook_flow_list_quote_inset(iter)?,
+    );
     Ok(())
 }
 
@@ -2173,6 +2219,12 @@ fn validate_notebook_flow_flag_compatibility(
         && flow_format != Some(FlowFormat::Markdown) {
         return Err(
             "--flow-body-right-inset-um requires a Markdown flow".into()
+        );
+    }
+    if typography.list_quote_inset.is_some()
+        && flow_format != Some(FlowFormat::Markdown) {
+        return Err(
+            "--flow-list-quote-inset-um requires a Markdown flow".into()
         );
     }
     heading.validate().map_err(str::to_owned)?;
@@ -2548,8 +2600,7 @@ fn preflight_notebook_ink_requirements(
 fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     preflight_notebook_sources(args)?;
     let mut profile = NotebookProfile::default();
-    let mut inspect = false;
-    let (mut output, mut replace) = (None, false);
+    let (mut inspect, mut output, mut replace) = (false, None, false);
     let (mut export, mut ink) = (NotebookExportOptions::default(), Vec::new());
     let (mut glyphs, mut statistics) = (GlyphOverlay::default(), None);
     let (mut flow, mut flow_region) = (None, None);
@@ -2593,8 +2644,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 &mut iter, &mut flow_typography.pitch)?,
             "--flow-paragraph-gap-um" => select_notebook_flow_paragraph_gap(
                 &mut iter, &mut flow_typography.paragraph_gap)?,
-            "--flow-body-inset-um" | "--flow-body-right-inset-um" =>
-                select_body_inset(&mut iter, &mut flow_typography, option)?,
+            "--flow-body-inset-um" | "--flow-body-right-inset-um"
+            | "--flow-list-quote-inset-um" =>
+                select_flow_inset(&mut iter, &mut flow_typography, option)?,
             "--flow-text" | "--flow-markdown"
             | "--flow-text-file" | "--flow-markdown-file" =>
                 parse_notebook_flow(&mut iter, option, &mut flow,
@@ -2605,9 +2657,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             | "--fallback-glyph" | "--glyph-variation" | "--glyph-word-rise"
             | "--glyph-line-drift" | "--glyph-word-drift" | "--join-text-pair"
             | "--glyph-word-pressure" | "--glyph-word-pigment"
-            | "--glyph-word-slant"
-            | "--glyph-word-width" | "--glyph-word-height"
-            | "--glyph-word-tracking" | "--glyph-word-baseline-step" => {
+            | "--glyph-word-slant" | "--glyph-word-width"
+            | "--glyph-word-height" | "--glyph-word-tracking"
+            | "--glyph-word-baseline-step" => {
                 parse_notebook_export_option(option, &mut iter,
                     &mut export, &mut ink, &mut glyphs, &mut stdin_selected)?;
             }
