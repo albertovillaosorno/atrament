@@ -1036,18 +1036,22 @@ closed-loop entry, closure, translation, path reorder, or short connector can
 be recovered. A destructive geometric starter replacement, exact glyph copy,
 or explicitly composed accent is similarly reversible. The single step stores
 exact native-compatible TSV bytes and the selected stroke index.
+
 Undoing the first stroke can restore an empty
 in-memory draft without exporting an invalid zero-stroke TSV. Redo restores
 the accepted selection, input fields and ink without an automatic download.
 
 Recovery applies only to the exact selected Unicode grapheme, including
 independent NFC/NFD spellings. Rejected edits leave an earlier valid step
-intact; a successful later edit replaces it. A new TSV import or session
+intact; a successful later edit replaces it.
+
+A new TSV import or session
 reset clears the step. Optional one-click lowercase, connected-letter,
 bilingual, punctuation, quotation, math, digit, capital, text-mark and Spanish
 accent fills are also single-step, whole-library transactions; one undo
 restores all the previously authored glyphs and omits every newly filled key.
 The recovery action stays bound to the glyph that was selected for the fill.
+
 This is bounded session authoring, not persistent history or a general
 notebook undo stack. Focused browser tests
 cover the empty-draft boundary, exact Unicode-interleaved path replay,
@@ -1062,6 +1066,7 @@ Undo/redo follows acceptance order across Unicode identities (NFC and NFD
 remain distinct); the user selects the next step's grapheme to recover it.
 One whole-library fill counts as one transaction. An edit after undo truncates
 only the redo tail, and the oldest step is evicted at the eight-step bound.
+
 Identity or refused edits leave history untouched, while an admitted import
 or session reset clears it. Restoring an empty draft is allowed in memory but
 still cannot produce an invalid empty TSV download.
@@ -1085,3 +1090,21 @@ edits through selection-only navigation, empty-draft undo, full redo and
 session reset. Both accepted TSV and download transport remain unchanged.
 This is a session-only navigation aid, not durable notebook history, a
 new glyph schema or completion of joined cursive handwriting.
+
+## Scoped keyboard recovery of authored glyph strokes — 2026-11-13
+
+The bounded eight-step browser recovery now supports Ctrl+Z/Command+Z
+and Ctrl+Y/Ctrl+Shift+Z/Command+Shift+Z when focus is inside the glyph
+editor but outside any text, number, select or contenteditable field.
+Only a next step owned by the exact selected NFC/NFD glyph can be
+recovered. Another glyph, an unfinished pen trace, inactive session,
+unrecognized modifier, repeated key or browser-cancelled event is not
+captured. The section has an explicit keyboard focus target and the
+recovery buttons advertise their shortcuts to assistive technology.
+
+One focused browser regression checks identical native TSV bytes after
+undo/redo across distinct NFC and NFD graphemes, both platform
+modifier conventions, no-event interception for editable fields and
+failed history ownership, and session reset. The export schema, Rust
+page ink and maximum history depth are unchanged; this is editor-only
+keyboard accessibility, not persistent notebook-wide undo.

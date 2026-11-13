@@ -521,7 +521,8 @@
             aria-live="polite">Requires a compatible backend session.</p>
         </section>
 
-        <section class="handwriting-config" aria-labelledby="glyph-title">
+        <section id="glyph-editor-region" class="handwriting-config"
+          aria-labelledby="glyph-title" tabindex="0">
           <div class="section-row compact">
             <div>
               <h3 class="field-label" id="glyph-title">
@@ -1258,10 +1259,13 @@
             <button id="glyph-slant-authored" type="button" disabled>
               Slant all selected glyph strokes (unsaved)
             </button>
-            <button id="glyph-slant-undo" type="button" disabled>
+            <button id="glyph-slant-undo" type="button"
+              aria-keyshortcuts="Control+Z Meta+Z" disabled>
               Undo last glyph transform
             </button>
-            <button id="glyph-slant-redo" type="button" disabled>
+            <button id="glyph-slant-redo" type="button"
+              aria-keyshortcuts="Control+Y Control+Shift+Z Meta+Shift+Z"
+              disabled>
               Redo last glyph transform
             </button>
             <button id="glyph-recovery-undo-select" type="button" disabled>
@@ -1280,7 +1284,11 @@
               next history step to undo or redo it, or use its Select button
               to navigate without changing ink. A new edit after undo
               discards the redo tail; importing a TSV or ending the session
-              clears history. Recovery never downloads or saves a file.</p>
+              clears history. Recovery never downloads or saves a file.
+              While focus is on this section outside editable fields, use
+              Ctrl+Z (or Command+Z) to undo, Ctrl+Y or Ctrl+Shift+Z
+              (Command+Shift+Z on Mac) to redo. A shortcut is ignored when
+              the next step belongs to another exact Unicode glyph.</p>
             <div class="glyph-slant-preview-region">
               <svg id="glyph-slant-preview"
                 class="glyph-stroke-preview glyph-stroke-slant-preview"

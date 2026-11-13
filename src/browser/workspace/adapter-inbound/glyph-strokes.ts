@@ -4053,6 +4053,7 @@ export function createGlyphStrokeEditor(): {
         required<HTMLButtonElement>("glyph-recovery-undo-select");
     const selectRedoGlyph =
         required<HTMLButtonElement>("glyph-recovery-redo-select");
+    const editorRegion = required<HTMLElement>("glyph-editor-region");
     const historyStatus = required<HTMLElement>("glyph-recovery-status");
     const slantPreview = required<SVGSVGElement>("glyph-slant-preview");
     const slantPreviewStatus =
@@ -5817,6 +5818,28 @@ export function createGlyphStrokeEditor(): {
         selectHistoryGlyph("before"));
     selectRedoGlyph.addEventListener("click", () =>
         selectHistoryGlyph("after"));
+    // Limit editor history shortcuts to this region. Typing into an input,
+    // select or editable descendant retains the browser's native undo stack.
+    // Do not capture a shortcut if the next step belongs to another exact
+    // Unicode glyph or if a pen trace is still being drawn.
+    editorRegion.addEventListener("keydown", (event: KeyboardEvent) => {
+        const editableSelector = "input, textarea, select, [contenteditable]";
+        const editableTarget = (event.target as Element | null)
+            ?.closest(editableSelector);
+        if (event.defaultPrevented || event.isComposing || event.repeat
+            || event.altKey || !(event.ctrlKey || event.metaKey)
+            || (event.ctrlKey && event.metaKey)
+            || editableTarget) return;
+        const key = event.key.toLowerCase();
+        const side = key === "z"
+            ? (event.shiftKey ? "after" : "before")
+            : key === "y" && !event.shiftKey ? "after" : null;
+        if (side === null) return;
+        const command = side === "before" ? undoTransform : redoTransform;
+        if (command.disabled) return;
+        event.preventDefault();
+        restoreTransform(side);
+    });
     seedLowercase.addEventListener("click", () => {
         if (!active) return;
         try {

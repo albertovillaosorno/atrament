@@ -471,9 +471,9 @@ function mountEditor() {
         createObjectURL: URL.createObjectURL,
         revokeObjectURL: URL.revokeObjectURL,
     };
-    const ids = ["glyph-character", "glyph-color", "glyph-load",
-        "glyph-add", "glyph-copy-from", "glyph-copy", "glyph-compose",
-        "glyph-selected",
+    const ids = ["glyph-editor-region", "glyph-character",
+        "glyph-color", "glyph-load", "glyph-add", "glyph-copy-from",
+        "glyph-copy", "glyph-compose", "glyph-selected",
         "glyph-form", "glyph-construct", "glyph-seed-lowercase",
         "glyph-seed-connected",
         "glyph-seed-baseline", "glyph-seed-connected-baseline",
@@ -8885,6 +8885,88 @@ test("history navigation finds exact NFC/NFD undo and redo owners",
             assert.equal(goRedo.disabled, true);
             assert.equal(get("recovery-status").textContent,
                 "No active glyph editing session.");
+        } finally {
+            ui.restore();
+        }
+    });
+
+test("scoped history shortcuts preserve native input undo and exact glyphs",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const nfd = "a\u0301";
+            const visit = (key) => {
+                get("character").value = key;
+                get("character").dispatch("input");
+            };
+            const keypress = (key, props = {}) => {
+                let prevented = false;
+                get("editor-region").dispatch("keydown", {
+                    key, ctrlKey: true, metaKey: false, shiftKey: false,
+                    repeat: false, isComposing: false, altKey: false,
+                    defaultPrevented: false,
+                    target: { closest: () => null },
+                    preventDefault: () => { prevented = true; },
+                    ...props,
+                });
+                return prevented;
+            };
+            const saved = async () => {
+                get("save").dispatch("click");
+                return await downloads.at(-1).text();
+            };
+            assert.equal(keypress("z"), false, "inactive editor");
+            editor.start();
+            visit(nfd);
+            get("add").dispatch("click");
+            const first = await saved();
+            visit("á");
+            get("add").dispatch("click");
+            const second = await saved();
+            assert.notEqual(second, first);
+            // Browser input history always wins over app glyph history.
+            assert.equal(keypress("z", {
+                target: { closest: () => ({ tagName: "INPUT" }) },
+            }), false);
+            assert.equal(keypress("z", { altKey: true }), false);
+            assert.equal(keypress("z", { repeat: true }), false);
+            assert.equal(keypress("z", { isComposing: true }), false);
+            assert.equal(keypress("z", { defaultPrevented: true }), false);
+            assert.equal(keypress("z", { metaKey: true }), false,
+                "two simultaneous platform modifiers are ignored");
+            assert.equal(keypress("y", { shiftKey: true }), false);
+            assert.equal(keypress("Z"), true, "uppercase keyboard key works");
+            assert.equal(await saved(), first);
+            assert.equal(keypress("z", { shiftKey: true }), true,
+                "Ctrl+Shift+Z redoes the exact selected NFC key");
+            assert.equal(await saved(), second);
+            assert.equal(keypress("z", { metaKey: true, ctrlKey: false }),
+                true, "Mac Command+Z uses the same recovery path");
+            assert.equal(await saved(), first);
+            assert.equal(keypress("y"), true, "Ctrl+Y redoes");
+            assert.equal(await saved(), second);
+            assert.equal(keypress("z"), true);
+            visit(nfd);
+            assert.equal(keypress("y"), false,
+                "next redo belongs to NFC, not matching visible NFD");
+            assert.equal(keypress("z"), true, "NFD has its own history step");
+            assert.equal(get("preview").children.length, 0);
+            assert.equal(keypress("z"), false, "no more undo history");
+            assert.equal(keypress("z", { shiftKey: true }), true,
+                "NFD restored by the same shortcut");
+            assert.equal(await saved(), first);
+            assert.equal(keypress("z", { metaKey: true, ctrlKey: false,
+                shiftKey: true }), false,
+                "Mac redo cannot skip the current NFC owner");
+            get("recovery-redo-select").dispatch("click");
+            assert.equal(get("character").value, "á");
+            assert.equal(keypress("z", { metaKey: true, ctrlKey: false,
+                shiftKey: true }), true);
+            assert.equal(await saved(), second);
+            editor.reset();
+            assert.equal(keypress("z"), false);
+            assert.equal(keypress("y"), false);
         } finally {
             ui.restore();
         }
