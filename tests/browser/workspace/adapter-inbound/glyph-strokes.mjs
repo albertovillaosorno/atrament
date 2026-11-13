@@ -14,6 +14,7 @@ const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
     reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath, joinNextCandidatePath,
+    joinNextCandidatePathCurved,
     translateCandidatePath, styleCandidatePath, scaleCandidatePath,
     reflectCandidatePath, rotateCandidatePath, removeCandidatePath } =
     await import(new URL(
@@ -605,7 +606,8 @@ function mountEditor() {
         "glyph-merge", "glyph-split-exact",
         "glyph-clear", "glyph-reverse",
         "glyph-reverse-path", "glyph-path-start", "glyph-path-close",
-        "glyph-path-join-next",
+        "glyph-path-join-next", "glyph-path-join-curved",
+        "glyph-path-bend-x", "glyph-path-bend-y",
         "glyph-path-earlier", "glyph-path-later",
         "glyph-path-dx", "glyph-path-dy", "glyph-path-translate",
         "glyph-path-style", "glyph-path-remove", "glyph-path-scale",
@@ -1717,6 +1719,115 @@ test("join-next preserves neighboring same-pen paths and Unicode", () => {
         /4096 authored strokes/);
     assert.equal(encodeGlyphLibrary(atLimit).startsWith(originalBytes.slice(
         0, originalBytes.indexOf("\n") + 1)), true);
+});
+
+test("curved pen joins sample quadratic coordinates and refuse cliffs", () => {
+    const key = "n\u0303";
+    const ink = (grapheme, x1, y1, x2, y2, width = 250) =>
+        ({ grapheme, x1, y1, x2, y2, width, color: "#243647" });
+    const a = ink(key, 500, 700, 850, 750);
+    const b = ink(key, 850, 750, 1100, 850);
+    const c = ink(key, 1350, 900, 1600, 1050);
+    const other = ink("ñ", 600, 700, 650, 1000);
+    const original = [a, other, b, c];
+    const bytes = encodeGlyphLibrary(original);
+    const changed = joinNextCandidatePathCurved(original, key, 2, 0, -200);
+    assert.deepEqual(changed.strokes, [a, other, b,
+        ink(key, 1100, 850, 1163, 788),
+        ink(key, 1163, 788, 1225, 775),
+        ink(key, 1225, 775, 1288, 813),
+        ink(key, 1288, 813, 1350, 900), c]);
+    assert.equal(changed.selectedIndex, 3);
+    assert.equal(candidatePenPaths(changed.strokes, key).length, 1);
+    assert.equal(encodeGlyphLibrary(original), bytes);
+    assert.equal(encodeGlyphLibrary(parseGlyphLibrary(
+        encodeGlyphLibrary(changed.strokes))),
+    encodeGlyphLibrary(changed.strokes));
+    for (const [selected, bendX, bendY] of [
+        [2, 0, 0], [2, 601, 0], [2, 0, -601], [2, 0.25, 50],
+        [2, NaN, 50], [2, 250, 50], [3, 0, -200], [-1, 0, -200],
+    ]) {
+        assert.throws(() => joinNextCandidatePathCurved(
+            original, key, selected, bendX, bendY));
+        assert.equal(encodeGlyphLibrary(original), bytes);
+    }
+    assert.throws(() => joinNextCandidatePathCurved([
+        a, b, { ...c, width: 300 },
+    ], key, 0, 0, -200), /matching pen/);
+    assert.throws(() => joinNextCandidatePathCurved([
+        a, b, { ...c, x1: 3400 },
+    ], key, 0, 0, -200), /1200/);
+    const edge = [ink(key, 250, 700, 125, 850),
+        ink(key, 500, 850, 650, 950)];
+    assert.throws(() => joinNextCandidatePathCurved(
+        edge, key, 0, -600, 50), /clips glyph cell/);
+    const near = [a, b, c,
+        ...Array.from({ length: 4089 }, () => other)];
+    assert.equal(near.length, 4092);
+    const filled = joinNextCandidatePathCurved(
+        near, key, 0, 0, -200);
+    assert.equal(filled.strokes.length, 4096,
+        "four new pieces exactly fill the native stroke budget");
+    assert.equal(candidatePenPaths(filled.strokes, key).length, 1);
+    const full = [...near, other];
+    assert.equal(full.length, 4093);
+    assert.throws(() => joinNextCandidatePathCurved(
+        full, key, 0, 0, -200), /4096 authored strokes/);
+});
+
+test("curved path UI records one undoable deliberate TSV change", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        const key = "o\u0301";
+        const ink = (grapheme, x1, y1, x2, y2) =>
+            ({ grapheme, x1, y1, x2, y2, width: 250,
+                color: "#243647" });
+        const source = [ink(key, 500, 700, 850, 750),
+            ink("ó", 600, 700, 650, 1000),
+            ink(key, 850, 750, 1100, 850),
+            ink(key, 1350, 900, 1600, 1050)];
+        const original = encodeGlyphLibrary(source);
+        const bytes = new TextEncoder().encode(original);
+        assert.equal(get("path-join-curved").disabled, true);
+        editor.start();
+        get("load").files = [{ size: bytes.length,
+            arrayBuffer: async () => bytes.buffer }];
+        await get("load").dispatch("change");
+        get("character").value = key;
+        get("character").dispatch("input");
+        get("selected").value = "2";
+        get("selected").dispatch("change");
+        get("path-bend-x").value = "601";
+        get("path-bend-y").value = "-200";
+        assert.equal(get("path-join-curved").disabled, false);
+        get("path-join-curved").dispatch("click");
+        assert.match(get("status").textContent, /outside native bounds/);
+        assert.equal(downloads.length, 0);
+        assert.match(get("paths").textContent, /2 candidate pen paths/);
+        assert.equal(get("slant-undo").disabled, true,
+            "invalid bends do not record history");
+        get("path-bend-x").value = "0";
+        get("path-join-curved").dispatch("click");
+        assert.match(get("status").textContent, /four curved segments/);
+        assert.equal(get("selected").value, "3");
+        assert.match(get("paths").textContent, /1 candidate pen path/);
+        assert.equal(downloads.length, 0);
+        const joined = encodeGlyphLibrary(joinNextCandidatePathCurved(
+            source, key, 2, 0, -200).strokes);
+        get("save").dispatch("click");
+        assert.equal(await downloads[0].text(), joined);
+        get("slant-undo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads[1].text(), original);
+        get("slant-redo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads[2].text(), joined);
+        editor.reset();
+        assert.equal(get("path-join-curved").disabled, true);
+    } finally {
+        ui.restore();
+    }
 });
 
 test("join-next browser action is one undoable, explicit TSV change",

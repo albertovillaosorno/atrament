@@ -1544,6 +1544,21 @@
               the next path's first point only with matching width/color,
               1200 µm or less separation and full pen clearance. The
               resulting single path is one undoable edit.</p>
+            <label>Curved join horizontal bend from midpoint (µm)
+              <input id="glyph-path-bend-x" type="number" min="-600"
+                max="600" step="10" value="0" disabled>
+            </label>
+            <label>Curved join vertical bend from midpoint (µm)
+              <input id="glyph-path-bend-y" type="number" min="-600"
+                max="600" step="10" value="-200" disabled>
+            </label>
+            <button id="glyph-path-join-curved" type="button" disabled>
+              Join following pen path with four curved segments
+            </button>
+            <p class="field-help">The explicit bend changes a quadratic
+              pen gesture; four rounded strokes join the same directed
+              endpoints. Full pen clearance and a nonzero visible bend are
+              required. No new curve type is saved in TSV v1.</p>
             <label>Selected path horizontal shift (µm)
               <input id="glyph-path-dx" type="number" min="-3500"
                 max="3500" step="10" value="0" disabled>

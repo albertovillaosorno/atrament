@@ -4777,6 +4777,152 @@ fn native_join_next_path_preserves_unicode_and_native_pdf_png_ink() {
 }
 
 #[test]
+fn native_curved_join_replays_exact_unicode_pdf_png_and_rejects_bad_ink() {
+    let nfd = "n\u{303}";
+    let source = test_path().with_extension("tsv");
+    let saved = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("original library path");
+    let saved_name = saved.to_str().expect("saved library path");
+    let geometry = args(&[
+        "--glyph-stroke", nfd, "500", "700", "850", "750",
+        "250", "#243647",
+        "--glyph-stroke", "ñ", "600", "700", "650", "1000",
+        "251", "#112233",
+        "--glyph-stroke", nfd, "850", "750", "1100", "850",
+        "250", "#243647",
+        "--glyph-stroke", nfd, "1350", "900", "1600", "1050",
+        "250", "#243647",
+    ]);
+    let original = execute_glyph_library(&geometry)
+        .expect("original ink").expect("original bytes");
+    fs::write(&source, &original).expect("original source file");
+    let edited = execute_glyph_library(&args(&[
+        "--profile", source_name, "--join-next-path-curved",
+        nfd, "1", "0", "-200",
+    ])).expect("accepted curved ink").expect("edited TSV");
+    let expected = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "ñ\t500\t700\t850\t750\t250\t#243647\n",
+        "ñ\t600\t700\t650\t1000\t251\t#112233\n",
+        "ñ\t850\t750\t1100\t850\t250\t#243647\n",
+        "ñ\t1100\t850\t1163\t788\t250\t#243647\n",
+        "ñ\t1163\t788\t1225\t775\t250\t#243647\n",
+        "ñ\t1225\t775\t1288\t813\t250\t#243647\n",
+        "ñ\t1288\t813\t1350\t900\t250\t#243647\n",
+        "ñ\t1350\t900\t1600\t1050\t250\t#243647\n",
+    );
+    assert_eq!(edited, expected.as_bytes());
+    assert_eq!(execute_glyph_library(&args(&[
+        "--profile", source_name, "--join-next-path-curved",
+        nfd, "1", "0", "-200", "--output", saved_name,
+    ])).expect("explicit save"), None);
+    assert_eq!(fs::read(&saved).expect("saved bytes"), edited);
+    assert_eq!(fs::read(&source).expect("unchanged original"), original);
+    let inspected = String::from_utf8(execute_glyph_library(&args(&[
+        "--profile", saved_name, "--inspect-paths", nfd,
+    ])).expect("path inspection").expect("path report"))
+        .expect("UTF-8 report");
+    assert!(inspected.contains("Strokes: 7\nPaths: 1\nPen lifts: 0"),
+        "{inspected}");
+    for format in ["pdf", "png"] {
+        let mut imported = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", saved_name,
+            "--place-text", "1", "30000", "45000", nfd,
+        ]);
+        let mut inline = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", nfd, "500", "700", "850", "750",
+            "250", "#243647",
+            "--glyph-stroke", nfd, "850", "750", "1100", "850",
+            "250", "#243647",
+            "--glyph-stroke", nfd, "1100", "850", "1163", "788",
+            "250", "#243647",
+            "--glyph-stroke", nfd, "1163", "788", "1225", "775",
+            "250", "#243647",
+            "--glyph-stroke", nfd, "1225", "775", "1288", "813",
+            "250", "#243647",
+            "--glyph-stroke", nfd, "1288", "813", "1350", "900",
+            "250", "#243647",
+            "--glyph-stroke", nfd, "1350", "900", "1600", "1050",
+            "250", "#243647",
+            "--place-text", "1", "30000", "45000", nfd,
+        ]);
+        if format == "png" {
+            imported.extend(args(&["--dpi", "72"]));
+            inline.extend(args(&["--dpi", "72"]));
+        }
+        let actual = execute_notebook(&imported)
+            .expect("rendered curved library").expect("rendered bytes");
+        let expected_bytes = execute_notebook(&inline)
+            .expect("rendered inline strokes").expect("rendered bytes");
+        assert_eq!(actual, expected_bytes, "curved {format} geometry parity");
+    }
+    fs::write(&saved, b"sentinel").expect("existing output sentinel");
+    for rejected in [
+        args(&["--join-next-path-curved"]),
+        args(&["--join-next-path-curved", nfd, "1", "0"]),
+        args(&["--join-next-path-curved", nfd, "0", "0", "-200"]),
+        args(&["--join-next-path-curved", nfd, "1", "0", "0"]),
+        args(&["--join-next-path-curved", nfd, "1", "601", "0"]),
+        args(&["--join-next-path-curved", nfd, "1", "0", "-601"]),
+        args(&["--join-next-path-curved", nfd, "1", "1.5", "0"]),
+        args(&["--join-next-path-curved", "nn", "1", "0", "-200"]),
+        args(&["--join-next-path-curved", nfd, "3", "0", "-200"]),
+        args(&["--join-next-path-curved", nfd, "1", "250", "50"]),
+        args(&["--set-stroke", nfd, "3", "1350", "900",
+            "1600", "1050", "300", "#243647",
+            "--join-next-path-curved", nfd, "1", "0", "-200"]),
+    ] {
+        let mut command = args(&["--profile", source_name]);
+        command.extend(rejected);
+        command.extend(args(&["--output", saved_name, "--replace"]));
+        assert!(execute_glyph_library(&command).is_err(),
+            "invalid curve must refuse: {command:?}");
+        assert_eq!(fs::read(&saved).expect("preserved sentinel"),
+            b"sentinel");
+        assert_eq!(fs::read(&source).expect("unchanged original"), original);
+    }
+    let mut clipped = args(&[
+        "--glyph-stroke", nfd, "250", "700", "125", "850",
+        "250", "#243647",
+        "--glyph-stroke", nfd, "500", "850", "650", "950",
+        "250", "#243647", "--join-next-path-curved", nfd,
+        "1", "-600", "50",
+    ]);
+    assert!(execute_glyph_library(&clipped)
+        .expect_err("clipped curved line refused").contains("glyph cell"));
+    clipped = args(&[
+        "--glyph-stroke", nfd, "500", "700", "800", "850",
+        "250", "#243647", "--glyph-stroke", nfd, "2001", "850",
+        "2200", "950", "250", "#243647",
+        "--join-next-path-curved", nfd, "1", "0", "-200",
+    ]);
+    assert!(execute_glyph_library(&clipped)
+        .expect_err("over-limit gap refused").contains("1200"));
+    let mut near = String::from("atrament.glyph-strokes.v1\n");
+    near.push_str("n\u{303}\t500\t700\t850\t750\t250\t#243647\n");
+    near.push_str("n\u{303}\t1350\t900\t1600\t1050\t250\t#243647\n");
+    near.push_str(&"∞\t500\t300\t600\t400\t251\t#445566\n".repeat(4090));
+    fs::write(&source, &near).expect("4092-stroke input");
+    let completed = execute_glyph_library(&args(&[
+        "--profile", source_name, "--join-next-path-curved",
+        nfd, "1", "0", "-200",
+    ])).expect("exactly four free slots").expect("full TSV bytes");
+    assert_eq!(completed.iter().filter(|byte| **byte == b'\n').count(),
+        4097, "header and 4096 authored strokes");
+    near.push_str("∞\t500\t300\t600\t400\t251\t#445566\n");
+    fs::write(&source, &near).expect("4093-stroke input");
+    assert!(execute_glyph_library(&args(&[
+        "--profile", source_name, "--join-next-path-curved",
+        nfd, "1", "0", "-200",
+    ])).expect_err("insufficient room for four curves")
+        .contains("4096 authored strokes"));
+    fs::remove_file(source).expect("remove original");
+    fs::remove_file(saved).expect("remove saved");
+}
+
+#[test]
 fn native_whole_glyph_shear_keeps_exact_unicode_slots_and_pen_paths() {
     let source = test_path().with_extension("tsv");
     let saved = test_path().with_extension("tsv");

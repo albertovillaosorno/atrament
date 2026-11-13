@@ -1457,3 +1457,34 @@ while seven malformed join flags must exit immediately without output.
 This is opt-in manual bridging of user-authored segments; it does not
 infer letter connections, synthesize cursive Bézier paths or complete the
 P1 two-line correlated penmanship acceptance.
+
+## Explicit curved connection between adjacent paths (partial) — 2026-11-13
+
+The localhost editor and Rust glyph CLI now add an explicitly shaped
+four-segment pen gesture between adjacent same-pen candidate paths. The
+native `--join-next-path-curved GRAPHEME PATH_INDEX BEND_X_UM BEND_Y_UM`
+flag and the browser's signed bend controls sample a quadratic guide at
+four quarter-intervals with matching whole-micrometre rounding. Offsets
+relative to the endpoint midpoint are limited to +/-600 µm; a transverse
+bend must visibly change the ink from a straight connector.
+
+The two original paths retain their directed strokes, style and interleaved
+exact Unicode TSV rows. The editor records one undoable session-only change;
+its native v1 output still has ordinary segments, not saved curve controls.
+Both implementations refuse absent following paths, mismatched pen widths
+or colors, gaps over 1200 µm, collapsed or straight-only rounded samples,
+any round-pen clip of the 3500 x 4500 µm cell, and library overflow. No
+mutation or automatic save occurs after a refusal. Malformed CLI operands
+are preflighted even when a selected glyph stdin pipe remains open.
+
+The Rust regression asserts exact sample coordinates, unchanged source and
+rejected target, canonical save/reopen, path inspection and actual vector
+PDF/transparent PNG bytes against independently supplied authored segments.
+Focused browser tests cover same-glyph path detection, Unicode preservation,
+full pen margins, UI download and Undo/Redo. A separate 256-case seeded
+browser/native subprocess oracle checks identical accepted full TSV and
+refused inputs; Linux preflight includes nine additional malformed curves.
+
+This advances opt-in cursive-like authoring without adding persistent pen-up
+identities, analytic curve records or inferred connections. The full
+correlated two-line handwriting acceptance remains open.

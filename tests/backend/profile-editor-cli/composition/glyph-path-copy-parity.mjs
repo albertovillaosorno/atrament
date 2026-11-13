@@ -8,7 +8,7 @@ import test from 'node:test';
 import { candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
     encodeGlyphLibrary, styleCandidatePath, removeCandidatePath,
     scaleCandidatePath, reflectCandidatePath, rotateCandidatePath,
-    joinNextCandidatePath }
+    joinNextCandidatePath, joinNextCandidatePathCurved }
 // jig-ignore-next-line: static ESM import needs a literal path.
     from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -817,7 +817,7 @@ test("256 native/browser join-next samples agree on full TSV or refusal",
 // Source-independent typed path grammar must be checked before opening stdin.
 // A deliberately unclosed child pipe catches accidental blocking reads; no
 // manual pipe closing or fake EOF may make malformed options appear safe.
-test("native join-next rejects malformed flags before open glyph stdin",
+test("native straight and curved joins preflight before open glyph stdin",
     { timeout: 25_000, skip: process.platform !== "linux" }, async () => {
         const built = spawnSync(cargo, [
             "build", "--locked", "--offline", "--quiet",
@@ -834,6 +834,15 @@ test("native join-next rejects malformed flags before open glyph stdin",
             ["--join-next-path", "n\u0303", "1.5"],
             ["--join-next-path", "ab", "1"],
             ["--join-next-path", " ", "1"],
+            ["--join-next-path-curved"],
+            ["--join-next-path-curved", "n\u0303", "1"],
+            ["--join-next-path-curved", "n\u0303", "1", "0"],
+            ["--join-next-path-curved", "n\u0303", "0", "0", "50"],
+            ["--join-next-path-curved", "n\u0303", "1", "601", "0"],
+            ["--join-next-path-curved", "n\u0303", "1", "0", "-601"],
+            ["--join-next-path-curved", "n\u0303", "1", "1.5", "0"],
+            ["--join-next-path-curved", "ab", "1", "0", "-200"],
+            ["--join-next-path-curved", "n\u0303", "1", "0", "0"],
         ];
         for (const tail of invalid) {
             const command = ["glyphs", "--profile", "-", ...tail];
@@ -866,4 +875,89 @@ test("native join-next rejects malformed flags before open glyph stdin",
             assert.match(result.stderr, /^Error: /,
                 `typed preflight rejects ${command.join(" ")}`);
         }
+    });
+
+// Four explicit quadratic pieces must have identical half-up physical
+// coordinates in native Rust and in the browser, even for negative bends.
+// Refused paths may not emit a partial TSV or change the input library.
+test("256 Rust/browser curved path joins agree on ink and refusals",
+    { timeout: 90_000 }, () => {
+        const built = spawnSync(cargo, [
+            "build", "--locked", "--offline", "--quiet",
+            "-p", "atrament_profile_editor_cli", "--bin", "atrament-profiles",
+        ], { cwd: root, encoding: "utf8", timeout: 90_000,
+            env: { ...process.env, TMPDIR: join(root, ".temp") } });
+        assert.equal(built.error, undefined, built.error?.message);
+        assert.equal(built.status, 0, built.stderr);
+        const pick = random(0xC0A7_2026);
+        let accepted = 0;
+        let refused = 0;
+        for (let sample = 0; sample < 256; sample += 1) {
+            const key = sample % 2 === 0 ? "ñ" : "n\u0303";
+            const other = key === "ñ" ? "n\u0303" : "ñ";
+            const first = stroke(pick, key, "#123456");
+            const gapX = pick(-200, 900);
+            const gapY = pick(-500, 500);
+            const next = { ...first,
+                x1: first.x2 + gapX, y1: first.y2 + gapY,
+                x2: first.x2 + gapX + 100,
+                y2: first.y2 + gapY + 100 };
+            const extra = stroke(pick, other, "#667788");
+            let rows = [first, extra, next];
+            const mode = sample % 16;
+            let bx = pick(-400, 400);
+            let by = pick(-400, 400);
+            let selected = 0;
+            let path = 1;
+            let glyph = key;
+            if (mode === 0) { bx = 0; by = 0; }
+            if (mode === 1) bx = 601;
+            if (mode === 2) by = -601;
+            if (mode === 3) rows = [first, extra];
+            if (mode === 4) rows[2] = { ...next, width: 275 };
+            if (mode === 5) { selected = -1; path = 0; }
+            if (mode === 6) { selected = 99; path = 4097; }
+            if (mode === 7) glyph = "nn";
+            if (mode === 8) { bx = gapX; by = gapY; }
+            if (mode === 9) rows[2] = { ...next,
+                x1: first.x2 + 1201, x2: first.x2 + 1250,
+                y1: first.y2, y2: first.y2 + 100 };
+            if (mode === 10) rows[2] = { ...next,
+                x1: first.x2 + 1, x2: first.x2 + 120,
+                y1: first.y2, y2: first.y2 + 100 };
+            const original = encodeGlyphLibrary(rows);
+            let expected;
+            try {
+                expected = encodeGlyphLibrary(joinNextCandidatePathCurved(
+                    rows, glyph, selected, bx, by).strokes);
+            } catch (error) {
+                expected = error;
+            }
+            const result = spawnSync(binary, [
+                "glyphs", ...rows.flatMap(strokeFlags),
+                "--join-next-path-curved", glyph, String(path),
+                String(bx), String(by),
+            ], { cwd: root, encoding: "utf8", timeout: 2_000,
+                maxBuffer: 512 * 1024 });
+            const context = `curved ${sample} mode=${mode}`;
+            assert.equal(result.error, undefined, context);
+            if (expected instanceof Error) {
+                refused += 1;
+                assert.notEqual(result.status, 0,
+                    context + ": browser " + expected.message
+                    + "; native " + result.stdout.slice(0, 120));
+                assert.equal(result.stdout, "", context);
+                assert.match(result.stderr, /^Error: /, context);
+            } else {
+                accepted += 1;
+                assert.equal(result.status, 0,
+                    context + ": " + result.stderr);
+                assert.equal(result.stdout, expected, context);
+                assert.ok(expected.length > original.length, context);
+            }
+            assert.equal(encodeGlyphLibrary(rows), original,
+                context + " must preserve original glyph bytes");
+        }
+        assert.ok(accepted > 55, `accepted curves: ${accepted}`);
+        assert.ok(refused > 70, `refused curves: ${refused}`);
     });

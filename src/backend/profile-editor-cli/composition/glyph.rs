@@ -797,6 +797,106 @@ impl GlyphOverlay {
         Ok(())
     }
 
+    /// Add a deliberately curved, four-segment quadratic pen gesture
+    /// between adjacent candidate paths. The integer samples are shared
+    /// with the browser (JS Math.round) and require no new TSV metadata.
+    pub(super) fn join_next_path_curved(
+        &mut self, grapheme: &str, ordinal: u32,
+        bend_x: i32, bend_y: i32,
+    ) -> Result<(), String> {
+        if bend_x.unsigned_abs() > 600 || bend_y.unsigned_abs() > 600
+            || (bend_x == 0i32 && bend_y == 0i32) {
+            return Err(
+                "curved join needs nonzero bounded bend (-600..600 um)".into()
+            );
+        }
+        let (positions, paths) = self.selected_candidate_paths(grapheme)?;
+        let index = checked_path_position(&paths, ordinal)?;
+        let before = paths.get(index).ok_or("selected path outside bounds")?;
+        let after = paths.get(index.saturating_add(1))
+            .ok_or("curved join needs a following candidate pen path")?;
+        let last_slot = *positions.get(before.end.saturating_sub(1))
+            .ok_or("last source path segment outside library")?;
+        let next_slot = *positions.get(after.start)
+            .ok_or("next path segment outside library")?;
+        let last = self.strokes.get(last_slot)
+            .ok_or("last source stroke outside library")?;
+        let next = self.strokes.get(next_slot)
+            .ok_or("next path stroke outside library")?;
+        if last.width_um != next.width_um || last.rgb != next.rgb {
+            return Err(
+                "curved join requires matching pen width and RGB".into()
+            );
+        }
+        let start = last.end_um;
+        let end = next.start_um;
+        if start == end {
+            return Err("candidate paths are already continuous".into());
+        }
+        let dx = i64::from(start.0) - i64::from(end.0);
+        let dy = i64::from(start.1) - i64::from(end.1);
+        if dx.unsigned_abs().pow(2).saturating_add(dy.unsigned_abs().pow(2))
+            > MAX_JOIN_GAP_UM.pow(2) {
+            return Err("curved path gap exceeds 1200 um join limit".into());
+        }
+        if i64::from(bend_x) * dy == i64::from(bend_y) * dx {
+            return Err("curved join requires a transverse bend".into());
+        }
+        if self.strokes.len() > MAX_STROKES - 4 {
+            return Err("curved join exceeds 4096 authored strokes".into());
+        }
+        let sampled = |i: i64| -> Result<(u32, u32), String> {
+            let component = |a: u32, b: u32, bend: i32|
+                -> Result<u32, String> {
+                let complement = 4 - i;
+                let numerator = complement * complement * i64::from(a)
+                    + i * complement * (i64::from(a) + i64::from(b)
+                        + 2 * i64::from(bend))
+                    + i * i * i64::from(b);
+                let rounded = (numerator + 8).div_euclid(16);
+                u32::try_from(rounded)
+                    .map_err(|_error| "curved join leaves glyph cell".into())
+            };
+            Ok((component(start.0, end.0, bend_x)?,
+                component(start.1, end.1, bend_y)?))
+        };
+        let mut prior = start;
+        let mut segments = Vec::with_capacity(4);
+        for i in 1..=4 {
+            let following = sampled(i)?;
+            if following == prior {
+                return Err("curved join collapses a pen segment".into());
+            }
+            ensure_inserted_bridge_fits_cell(
+                prior, following, last.width_um,
+            )?;
+            segments.push(GlyphStroke {
+                grapheme: grapheme.to_owned(), start_um: prior,
+                end_um: following, width_um: last.width_um, rgb: last.rgb,
+            });
+            prior = following;
+        }
+        // Refuse a control offset that rounds to four straight pieces.
+        if segments.iter().all(|piece| {
+            let px = i64::from(piece.end_um.0) - i64::from(start.0);
+            let py = i64::from(piece.end_um.1) - i64::from(start.1);
+            px * dy == py * dx
+        }) {
+            return Err("curved join does not bend the selected ink".into());
+        }
+        let mut revised = self.strokes.clone();
+        drop(revised.splice(
+            last_slot.saturating_add(1)..last_slot.saturating_add(1),
+            segments,
+        ));
+        let original = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = original;
+            return Err(error);
+        }
+        Ok(())
+    }
+
     /// Copy exact authored pen geometry to a new independent Unicode key.
     /// The source remains untouched; no live dependency is established.
     pub(super) fn copy_glyph(
@@ -981,6 +1081,15 @@ impl GlyphOverlay {
             "--reverse-path" => self.reverse_path(grapheme, from),
             "--close-path" => self.close_path(grapheme, from),
             "--join-next-path" => self.join_next_path(grapheme, from),
+            "--join-next-path-curved" => {
+                let bx = next_signed_path_offset(
+                    iter, "curved join X bend", 600,
+                )?;
+                let by = next_signed_path_offset(
+                    iter, "curved join Y bend", 600,
+                )?;
+                self.join_next_path_curved(grapheme, from, bx, by)
+            }
             "--rotate-path" => {
                 let start = next_integer(iter, "path start stroke", 1, 4096)?;
                 self.rotate_path(grapheme, from, start)
@@ -1960,6 +2069,7 @@ impl GlyphOverlay {
     ) -> Result<(), String> {
         let path = matches!(flag,
             "--reverse-path" | "--close-path" | "--join-next-path"
+            | "--join-next-path-curved"
             | "--rotate-path"
             | "--move-path" | "--translate-path" | "--style-path"
             | "--scale-path" | "--reflect-path" | "--remove-path"
@@ -1987,6 +2097,19 @@ impl GlyphOverlay {
                     if dx == 0i32 && dy == 0i32 {
                         return Err(
                             "path shift needs nonzero bounded whole um".into()
+                        );
+                    }
+                }
+                "--join-next-path-curved" => {
+                    let bx = next_signed_path_offset(
+                        iter, "curved join X bend", 600,
+                    )?;
+                    let by = next_signed_path_offset(
+                        iter, "curved join Y bend", 600,
+                    )?;
+                    if bx == 0 && by == 0 {
+                        return Err(
+                            "curved join requires a nonzero bend".into()
                         );
                     }
                 }

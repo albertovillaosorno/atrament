@@ -458,12 +458,10 @@ export function joinNextCandidatePath(strokes, grapheme, selectedIndex) {
         throw new Error("Path joining requires a selected exact glyph stroke");
     }
     encodeGlyphLibrary([...strokes]);
-    const positions = strokes.flatMap((stroke, index) =>
-        stroke.grapheme === grapheme ? [index] : []);
+    const positions = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
     const ordinal = positions.indexOf(selectedIndex) + 1;
     const paths = candidatePenPaths(strokes, grapheme);
-    const index = paths.findIndex((candidate) =>
-        ordinal >= candidate.first && ordinal <= candidate.last);
+    const index = paths.findIndex((candidate) => ordinal >= candidate.first && ordinal <= candidate.last);
     const current = paths[index];
     const following = paths[index + 1];
     if (!current || !following) {
@@ -495,6 +493,85 @@ export function joinNextCandidatePath(strokes, grapheme, selectedIndex) {
     validateInsertedBridge(bridge);
     const next = [...strokes];
     next.splice(lastSlot + 1, 0, bridge);
+    encodeGlyphLibrary(next);
+    return { strokes: next, selectedIndex: lastSlot + 1 };
+}
+// Add a four-piece quadratic connector controlled by a bounded bend from
+// the midpoint of the two original directed endpoints. Integer arithmetic
+// matches the native CLI's half-up micrometre rounding exactly.
+export function joinNextCandidatePathCurved(strokes, grapheme, selectedIndex, bendX, bendY) {
+    if (!exactGrapheme(grapheme) || !Number.isSafeInteger(selectedIndex)
+        || selectedIndex < 0 || strokes[selectedIndex]?.grapheme !== grapheme) {
+        throw new Error("Curved joining needs a selected exact glyph stroke");
+    }
+    if (![bendX, bendY].every((n) => Number.isSafeInteger(n) && Math.abs(n) <= 600)
+        || (bendX === 0 && bendY === 0)) {
+        throw new Error("Curved join needs nonzero -600..600 µm bend");
+    }
+    encodeGlyphLibrary([...strokes]);
+    const positions = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const ordinal = positions.indexOf(selectedIndex) + 1;
+    const paths = candidatePenPaths(strokes, grapheme);
+    const index = paths.findIndex((path) => ordinal >= path.first && ordinal <= path.last);
+    const current = paths[index];
+    const following = paths[index + 1];
+    if (!current || !following) {
+        throw new Error("Curved join needs a following candidate pen path");
+    }
+    const lastSlot = positions[current.last - 1];
+    const before = strokes[lastSlot];
+    const after = strokes[positions[following.first - 1]];
+    if (before.width !== after.width
+        || before.color.toUpperCase() !== after.color.toUpperCase()) {
+        throw new Error("Curved join requires matching pen width and RGB");
+    }
+    const start = { x: before.x2, y: before.y2 };
+    const end = { x: after.x1, y: after.y1 };
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    if (dx === 0 && dy === 0) {
+        throw new Error("Candidate paths are already continuous");
+    }
+    if (dx * dx + dy * dy > 1200 * 1200) {
+        throw new Error("Curved path gap exceeds 1200 µm join limit");
+    }
+    if (bendX * dy === bendY * dx) {
+        throw new Error("Curved join requires a transverse bend");
+    }
+    if (strokes.length > MAX_STROKES - 4) {
+        throw new Error("Curved join exceeds 4096 authored strokes");
+    }
+    const sample = (i) => {
+        const axis = (a, b, bend) => {
+            const complement = 4 - i;
+            return Math.round((complement * complement * a
+                + i * complement * (a + b + 2 * bend)
+                + i * i * b) / 16);
+        };
+        return { x: axis(start.x, end.x, bendX),
+            y: axis(start.y, end.y, bendY) };
+    };
+    const bridges = [];
+    let prior = start;
+    for (let i = 1; i <= 4; i += 1) {
+        const next = sample(i);
+        if (next.x === prior.x && next.y === prior.y) {
+            throw new Error("Curved join collapses a pen segment");
+        }
+        const bridge = {
+            grapheme, x1: prior.x, y1: prior.y,
+            x2: next.x, y2: next.y,
+            width: before.width, color: before.color,
+        };
+        validateInsertedBridge(bridge);
+        bridges.push(bridge);
+        prior = next;
+    }
+    if (bridges.every((piece) => (piece.x2 - start.x) * dy === (piece.y2 - start.y) * dx)) {
+        throw new Error("Curved join does not bend selected ink");
+    }
+    const next = strokes.slice();
+    next.splice(lastSlot + 1, 0, ...bridges);
     encodeGlyphLibrary(next);
     return { strokes: next, selectedIndex: lastSlot + 1 };
 }
@@ -4435,6 +4512,9 @@ export function createGlyphStrokeEditor() {
     const startPath = required("glyph-path-start");
     const closePath = required("glyph-path-close");
     const joinNextPath = required("glyph-path-join-next");
+    const joinNextPathCurved = required("glyph-path-join-curved");
+    const curvedBendX = required("glyph-path-bend-x");
+    const curvedBendY = required("glyph-path-bend-y");
     const translatePath = required("glyph-path-translate");
     const scalePath = required("glyph-path-scale");
     const rotatePath = required("glyph-path-rotate");
@@ -4499,7 +4579,8 @@ export function createGlyphStrokeEditor() {
         selected, update,
         remove, subdivide, splitExact, merge, clearGlyph, reverse,
         reversePath,
-        startPath, closePath, joinNextPath,
+        startPath, closePath, joinNextPath, joinNextPathCurved,
+        curvedBendX, curvedBendY,
         translatePath, scalePath, stylePath, removePath,
         rotatePath, pathRotateDegrees, pathRotatePivotX, pathRotatePivotY,
         reflectPath, pathReflectAxis, pathReflectPivot,
@@ -5677,6 +5758,11 @@ export function createGlyphStrokeEditor() {
             || chosenPath.width !== followingPath.width
             || chosenPath.color !== followingPath.color
             || bridgeGap === 0 || bridgeGap > 1200 * 1200;
+        joinNextPathCurved.disabled = !active || drawing !== null
+            || !chosenPath || !followingPath || strokes.length > MAX_STROKES - 4
+            || chosenPath.width !== followingPath.width
+            || chosenPath.color !== followingPath.color
+            || bridgeGap === 0 || bridgeGap > 1200 * 1200;
         translatePath.disabled = !active || !chosenPath;
         scalePath.disabled = !active || drawing !== null || !chosenPath;
         rotatePath.disabled = !active || drawing !== null || !chosenPath;
@@ -6720,11 +6806,33 @@ export function createGlyphStrokeEditor() {
             return;
         try {
             const glyph = character.value;
-            const changed = joinNextCandidatePath(
-                strokes, glyph, selectedIndex);
-            commitInkEdit(changed.strokes, glyph, "pen path join",
-                changed.selectedIndex);
+            const changed = joinNextCandidatePath(strokes, glyph, selectedIndex);
+            commitInkEdit(changed.strokes, glyph, "pen path join", changed.selectedIndex);
             message("Joined neighboring same-pen paths; unsaved");
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    joinNextPathCurved.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null)
+            return;
+        try {
+            const glyph = character.value;
+            const bend = (raw) => {
+                if (!/^-?[0-9]+$/.test(raw)) {
+                    throw new Error("Curved bend requires whole micrometres");
+                }
+                const value = Number(raw);
+                if (!Number.isSafeInteger(value) || Math.abs(value) > 600) {
+                    throw new Error("Curved bend outside native bounds");
+                }
+                return value;
+            };
+            const changed = joinNextCandidatePathCurved(strokes, glyph, selectedIndex, bend(curvedBendX.value), bend(curvedBendY.value));
+            commitInkEdit(changed.strokes, glyph, "curved pen path join", changed.selectedIndex);
+            message("Joined neighboring pen paths with four curved segments;"
+                + " unsaved");
         }
         catch (error) {
             message(String(error));

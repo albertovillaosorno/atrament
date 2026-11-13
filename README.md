@@ -2617,6 +2617,38 @@ Malformed path options also refuse before attempting to read a selected
 unclosed stdin glyph source. This is not automatic cursive joining, analytic
 curve construction or persistent path-identity metadata.
 
+**Join selected path with a curved pen gesture** is a separate manual
+alternative to the straight path bridge. The editor takes signed horizontal
+and vertical bends (each -600..600 µm) from the midpoint of the selected
+path's end and the next path's start. A nonzero *transverse* bend samples a
+quadratic arc into four directed, whole-micrometre segments. This makes a
+small smooth-looking connector without replacing source segments or adding
+a new v1 TSV curve field. The joined contour can be inspected, edited,
+exported, and reversed with the existing path tools.
+
+The equivalent native command is:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile ink.tsv --join-next-path-curved 'ñ' 1 0 -200 \
+  --output curved.tsv
+```
+
+The two candidate paths must have identical RGB/pen width, distinct endpoints
+at most 1200 µm apart, and enough space for four extra segments under the
+4096-stroke and 512-KiB bounds. All sampled round caps must fit the full
+3500 × 4500 µm cell, and no new segment may collapse or form an unchanged
+straight connection after rounding. Invalid integers, style mismatches,
+clipped geometry, missing next paths and exhausted capacity refuse without
+changing the library or any existing output. The CLI checks malformed
+operands before opening a selected stdin glyph library. In the browser the
+operation is a single unsaved Undo/Redo step until deliberate TSV download.
+
+Native and browser tests compare 256 deterministic accepted/refused exact
+Unicode cases, with real PDF/transparent PNG byte parity after TSV reload.
+This is a manually sampled four-piece pen gesture, **not** an analytic curve
+primitive, automatic ligature generation, or calibrated handwriting.
+
 **Load stroke TSV** reads an explicit existing glyph file into an in-memory
 draft. **Download stroke TSV** saves the canonical native-compatible file;
 there is no automatic saving or new server-side file endpoint. The Rust CLI
