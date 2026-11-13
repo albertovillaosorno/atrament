@@ -1,7 +1,7 @@
 // Copyright © 2026 Alberto Villa Osorno. SPDX-License-Identifier: MIT
 // Verify native CLI and browser copy the same explicitly authored pen paths.
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -812,4 +812,58 @@ test("256 native/browser join-next samples agree on full TSV or refusal",
         }
         assert.ok(accepted > 70, `expected enough accepted joins: ${accepted}`);
         assert.ok(refused > 70, `expected enough refused joins: ${refused}`);
+    });
+
+// Source-independent typed path grammar must be checked before opening stdin.
+// A deliberately unclosed child pipe catches accidental blocking reads; no
+// manual pipe closing or fake EOF may make malformed options appear safe.
+test("native join-next rejects malformed flags before open glyph stdin",
+    { timeout: 25_000, skip: process.platform !== "linux" }, async () => {
+        const built = spawnSync(cargo, [
+            "build", "--locked", "--offline", "--quiet",
+            "-p", "atrament_profile_editor_cli", "--bin", "atrament-profiles",
+        ], { cwd: root, encoding: "utf8", timeout: 90_000,
+            env: { ...process.env, TMPDIR: join(root, ".temp") } });
+        assert.equal(built.error, undefined, built.error?.message);
+        assert.equal(built.status, 0, built.stderr);
+        const invalid = [
+            ["--join-next-path"],
+            ["--join-next-path", "n\u0303"],
+            ["--join-next-path", "n\u0303", "0"],
+            ["--join-next-path", "n\u0303", "4097"],
+            ["--join-next-path", "n\u0303", "1.5"],
+            ["--join-next-path", "ab", "1"],
+            ["--join-next-path", " ", "1"],
+        ];
+        for (const tail of invalid) {
+            const command = ["glyphs", "--profile", "-", ...tail];
+            const result = await new Promise((resolve, reject) => {
+                const child = spawn(binary, command, {
+                    cwd: root, stdio: ["pipe", "pipe", "pipe"],
+                });
+                child.stderr.setEncoding("utf8");
+                child.stdout.setEncoding("utf8");
+                let stderr = "";
+                let stdout = "";
+                child.stderr.on("data", (chunk) => { stderr += chunk; });
+                child.stdout.on("data", (chunk) => { stdout += chunk; });
+                const timeout = setTimeout(() => {
+                    child.kill();
+                    reject(new Error("invalid path edit blocked on stdin"));
+                }, 2_000);
+                child.on("error", (error) => {
+                    clearTimeout(timeout);
+                    reject(error);
+                });
+                child.on("close", (status) => {
+                    clearTimeout(timeout);
+                    resolve({ status, stderr, stdout });
+                });
+                // Intentionally leave child.stdin open until child exits.
+            });
+            assert.notEqual(result.status, 0, command.join(" "));
+            assert.equal(result.stdout, "", command.join(" "));
+            assert.match(result.stderr, /^Error: /,
+                `typed preflight rejects ${command.join(" ")}`);
+        }
     });

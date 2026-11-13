@@ -1451,6 +1451,8 @@ unchanged source/target after refused edits, the 4096-row cap and actual
 PDF/transparent PNG byte parity with independently supplied pen segments.
 An additional 256-case subprocess oracle compares production browser TSV
 with the real Rust CLI for accepted and refused randomized path joins.
+A separate Linux subprocess regression holds glyph stdin deliberately open
+while seven malformed join flags must exit immediately without output.
 
 This is opt-in manual bridging of user-authored segments; it does not
 infer letter connections, synthesize cursive Bézier paths or complete the

@@ -2613,8 +2613,9 @@ so later path numbers can change. The complete TSV is validated before
 writing, including the 4096-segment cap. Missing next paths, different
 pen styles, long or clipped bridges refuse without replacing output.
 Saved TSV is accepted by the same Rust PDF and transparent PNG compositor.
-This is not automatic cursive joining, analytic curve construction or
-persistent path-identity metadata.
+Malformed path options also refuse before attempting to read a selected
+unclosed stdin glyph source. This is not automatic cursive joining, analytic
+curve construction or persistent path-identity metadata.
 
 **Load stroke TSV** reads an explicit existing glyph file into an in-memory
 draft. **Download stroke TSV** saves the canonical native-compatible file;
