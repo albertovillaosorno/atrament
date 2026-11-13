@@ -650,6 +650,31 @@ independent prose left/right insets, and all selected sheet/region
 constraints still apply. A narrow region that cannot hold 4 mm of
 list/quote text refuses before replacing an existing file.
 
+To reserve writing room at the **right** of those same structural rows,
+select `--flow-list-quote-right-inset-um 6000`. It reduces the usable
+width for bullets, numbered lists, checkbox tasks and one-level quotes
+without changing their left-hand text origin or moving the synthetic
+dash, checkbox or quote rule. The original left inset remains independent.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-list-quote-inset-um 3000 \
+  --flow-list-quote-right-inset-um 6000 \
+  --export-paper pdf --output bounded-lists.pdf
+```
+
+This additional 0–12,000 µm reserve applies only to Markdown flow.
+Omitted or explicit zero preserves exact previous output bytes; headings,
+ordinary prose, thematic rules and literal indented/fenced rows remain
+unchanged. Wrapped structural rows and their physical pages are measured
+against the combined left and right reserves.
+
+Bad, repeated or plain-text
+selections refuse before source reads; a too-narrow region refuses without
+overwriting an existing output. The selection is export-only and does not
+modify notebook profile JSON.
+
 The CLI continues content on the next physical page when needed;
 `--pages` and `--png-page` still refuse impossible selections. Invalid,
 overlapping-margins or too-small areas refuse before any selected file

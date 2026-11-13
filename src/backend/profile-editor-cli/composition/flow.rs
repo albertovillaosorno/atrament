@@ -72,6 +72,7 @@ pub(super) struct FlowTypography {
     pub(super) body_inset: Option<u32>,
     pub(super) body_right_inset: Option<u32>,
     pub(super) list_quote_inset: Option<u32>,
+    pub(super) list_quote_right_inset: Option<u32>,
     pub(super) paragraph_gap: Option<u32>,
     pub(super) pitch: Option<u32>,
 }
@@ -558,6 +559,7 @@ struct Layout<'model> {
     left: u32,
     lines: Vec<TextRun>,
     list_quote_inset_um: u32,
+    list_quote_right_inset_um: u32,
     ornaments: Vec<NotebookInkLine>,
     page: usize,
     paragraph_gap_um: u32,
@@ -881,6 +883,11 @@ impl Layout<'_> {
             cap = cap.checked_sub(self.body_right_inset_um)
                 .filter(|width| *width >= 4_000)
                 .ok_or("flow body right inset leaves no writing row")?;
+        } else if matches!(style, LineStyle::Bullet | LineStyle::Ordered
+            | LineStyle::Task(_) | LineStyle::Quote) {
+            cap = cap.checked_sub(self.list_quote_right_inset_um)
+                .filter(|width| *width >= 4_000)
+                .ok_or("flow list/quote right inset leaves no writing row")?;
         }
         Ok((start_x, cap))
     }
@@ -2688,6 +2695,7 @@ fn initialize_layout<'model>(
         body_inset_um: spacing.body_inset.unwrap_or(0),
         body_right_inset_um: spacing.body_right_inset.unwrap_or(0),
         list_quote_inset_um: spacing.list_quote_inset.unwrap_or(0),
+        list_quote_right_inset_um: spacing.list_quote_right_inset.unwrap_or(0),
         heading,
         heading_attached_to_prior: false,
         heading_chain: None,
@@ -2872,6 +2880,16 @@ pub(super) fn layout_flow_with_typography(
     if spacing.list_quote_inset.is_some()
         && source.format != FlowFormat::Markdown {
         return Err("flow list/quote inset requires Markdown flow".into());
+    }
+    if spacing.list_quote_right_inset
+        .is_some_and(|inset| inset > MAX_BODY_INSET_UM) {
+        return Err(
+            "flow list/quote right inset must be within 0..12000 um".into()
+        );
+    }
+    if spacing.list_quote_right_inset.is_some()
+        && source.format != FlowFormat::Markdown {
+        return Err("flow list/quote right inset requires Markdown flow".into());
     }
     let pitch = measured_pitch_with_minimum(
         source, statistics, spacing.pitch,

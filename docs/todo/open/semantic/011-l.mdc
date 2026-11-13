@@ -4312,3 +4312,21 @@ PNG/versioned ink TSV exports, typed bounds, preflight and atomic
 existing-file preservation on too-narrow fixed regions. This does not
 add nested Markdown lists, saved semantic block styles or a completed
 notebook-to-handwriting export journey.
+
+
+## Selected right Markdown list and quote inset (partial) — 2026-11-12
+
+The Rust CLI additionally accepts
+`--flow-list-quote-right-inset-um 0..12000` to reserve physical space
+on the right of Markdown bullet, numbered, checkbox and one-level quote
+rows. The existing structural left inset remains independent. The
+new option reduces measured wrapping width without moving authored
+labels, synthetic list markers or quote bars. Omitted or explicit zero
+retains prior native output bytes; prose, headings and code are unaffected.
+
+Four native tests cover structural anchors and ornaments, combined
+left/right reserve wrapping and physical page turns, deterministic
+PDF/transparent PNG/versioned TSV replay, early CLI and typed rejection,
+and atomic preservation of an existing PDF when the region is too narrow.
+The setting is export-only, does not persist paragraph styles and does not
+complete saved semantic notebook-to-handwriting output. ATR-P2-011 stays open.

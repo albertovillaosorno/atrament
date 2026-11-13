@@ -13652,3 +13652,199 @@ fn invalid_markdown_list_quote_inset_preflight_is_atomic() {
         b"keep-existing-PDF");
     fs::remove_file(target).expect("test-owned file cleanup");
 }
+
+
+#[test]
+fn selected_markdown_list_quote_right_inset_preserves_marks() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "a\n\n- a a\n\n1. a a\n\n- [x] a\n\n> a a\n\n# a\n\n    a\n\n~~~\na\n~~~")
+        .expect("mixed structural Markdown");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 62_000, height: 180_000,
+    };
+    let paper = NotebookProfile::default();
+    let render = |extra| layout_flow_with_typography(
+        &source, &paper, None, HeadingDecoration::default(),
+        Some(region), FlowTypography {
+            list_quote_right_inset: extra, ..FlowTypography::default()
+        },
+    ).expect("admitted structural rows");
+    let original = render(None);
+    let zero = render(Some(0));
+    let signature = |rows: &[TextRun]| rows.iter()
+        .map(|row| (row.page, row.origin_um, row.text.clone()))
+        .collect::<Vec<_>>();
+    assert_eq!(signature(&original.0), signature(&zero.0));
+    assert_eq!(original.1, zero.1);
+    assert_eq!(original.2, zero.2);
+    let selected = render(Some(6_000));
+    assert_eq!(signature(&original.0), signature(&selected.0),
+        "right reserve cannot move short rows or authored anchors");
+    assert_eq!(original.1, selected.1,
+        "right reserve cannot displace bullets, tasks, bars or titles");
+    assert_eq!(original.2, selected.2);
+}
+
+#[test]
+fn selected_markdown_list_quote_right_inset_wraps_across_pages() {
+    let paper = NotebookProfile::default();
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 36_000, height: 32_000,
+    };
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "a\n\n- a a a a a a a a a a a a a a\n\n> a a a a a a a a")
+        .expect("two structural paragraphs");
+    let render = |right, left| layout_flow_with_typography(
+        &source, &paper, None, HeadingDecoration::default(),
+        Some(region), FlowTypography {
+            list_quote_inset: left, list_quote_right_inset: right,
+            ..FlowTypography::default()
+        },
+    );
+    let legacy = render(None, None).expect("legacy physical rows");
+    let constrained = render(Some(8_000), Some(4_000))
+        .expect("combined structural insets");
+    assert!(constrained.0.len() > legacy.0.len(),
+        "less writable width must produce more structural rows");
+    assert!(constrained.2 > legacy.2,
+        "extra wraps consume more physical pages");
+    assert_eq!(constrained.0[0].page, legacy.0[0].page);
+    assert_eq!(constrained.0[0].origin_um, legacy.0[0].origin_um);
+    let structural = constrained.0.iter().filter(|row| row.text != "a")
+        .collect::<Vec<_>>();
+    assert!(structural.len() >= 3);
+    assert!(structural.iter().all(|row| row.origin_um.0 == 42_500),
+        "right reserve only removes capacity; left inset moves anchors");
+    assert!(constrained.1.iter().all(|mark|
+        mark.start_um.0 > region.left && mark.end_um.0 > region.left));
+    assert_eq!(render(Some(12_001), Some(0))
+        .expect_err("typed upper bound"),
+        "flow list/quote right inset must be within 0..12000 um");
+    let narrow = FlowRegion { width: 22_000, ..region };
+    let source = FlowSource::new(FlowFormat::Markdown, "> a")
+        .expect("quoted ink");
+    assert_eq!(layout_flow_with_typography(
+        &source, &paper, None, HeadingDecoration::default(),
+        Some(narrow), FlowTypography {
+            list_quote_inset: Some(6_000),
+            list_quote_right_inset: Some(8_000),
+            ..FlowTypography::default()
+        },
+    ).expect_err("combined structural insets must leave a writing row"),
+        "flow list/quote right inset leaves no writing row");
+    let plain = FlowSource::new(FlowFormat::Plain, "a")
+        .expect("plain source");
+    assert_eq!(layout_flow_with_typography(
+        &plain, &paper, None, HeadingDecoration::default(),
+        Some(region), FlowTypography {
+            list_quote_right_inset: Some(0), ..FlowTypography::default()
+        },
+    ).expect_err("typed option requires Markdown"),
+        "flow list/quote right inset requires Markdown flow");
+}
+
+#[test]
+fn selected_markdown_list_quote_right_inset_native_exports_replay() {
+    let base = args(&[
+        "--printed-sheet", "true", "--glyph-stroke", "a",
+        "900", "900", "2200", "3400", "250", "#204060",
+        "--flow-markdown",
+        "- a a a a a a a a a a a a a\n\n> a a a a\n\n- [x] a",
+        "--flow-region", "30000", "40000", "32000", "90000",
+    ]);
+    let export = |selected: Option<&str>, format: &str| {
+        let mut command = base.clone();
+        if let Some(right) = selected {
+            command.extend(args(&[
+                "--flow-list-quote-right-inset-um", right,
+            ]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        execute_notebook(&command).expect("native export")
+            .expect("selected output bytes")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let original = export(None, format);
+        assert_eq!(original, export(Some("0"), format),
+            "explicit zero must preserve {format} bytes");
+        let chosen = export(Some("6000"), format);
+        assert_eq!(chosen, export(Some("6000"), format),
+            "structural right reserve must replay exact {format} bytes");
+        assert_ne!(original, chosen, "physical wraps affect {format}");
+        if format == "pdf" {
+            assert!(chosen.starts_with(b"%PDF-1.4"));
+        } else if format == "png" {
+            assert!(chosen.starts_with(b"\x89PNG\r\n\x1a\n"));
+        } else {
+            let tsv = String::from_utf8(chosen).expect("versioned ink");
+            assert!(tsv.starts_with("atrament.page-ink.v1\n"));
+            assert!(tsv.lines().skip(1).any(|line| line.starts_with("1\t")));
+        }
+    }
+}
+
+#[test]
+fn invalid_markdown_list_quote_right_inset_is_preflight_atomic() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "unopened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (tokens, expected) in [
+        (vec!["--flow-list-quote-right-inset-um", "12001"],
+            "within 0..12000"),
+        (vec!["--flow-list-quote-right-inset-um", "-1"],
+            "within 0..12000"),
+        (vec!["--flow-list-quote-right-inset-um", "+0"],
+            "within 0..12000"),
+        (vec!["--flow-list-quote-right-inset-um", "4294967296"],
+            "within 0..12000"),
+        (vec!["--flow-list-quote-right-inset-um", ""],
+            "within 0..12000"),
+        (vec!["--flow-list-quote-right-inset-um"],
+            "requires 0..12000"),
+        (vec!["--flow-list-quote-right-inset-um", "0",
+            "--flow-list-quote-right-inset-um", "1"],
+            "may appear only once"),
+    ] {
+        let mut command = source.clone();
+        command.extend(args(&tokens));
+        let error = preflight_notebook_sources(&command)
+            .expect_err("invalid option refuses before reading stdin");
+        assert!(error.contains(expected), "{tokens:?}: {error}");
+    }
+    let mut plain = args(&[
+        "--flow-text", "a", "--export-paper", "pdf",
+        "--glyph-file", "unopened.tsv",
+    ]);
+    plain.extend(args(&["--flow-list-quote-right-inset-um", "0"]));
+    assert_eq!(preflight_notebook_sources(&plain)
+        .expect_err("right reserve requires Markdown"),
+        "--flow-list-quote-right-inset-um requires a Markdown flow");
+
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"keep-existing-PDF").expect("test-owned sentinel");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown", "- a",
+        "--flow-region", "30000", "40000", "20000", "32000",
+        "--flow-list-quote-inset-um", "6000",
+        "--flow-list-quote-right-inset-um", "8000",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("test path"), "--replace",
+    ]));
+    assert_eq!(execute_notebook(&command)
+        .expect_err("narrow selected region must refuse"),
+        "flow list/quote right inset leaves no writing row");
+    assert_eq!(fs::read(&target).expect("existing PDF preserved"),
+        b"keep-existing-PDF");
+    fs::remove_file(target).expect("test-owned cleanup");
+}
