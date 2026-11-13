@@ -4190,7 +4190,8 @@ export function createGlyphStrokeEditor(): {
         | "pen path direction" | "pen path start"
         | "pen path closure" | "pen path move"
         | "pen path order" | "pen connection"
-        | "stroke removal";
+        | "stroke removal" | "starter replacement"
+        | "glyph copy" | "accent composition";
     let transformHistory: {
         before: string; after: string;
         beforeSelection: number | null; afterSelection: number | null;
@@ -5556,9 +5557,7 @@ export function createGlyphStrokeEditor(): {
                 ...lines,
             ];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, target, "starter replacement", null);
             message("Constructed " + lines.length + " sampled segments for "
                 + target + "; curves are sampled into TSV");
         } catch (error) {
@@ -6084,9 +6083,7 @@ export function createGlyphStrokeEditor(): {
                 ...templates.map((stroke) => ({ ...stroke, grapheme: target })),
             ];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, target, "glyph copy", null);
             message("Copied " + templates.length
                 + " strokes to the exact selected grapheme (unsaved)");
         } catch (error) {
@@ -6106,9 +6103,7 @@ export function createGlyphStrokeEditor(): {
                 ...lines,
             ];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, target, "accent composition", null);
             message("Composed " + lines.length + " ordered strokes for "
                 + target + "; base preserved (unsaved)");
         } catch (error) {

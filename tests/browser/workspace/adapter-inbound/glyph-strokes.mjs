@@ -8262,6 +8262,85 @@ test("one-step stroke undo restores empty drafts and directed edits",
     }
 });
 
+test("starter replacement, exact copy and accent composition are undoable",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const nfd = "e\u{301}";
+        const line = (grapheme, x1, y1, x2, y2) => ({
+            grapheme, x1, y1, x2, y2, width: 250,
+            color: "#243647",
+        });
+        const importInk = async (ink) => {
+            const source = new TextEncoder().encode(encodeGlyphLibrary(ink));
+            get("load").files = [{ size: source.length,
+                arrayBuffer: async () => source.buffer }];
+            await get("load").dispatch("change");
+        };
+        const save = async () => {
+            get("save").dispatch("click");
+            return downloads.at(-1).text();
+        };
+        const recover = async (before, after, label) => {
+            assert.equal(get("slant-undo").textContent, `Undo last ${label}`);
+            assert.equal(await save(), encodeGlyphLibrary(after));
+            get("slant-undo").dispatch("click");
+            assert.equal(await save(), encodeGlyphLibrary(before),
+                `${label} undo restores original authored ink`);
+            get("slant-redo").dispatch("click");
+            assert.equal(await save(), encodeGlyphLibrary(after),
+                `${label} redo preserves exact Unicode slots`);
+        };
+        const original = [line("o", 700, 1300, 1200, 1900),
+            line("ñ", 500, 2300, 1100, 2700)];
+        await importInk(original);
+        get("character").value = "o";
+        get("character").dispatch("input");
+        get("selected").value = "0";
+        get("selected").dispatch("change");
+        get("form").value = "o";
+        get("form").dispatch("change");
+        get("construct").dispatch("click");
+        const starter = geometricStarter("o", 1550, 2450, 1100,
+            250, "#243647");
+        const replaced = [original[1], ...starter];
+        await recover(original, replaced, "starter replacement");
+        assert.equal(get("slant-undo").disabled, false);
+        const accents = [line("e", 600, 1500, 1100, 2400),
+            line("é", 1200, 900, 1500, 1200),
+            line(nfd, 2000, 1500, 2300, 1800),
+            line("∞", 2600, 2500, 3000, 2900)];
+        await importInk(accents);
+        get("character").value = "é";
+        get("character").dispatch("input");
+        get("copy-from").value = "e";
+        get("copy").dispatch("click");
+        const copied = accents.filter((item) => item.grapheme !== "é")
+            .concat({ ...accents[0], grapheme: "é" });
+        await recover(accents, copied, "glyph copy");
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        get("compose").dispatch("click");
+        const composed = copied.filter((item) => item.grapheme !== nfd)
+            .concat(composeAccentedGlyph(copied, "e", nfd, "#243647"));
+        await recover(copied, composed, "accent composition");
+        assert.deepEqual(parseGlyphLibrary(await save()), composed);
+        get("character").value = "é";
+        get("character").dispatch("input");
+        assert.equal(get("slant-undo").disabled, true,
+            "another exact spelling cannot undo the composed NFD glyph");
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        assert.equal(get("slant-undo").disabled, false);
+        editor.reset();
+        assert.equal(get("slant-undo").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
 test("manual pen trace, path reorder and join recover in selected TSV",
     async () => {
     const ui = mountEditor();

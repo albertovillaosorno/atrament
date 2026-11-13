@@ -5351,9 +5351,7 @@ export function createGlyphStrokeEditor() {
                 ...lines,
             ];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, target, "starter replacement", null);
             message("Constructed " + lines.length + " sampled segments for "
                 + target + "; curves are sampled into TSV");
         }
@@ -5884,9 +5882,7 @@ export function createGlyphStrokeEditor() {
                 ...templates.map((stroke) => ({ ...stroke, grapheme: target })),
             ];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, target, "glyph copy", null);
             message("Copied " + templates.length
                 + " strokes to the exact selected grapheme (unsaved)");
         }
@@ -5906,9 +5902,7 @@ export function createGlyphStrokeEditor() {
                 ...lines,
             ];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, target, "accent composition", null);
             message("Composed " + lines.length + " ordered strokes for "
                 + target + "; base preserved (unsaved)");
         }

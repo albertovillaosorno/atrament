@@ -1033,7 +1033,9 @@ The localhost glyph editor now offers exact one-step undo/redo beyond the
 previous six whole-glyph transforms. One accepted pen trace, stroke addition,
 coordinate/color edit, reversal, reordering, deletion, pen-path reversal,
 closed-loop entry, closure, translation, path reorder, or short connector can
-be recovered. The single step stores exact native-compatible TSV bytes and
+be recovered. A destructive geometric starter replacement, exact glyph copy,
+or explicitly composed accent is similarly reversible. The single step stores
+exact native-compatible TSV bytes and
 the selected stroke index; undoing the first stroke can restore an empty
 in-memory draft without exporting an invalid zero-stroke TSV. Redo restores
 the accepted selection, input fields and ink without an automatic download.
@@ -1041,9 +1043,9 @@ the accepted selection, input fields and ink without an automatic download.
 Recovery applies only to the exact selected Unicode grapheme, including
 independent NFC/NFD spellings. Rejected edits leave an earlier valid step
 intact; a successful later edit replaces it. A new TSV import or session
-reset clears the step. Geometric starter construction, bulk fills, glyph
-copy and accent composition currently invalidate old recovery rather than
-being recorded as a new step. This is a bounded authoring convenience, not
+reset clears the step. Bulk template fills currently invalidate old
+recovery rather than being recorded as a new step. This is a bounded
+user-facing authoring convenience, not
 persistent history or a general notebook undo stack. Focused browser tests
 cover the empty-draft boundary, exact Unicode-interleaved path replay,
 source imports, refused edits, selected coordinate restoration and session
