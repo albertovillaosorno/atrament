@@ -110,6 +110,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--move-path GRAPHEME FROM_PATH TO_PATH] \
     [--translate-path GRAPHEME PATH_INDEX DX_UM DY_UM] \
     [--scale-path GRAPHEME PATH_INDEX X_PERCENT Y_PERCENT] \
+    [--shear-path GRAPHEME PATH_INDEX DEG BASELINE_Y_UM] \
     [--reflect-path GRAPHEME PATH_INDEX x|y PIVOT_UM] \
     [--rotate-path-ink GRAPHEME PATH_INDEX DEG PIVOT_X_UM PIVOT_Y_UM] \
     [--style-path GRAPHEME PATH_INDEX WIDTH_UM #RRGGBB] \
@@ -153,6 +154,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     --join-next-path-curved adds four quadratic segments (bend +/-600 um).\n\
     --translate-path moves one path using bounded signed micrometres.\n\
     --scale-path resizes around the selected path's first endpoint.\n\
+    --shear-path slants one selected pen path -20..20 degrees.\n\
     --reflect-path mirrors a selected path, preserving directed joints.\n\
     --rotate-path-ink turns one path clockwise around X/Y coordinates.\n\
     --shear-glyph slants all exact-glyph pen segments 0..20 degrees.\n\
@@ -1475,7 +1477,7 @@ fn preflight_glyph_typed_option(
         "--rotate-path-ink" => 5,
         "--set-stroke" => 8,
         "--join-next-path-curved" | "--translate-path"
-        | "--style-path" | "--scale-path"
+        | "--style-path" | "--scale-path" | "--shear-path"
         | "--reflect-path" | "--rotate-glyph" => 4,
         "--move-stroke" | "--move-path" | "--rotate-path"
         | "--shear-glyph" | "--scale-glyph-height"
@@ -1501,7 +1503,7 @@ fn preflight_glyph_typed_option(
         | "--join-next-path-curved" | "--rotate-path"
         | "--move-path"
         | "--translate-path" | "--style-path" | "--scale-path"
-        | "--reflect-path" | "--remove-path"
+        | "--reflect-path" | "--shear-path" | "--remove-path"
         | "--rotate-path-ink" =>
             GlyphOverlay::preflight_stroke_or_path_edit(option, iter)?,
         _ => GlyphOverlay::preflight_transform_option(option, iter)?,
@@ -1659,7 +1661,7 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
             | "--join-next-path" | "--join-next-path-curved"
             | "--move-path"
             | "--translate-path" | "--style-path" | "--scale-path"
-            | "--reflect-path" | "--remove-path"
+            | "--reflect-path" | "--shear-path" | "--remove-path"
             | "--rotate-path-ink" =>
                 glyphs.edit_path(option, &mut iter)?,
             "--remove-glyph" => {

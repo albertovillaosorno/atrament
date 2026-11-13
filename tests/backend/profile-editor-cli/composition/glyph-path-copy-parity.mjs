@@ -8,7 +8,7 @@ import test from 'node:test';
 import { candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
     encodeGlyphLibrary, styleCandidatePath, removeCandidatePath,
     scaleCandidatePath, reflectCandidatePath, rotateCandidatePath,
-    joinNextCandidatePath, joinNextCandidatePathCurved }
+    joinNextCandidatePath, joinNextCandidatePathCurved, shearCandidatePath }
 // jig-ignore-next-line: static ESM import needs a literal path.
     from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -960,4 +960,146 @@ test("256 Rust/browser curved path joins agree on ink and refusals",
         }
         assert.ok(accepted > 55, `accepted curves: ${accepted}`);
         assert.ok(refused > 70, `refused curves: ${refused}`);
+    });
+
+// Every accepted selected-path slant must match native integer pen geometry,
+// preserving all interleaved NFC/NFD rows; errors must emit no partial TSV.
+test("256 Rust/browser selected-path slants agree including signed angles",
+    { timeout: 90_000 }, () => {
+        const built = spawnSync(cargo, [
+            "build", "--locked", "--offline", "--quiet",
+            "-p", "atrament_profile_editor_cli", "--bin", "atrament-profiles",
+        ], { cwd: root, encoding: "utf8", timeout: 90_000,
+            env: { ...process.env, TMPDIR: join(root, ".temp") } });
+        assert.equal(built.error, undefined, built.error?.message);
+        assert.equal(built.status, 0, built.stderr);
+        const pick = random(0x51A1_2026);
+        let accepted = 0;
+        let refused = 0;
+        for (let sample = 0; sample < 256; sample += 1) {
+            const key = sample % 2 === 0 ? "ñ" : "n\u0303";
+            const other = key === "ñ" ? "n\u0303" : "ñ";
+            const first = stroke(pick, key, "#123456");
+            const next = { ...first, x1: first.x2, y1: first.y2,
+                x2: first.x2 + pick(20, 140),
+                y2: first.y2 + pick(20, 140) };
+            const separate = stroke(pick, key, "#456789");
+            const rows = [first, stroke(pick, other, "#778899"),
+                next, stroke(pick, "∞", "#667788"), separate];
+            const mode = sample % 16;
+            let angle = pick(-12, 12);
+            if (angle === 0) angle = 7;
+            let baseline = pick(1100, 2800);
+            let selected = 2;
+            let ordinal = 1;
+            let glyph = key;
+            if (mode === 8) angle = 0;
+            if (mode === 9) angle = 21;
+            if (mode === 10) baseline = 4501;
+            if (mode === 11) { selected = -1; ordinal = 0; }
+            if (mode === 12) { selected = 9999; ordinal = 4097; }
+            if (mode === 13) glyph = "nn";
+            if (mode === 14) {
+                first.y1 = first.y2 = next.y1 = next.y2 = 1000;
+                baseline = 1000;
+            }
+            if (mode === 15) {
+                first.x1 = 2800; first.y1 = 1000;
+                first.x2 = 3000; first.y2 = 1500;
+                next.x1 = 3000; next.y1 = 1500;
+                next.x2 = 3100; next.y2 = 2000;
+                angle = 20; baseline = 4500;
+            }
+            const original = encodeGlyphLibrary(rows);
+            let expected;
+            try {
+                expected = encodeGlyphLibrary(shearCandidatePath(
+                    rows, glyph, selected, angle, baseline).strokes);
+            } catch (error) {
+                expected = error;
+            }
+            const result = spawnSync(binary, [
+                "glyphs", ...rows.flatMap(strokeFlags),
+                "--shear-path", glyph, String(ordinal),
+                String(angle), String(baseline),
+            ], { cwd: root, encoding: "utf8", timeout: 2_000,
+                maxBuffer: 512 * 1024 });
+            const context = `slant ${sample} mode=${mode}`;
+            assert.equal(result.error, undefined, context);
+            if (expected instanceof Error) {
+                refused += 1;
+                assert.notEqual(result.status, 0,
+                    context + ": browser " + expected.message);
+                assert.equal(result.stdout, "", context);
+                assert.match(result.stderr, /^Error: /, context);
+            } else {
+                accepted += 1;
+                assert.equal(result.status, 0,
+                    context + ": " + result.stderr);
+                assert.equal(result.stdout, expected, context);
+                assert.notEqual(expected, original, context);
+            }
+            assert.equal(encodeGlyphLibrary(rows), original,
+                context + " must preserve original source strokes");
+        }
+        assert.ok(accepted > 100, `accepted slants: ${accepted}`);
+        assert.ok(refused > 80, `refused slants: ${refused}`);
+    });
+
+// Invalid slant operands must fail without waiting for an unclosed stdin.
+// This tests the real CLI process, not just the Rust operand parser.
+test("native selected-path slant preflights before open glyph stdin",
+    { timeout: 25_000, skip: process.platform !== "linux" }, async () => {
+        const built = spawnSync(cargo, [
+            "build", "--locked", "--offline", "--quiet",
+            "-p", "atrament_profile_editor_cli", "--bin", "atrament-profiles",
+        ], { cwd: root, encoding: "utf8", timeout: 90_000,
+            env: { ...process.env, TMPDIR: join(root, ".temp") } });
+        assert.equal(built.error, undefined, built.error?.message);
+        assert.equal(built.status, 0, built.stderr);
+        const malformed = [
+            ["--shear-path"],
+            ["--shear-path", "n\u0303"],
+            ["--shear-path", "n\u0303", "1"],
+            ["--shear-path", "n\u0303", "1", "10"],
+            ["--shear-path", "n\u0303", "0", "10", "2600"],
+            ["--shear-path", "n\u0303", "4097", "10", "2600"],
+            ["--shear-path", "n\u0303", "1", "0", "2600"],
+            ["--shear-path", "n\u0303", "1", "21", "2600"],
+            ["--shear-path", "n\u0303", "1", "10", "4501"],
+            ["--shear-path", "n\u0303", "1", "+10", "2600"],
+            ["--shear-path", "n\u0303", "1", "1.5", "2600"],
+            ["--shear-path", "ab", "1", "10", "2600"],
+        ];
+        for (const tail of malformed) {
+            const command = ["glyphs", "--profile", "-", ...tail];
+            const result = await new Promise((resolve, reject) => {
+                const child = spawn(binary, command, {
+                    cwd: root, stdio: ["pipe", "pipe", "pipe"],
+                });
+                child.stderr.setEncoding("utf8");
+                child.stdout.setEncoding("utf8");
+                let stderr = "";
+                let stdout = "";
+                child.stderr.on("data", (chunk) => { stderr += chunk; });
+                child.stdout.on("data", (chunk) => { stdout += chunk; });
+                const timeout = setTimeout(() => {
+                    child.kill();
+                    reject(new Error("invalid slant blocked on open stdin"));
+                }, 2_000);
+                child.on("error", (error) => {
+                    clearTimeout(timeout);
+                    reject(error);
+                });
+                child.on("close", (status) => {
+                    clearTimeout(timeout);
+                    resolve({ status, stderr, stdout });
+                });
+                // The child must reject while stdin is still open.
+            });
+            assert.notEqual(result.status, 0, command.join(" "));
+            assert.equal(result.stdout, "", command.join(" "));
+            assert.match(result.stderr, /^Error: /,
+                `preflight must reject ${command.join(" ")}`);
+        }
     });

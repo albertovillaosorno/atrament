@@ -16,7 +16,8 @@ const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     rotateClosedCandidatePath, closeCandidatePath, joinNextCandidatePath,
     joinNextCandidatePathCurved,
     translateCandidatePath, styleCandidatePath, scaleCandidatePath,
-    reflectCandidatePath, rotateCandidatePath, removeCandidatePath } =
+    reflectCandidatePath, rotateCandidatePath, shearCandidatePath,
+    removeCandidatePath } =
     await import(new URL(
         "../../../../src/browser/workspace/adapter-inbound/generated/"
             + "glyph-strokes.js", import.meta.url,
@@ -614,6 +615,8 @@ function mountEditor() {
         "glyph-path-reflect", "glyph-path-reflect-axis",
         "glyph-path-rotate", "glyph-path-rotate-degrees",
         "glyph-path-rotate-pivot-x", "glyph-path-rotate-pivot-y",
+        "glyph-path-shear", "glyph-path-shear-degrees",
+        "glyph-path-shear-baseline",
         "glyph-path-reflect-pivot",
         "glyph-path-scale-x", "glyph-path-scale-y",
         "glyph-path-copy", "glyph-path-copy-target",
@@ -659,6 +662,8 @@ function mountEditor() {
     get("path-rotate-degrees").value = "10";
     get("path-rotate-pivot-x").value = "1750";
     get("path-rotate-pivot-y").value = "2250";
+    get("path-shear-degrees").value = "10";
+    get("path-shear-baseline").value = "3000";
     get("path-reflect-axis").value = "x";
     get("path-reflect-pivot").value = "1750";
     get("variation-sample").value = "1";
@@ -13175,6 +13180,139 @@ test("selected path rotation UI saves only accepted and undoable TSV",
             editor.reset();
             assert.equal(get("path-rotate").disabled, true);
             assert.equal(get("slant-undo").disabled, true);
+        } finally {
+            ui.restore();
+        }
+    });
+
+test("selected path slant changes only exact Unicode pen-path joints", () => {
+    const nfd = "n\u0303";
+    const a = { ...stroke(nfd), x1: 800, y1: 800,
+        x2: 1100, y2: 1400, width: 251, color: "#112233" };
+    const b = { ...a, x1: 1100, y1: 1400,
+        x2: 1400, y2: 2000 };
+    const accent = { ...a, x1: 2200, y1: 2500,
+        x2: 2700, y2: 3000, color: "#445566" };
+    const other = { ...a, grapheme: "ñ", x1: 2200, y1: 600,
+        x2: 2200, y2: 3300, width: 300 };
+    const infinity = { ...a, grapheme: "∞", x1: 800, y1: 800,
+        x2: 1700, y2: 1500, width: 200 };
+    const original = [a, other, b, infinity, accent];
+    const before = encodeGlyphLibrary(original);
+    const changed = shearCandidatePath(original, nfd, 2, 20, 2600);
+    assert.deepEqual(changed, { strokes: [
+        { ...a, x1: 1455, x2: 1537 }, other,
+        { ...b, x1: 1537, x2: 1618 }, infinity, accent,
+    ], selectedIndex: 2 });
+    assert.deepEqual(candidatePenPaths(changed.strokes, nfd).map((path) =>
+        [path.first, path.last]), [[1, 2], [3, 3]]);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(changed.strokes)),
+        changed.strokes);
+    const left = shearCandidatePath(original, nfd, 0, -20, 2600);
+    assert.equal(left.strokes[0].x1, 145);
+    assert.equal(left.strokes[0].x2, left.strokes[2].x1);
+    assert.equal(encodeGlyphLibrary(original), before,
+        "browser slant is a proposal, not source mutation");
+});
+
+test("selected path slant validates bounds, no-ops and full contours", () => {
+    const nfd = "n\u0303";
+    const a = { ...stroke(nfd), x1: 800, y1: 800,
+        x2: 1100, y2: 1400, width: 251 };
+    const base = [a, { ...a, grapheme: "ñ" }];
+    const original = encodeGlyphLibrary(base);
+    for (const [index, angle, baseline] of [
+        [-1, 10, 2000], [1, 10, 2000],
+        [0, 0, 2000], [0, 21, 2000], [0, -21, 2000],
+        [0, 1.5, 2000], [0, NaN, 2000],
+        [0, 10, -1], [0, 10, 4501], [0, 10, 2000.5],
+        [0, -20, 4500],
+    ]) {
+        assert.throws(() => shearCandidatePath(base, nfd,
+            index, angle, baseline), /path|slant|clip|selected/i);
+    }
+    assert.throws(() => shearCandidatePath(base,
+        "nn", 0, 10, 2000), /selected/i);
+    assert.throws(() => shearCandidatePath([{
+        ...a, x1: 1000, x2: 1500, y1: 2000, y2: 2000,
+    }], nfd, 0, 10, 2000), /does not change/);
+    assert.equal(encodeGlyphLibrary(base), original);
+
+    const loop = [{ ...a, x1: 1000, y1: 1000, x2: 1400, y2: 1000,
+        width: 200 },
+    { ...a, x1: 1400, y1: 1000, x2: 1400, y2: 1400, width: 200 },
+    { ...a, x1: 1400, y1: 1400, x2: 1000, y2: 1400, width: 200 },
+    { ...a, x1: 1000, y1: 1400, x2: 1000, y2: 1000, width: 200 }];
+    const closed = shearCandidatePath(loop, nfd, 2, -15, 2000);
+    assert.deepEqual(candidatePenPaths(closed.strokes, nfd)[0].start,
+        candidatePenPaths(closed.strokes, nfd)[0].end);
+    const full = Array.from({ length: 4096 }, (_, index) => ({
+        ...a, x1: 1000 + 2 * (index % 2),
+        x2: 1000 + 2 * ((index + 1) % 2), y1: 1000, y2: 1000,
+        width: 200,
+    }));
+    const changed = shearCandidatePath(full, nfd, 2048, 20, 2000);
+    assert.equal(changed.strokes.length, 4096);
+    assert.equal(candidatePenPaths(changed.strokes, nfd).length, 1);
+    assert.equal(changed.strokes[0].x1, 1364);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(changed.strokes)),
+        changed.strokes);
+});
+
+test("selected path slant UI is undoable and only deliberately exported",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const key = "n\u0303";
+            const a = { ...stroke(key), x1: 800, y1: 800,
+                x2: 1100, y2: 1400, width: 251 };
+            const b = { ...a, x1: 1100, y1: 1400,
+                x2: 1400, y2: 2000 };
+            const original = [a, { ...a, grapheme: "ñ" }, b];
+            const bytes = new TextEncoder().encode(
+                encodeGlyphLibrary(original));
+            assert.equal(get("path-shear").disabled, true);
+            editor.start();
+            get("load").files = [{ size: bytes.length,
+                arrayBuffer: async () => bytes.buffer }];
+            await get("load").dispatch("change");
+            get("character").value = key;
+            get("character").dispatch("input");
+            get("selected").value = "2";
+            get("selected").dispatch("change");
+            for (const field of ["shear", "shear-degrees",
+                "shear-baseline"]) {
+                assert.equal(get(`path-${field}`).disabled, false);
+            }
+            get("path-shear-degrees").value = "20";
+            get("path-shear-baseline").value = "2600";
+            get("path-shear").dispatch("click");
+            assert.match(get("status").textContent,
+                /Slanted selected continuous pen path; unsaved/);
+            assert.equal(downloads.length, 0);
+            const result = shearCandidatePath(original, key, 2,
+                20, 2600).strokes;
+            get("save").dispatch("click");
+            assert.equal(await downloads[0].text(), encodeGlyphLibrary(result));
+            get("slant-undo").dispatch("click");
+            assert.match(get("status").textContent,
+                /Undid last pen path slant/);
+            get("save").dispatch("click");
+            assert.equal(await downloads[1].text(),
+                encodeGlyphLibrary(original));
+            get("slant-redo").dispatch("click");
+            get("save").dispatch("click");
+            assert.equal(await downloads[2].text(), encodeGlyphLibrary(result));
+            for (const invalid of ["0", "21", "-21", "1e1", "+10", "10.5"]) {
+                get("path-shear-degrees").value = invalid;
+                get("path-shear").dispatch("click");
+                get("save").dispatch("click");
+                assert.equal(await downloads.at(-1).text(),
+                    encodeGlyphLibrary(result));
+            }
+            editor.reset();
+            assert.equal(get("path-shear").disabled, true);
         } finally {
             ui.restore();
         }

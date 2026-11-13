@@ -2496,6 +2496,33 @@ file output, and no new scaling field or persistent pen-lift marker is
 added. Browser and native scaling were checked against 256 deterministic
 byte-for-byte Unicode and refusal cases, including negative rounding ties.
 
+**Slant selected continuous pen path** changes only the connected pen
+contour containing the currently selected stroke. Set a signed whole angle
+from -20 to 20 degrees (not zero) and a horizontal baseline at Y 0–4500 µm.
+
+The browser records a single undoable edit, without changing the underlying
+authored glyph library until an explicit TSV download.
+
+The native equivalent uses the one-based path index from `--inspect-paths`:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile ink.tsv --shear-path 'ñ' 1 -12 2600 \
+  --output slanted.tsv
+```
+
+Both implementations move each X endpoint by the rounded horizontal shear
+of its distance above or below the selected baseline. Y coordinates, shared
+directed joints, width, color, interleaved Unicode rows and unselected paths
+remain intact. Invalid angles, missing paths, unchanged rounded ink and
+round-pen clipping refuse atomically, including before a selected unclosed
+CLI stdin pipe is read.
+
+Native PDF and transparent PNG exports use the same resulting physical stroke
+geometry. A 256-case cross-runtime comparison confirms exact output TSV and
+error behavior. This edits v1 sampled strokes, not saved slant metadata or
+analytic curves.
+
 **Reflect selected continuous pen path** mirrors only the one path
 containing the selected stroke, around a chosen vertical X or horizontal Y
 coordinate (whole micrometres). It preserves directed joints, stroke order,

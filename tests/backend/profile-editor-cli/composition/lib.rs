@@ -18796,3 +18796,194 @@ fn native_selected_path_rotation_keeps_closed_and_full_budget_ink() {
         authored.as_bytes());
     fs::remove_file(source).expect("remove owned source");
 }
+
+#[test]
+fn native_selected_path_shear_preserves_exact_unicode_and_exported_ink() {
+    let nfd = "n\u{303}";
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source");
+    let output_name = output.to_str().expect("target");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "800", "800", "1100", "1400",
+        "251", "#112233",
+        "--glyph-stroke", "ñ", "2200", "600", "2200", "3300",
+        "300", "#778899",
+        "--glyph-stroke", nfd, "1100", "1400", "1400", "2000",
+        "251", "#112233",
+        "--glyph-stroke", "∞", "800", "800", "1700", "1500",
+        "200", "#445566",
+        "--glyph-stroke", nfd, "2200", "2500", "2700", "3000",
+        "200", "#445566",
+    ])).expect("source accepted").expect("source TSV");
+    fs::write(&source, &original).expect("save source");
+    let edited = execute_glyph_library(&args(&[
+        "--profile", source_name, "--shear-path", nfd, "1", "20", "2600",
+    ])).expect("bounded slant accepted").expect("TSV");
+    let expected = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "n\u{303}\t1455\t800\t1537\t1400\t251\t#112233\n",
+        "ñ\t2200\t600\t2200\t3300\t300\t#778899\n",
+        "n\u{303}\t1537\t1400\t1618\t2000\t251\t#112233\n",
+        "∞\t800\t800\t1700\t1500\t200\t#445566\n",
+        "n\u{303}\t2200\t2500\t2700\t3000\t200\t#445566\n",
+    );
+    assert_eq!(edited, expected.as_bytes());
+    let report = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--shear-path", nfd, "1", "20", "2600",
+        "--inspect-paths", nfd,
+    ])).expect("inspected").expect("report");
+    assert!(String::from_utf8_lossy(&report)
+        .contains("Strokes: 3\nPaths: 2\nPen lifts: 1"));
+    assert!(execute_glyph_library(&args(&[
+        "--profile", source_name, "--shear-path", nfd, "1", "20", "2600",
+        "--output", output_name,
+    ])).expect("save explicit target").is_none());
+    assert_eq!(fs::read(&source).expect("source unchanged"), original);
+    assert_eq!(fs::read(&output).expect("saved edited TSV"), edited);
+    for format in ["pdf", "png"] {
+        let mut saved = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", output_name,
+            "--place-text", "1", "30000", "45000", "ñn\u{303}",
+        ]);
+        let mut direct = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", nfd, "1455", "800", "1537", "1400",
+            "251", "#112233",
+            "--glyph-stroke", "ñ", "2200", "600", "2200", "3300",
+            "300", "#778899",
+            "--glyph-stroke", nfd, "1537", "1400", "1618", "2000",
+            "251", "#112233",
+            "--glyph-stroke", "∞", "800", "800", "1700", "1500",
+            "200", "#445566",
+            "--glyph-stroke", nfd, "2200", "2500", "2700", "3000",
+            "200", "#445566",
+            "--place-text", "1", "30000", "45000", "ñn\u{303}",
+        ]);
+        if format == "png" {
+            saved.extend(args(&["--dpi", "72"]));
+            direct.extend(args(&["--dpi", "72"]));
+        }
+        let expected_page = execute_notebook(&saved)
+            .expect("saved page").expect("bytes");
+        assert_eq!(expected_page,
+            execute_notebook(&direct).expect("independent ink").expect("bytes"),
+            "saved selected-path slant differs in {format}");
+    }
+    fs::remove_file(source).expect("remove owned source");
+    fs::remove_file(output).expect("remove owned output");
+}
+
+#[test]
+fn native_selected_path_shear_preflights_and_refuses_without_clobber() {
+    for incomplete in [
+        args(&["--profile", "-", "--shear-path"]),
+        args(&["--profile", "-", "--shear-path", "ñ"]),
+        args(&["--profile", "-", "--shear-path", "ñ", "1"]),
+        args(&["--profile", "-", "--shear-path", "ñ", "1", "10"]),
+    ] {
+        let error = preflight_glyph_profile_sources(&incomplete)
+            .expect_err("incomplete slant before reading stdin");
+        assert!(error.contains("--shear-path requires 4 operands"), "{error}");
+    }
+    for (glyph, index, angle, baseline) in [
+        ("ñ", "0", "10", "2600"),
+        ("ñ", "4097", "10", "2600"),
+        ("ab", "1", "10", "2600"),
+        ("ñ", "1", "0", "2600"),
+        ("ñ", "1", "21", "2600"),
+        ("ñ", "1", "-21", "2600"),
+        ("ñ", "1", "+10", "2600"),
+        ("ñ", "1", "1.5", "2600"),
+        ("ñ", "1", "10", "-1"),
+        ("ñ", "1", "10", "4501"),
+        ("ñ", "1", "10", "1.5"),
+    ] {
+        assert!(preflight_glyph_profile_sources(&args(&[
+            "--profile", "-", "--shear-path",
+            glyph, index, angle, baseline,
+        ])).is_err(), "{glyph} {index} {angle} {baseline}");
+    }
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source");
+    let output_name = output.to_str().expect("output");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "800", "800", "1100", "1400",
+        "251", "#112233",
+        "--glyph-stroke", "∞", "800", "800", "1700", "1500",
+        "200", "#445566",
+    ])).expect("source").expect("TSV");
+    fs::write(&source, &original).expect("source");
+    fs::write(&output, b"approved slant sentinel").expect("sentinel");
+    for (glyph, index, angle, baseline, reason) in [
+        ("ñ", "1", "-20", "4500", "clip"),
+        ("ñ", "2", "10", "2600", "path index"),
+        ("á", "1", "10", "2600", "no authored strokes"),
+    ] {
+        let error = execute_glyph_library(&args(&[
+            "--profile", source_name, "--shear-path",
+            glyph, index, angle, baseline,
+            "--output", output_name, "--replace",
+        ])).expect_err("bad slant cannot overwrite output");
+        assert!(error.contains(reason), "{error}");
+        assert_eq!(fs::read(&source).expect("source"), original);
+        assert_eq!(fs::read(&output).expect("output"),
+            b"approved slant sentinel");
+    }
+    let unchanged = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "1000", "2000", "1500", "2000",
+        "200", "#112233",
+        "--shear-path", "ñ", "1", "-10", "2000",
+    ])).expect_err("baseline-aligned horizontal stroke unchanged");
+    assert!(unchanged.contains("does not change"), "{unchanged}");
+    fs::remove_file(source).expect("remove owned source");
+    fs::remove_file(output).expect("remove owned output");
+}
+
+#[test]
+fn native_selected_path_shear_preserves_closed_and_full_budget_paths() {
+    let key = "n\u{303}";
+    let loop_report = execute_glyph_library(&args(&[
+        "--glyph-stroke", key, "1000", "1000", "1400", "1000",
+        "200", "#112233",
+        "--glyph-stroke", "ñ", "1200", "1400", "1200", "1800",
+        "200", "#445566",
+        "--glyph-stroke", key, "1400", "1000", "1400", "1400",
+        "200", "#112233",
+        "--glyph-stroke", key, "1400", "1400", "1000", "1400",
+        "200", "#112233",
+        "--glyph-stroke", key, "1000", "1400", "1000", "1000",
+        "200", "#112233",
+        "--shear-path", key, "1", "-15", "2000",
+        "--inspect-paths", key,
+    ])).expect("closed loop edit").expect("report");
+    let report = String::from_utf8(loop_report).expect("UTF-8");
+    assert!(report.contains("Strokes: 4\nPaths: 1\nPen lifts: 0"),
+        "{report}");
+    assert!(report.contains("(732, 1000) -> (732, 1000)")
+        && report.contains("[closed loop]"),
+        "slant preserves closed path endpoints: {report}");
+    let source = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source");
+    let mut authored = String::from("atrament.glyph-strokes.v1\n");
+    for index in 0..4096 {
+        let from = 1000 + 2 * (index % 2);
+        let to = 1000 + 2 * ((index + 1) % 2);
+        authored.push_str(&format!(
+            "n\u{303}\t{from}\t1000\t{to}\t1000\t200\t#112233\n",
+        ));
+    }
+    fs::write(&source, authored.as_bytes()).expect("full source");
+    let output = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--shear-path", key, "1", "20", "2000",
+    ])).expect("slanted 4096 stroke path").expect("TSV");
+    assert_eq!(output.iter().filter(|byte| **byte == b'\n').count(),
+        4097);
+    assert_eq!(fs::read(&source).expect("saved original"),
+        authored.as_bytes());
+    fs::remove_file(source).expect("owned source");
+}

@@ -645,6 +645,51 @@ export function translateCandidatePath(strokes, grapheme, selectedIndex, dx, dy)
     encodeGlyphLibrary(next);
     return { strokes: next, selectedIndex };
 }
+// Change the slant of one selected connected pen path only. Unlike the
+// whole-glyph italic edit, signed angles are allowed, and unchanged rounded
+// geometry refuses. Shared points undergo identical integer rounding.
+export function shearCandidatePath(strokes, grapheme, selectedIndex, degrees, baseline) {
+    if (!exactGrapheme(grapheme) || !Number.isSafeInteger(selectedIndex)
+        || selectedIndex < 0 || strokes[selectedIndex]?.grapheme !== grapheme) {
+        throw new Error("Path slant needs a selected exact glyph stroke");
+    }
+    if (!Number.isSafeInteger(degrees) || degrees === 0
+        || Math.abs(degrees) > 20
+        || !Number.isSafeInteger(baseline) || baseline < 0
+        || baseline > 4500) {
+        throw new Error("Path slant needs nonzero -20..20°"
+            + " and a bounded baseline");
+    }
+    encodeGlyphLibrary([...strokes]);
+    const indices = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const ordinal = indices.indexOf(selectedIndex) + 1;
+    const path = candidatePenPaths(strokes, grapheme).find((candidate) => ordinal >= candidate.first && ordinal <= candidate.last);
+    if (!path)
+        throw new Error("Selected glyph has no candidate pen path");
+    const slope = Math.tan(degrees * Math.PI / 180);
+    const next = strokes.slice();
+    let changed = false;
+    for (const slot of indices.slice(path.first - 1, path.last)) {
+        const stroke = strokes[slot];
+        const shifted = {
+            ...stroke,
+            x1: Math.round(stroke.x1 + slope * (baseline - stroke.y1)),
+            x2: Math.round(stroke.x2 + slope * (baseline - stroke.y2)),
+        };
+        const radius = stroke.width / 2;
+        if ([shifted.x1, shifted.x2].some((x) => x < radius || x > 3500 - radius)) {
+            throw new Error("Slanted pen contour clips glyph cell");
+        }
+        validateStroke(shifted);
+        changed ||= shifted.x1 !== stroke.x1 || shifted.x2 !== stroke.x2;
+        next[slot] = shifted;
+    }
+    if (!changed) {
+        throw new Error("Path slant does not change selected ink");
+    }
+    encodeGlyphLibrary(next);
+    return { strokes: next, selectedIndex };
+}
 // Reflect a selected directed path without touching any other path of the
 // same exact glyph. A second reflection restores the original TSV bytes.
 export function reflectCandidatePath(strokes, grapheme, selectedIndex, axis, pivot) {
@@ -4518,6 +4563,9 @@ export function createGlyphStrokeEditor() {
     const translatePath = required("glyph-path-translate");
     const scalePath = required("glyph-path-scale");
     const rotatePath = required("glyph-path-rotate");
+    const shearPath = required("glyph-path-shear");
+    const pathShearDegrees = required("glyph-path-shear-degrees");
+    const pathShearBaseline = required("glyph-path-shear-baseline");
     const pathRotateDegrees = required("glyph-path-rotate-degrees");
     const pathRotatePivotX = required("glyph-path-rotate-pivot-x");
     const pathRotatePivotY = required("glyph-path-rotate-pivot-y");
@@ -4583,6 +4631,7 @@ export function createGlyphStrokeEditor() {
         curvedBendX, curvedBendY,
         translatePath, scalePath, stylePath, removePath,
         rotatePath, pathRotateDegrees, pathRotatePivotX, pathRotatePivotY,
+        shearPath, pathShearDegrees, pathShearBaseline,
         reflectPath, pathReflectAxis, pathReflectPivot,
         copyPath, copyShiftedPath, pathCopyTarget,
         pathDx, pathDy, pathScaleX, pathScaleY,
@@ -5766,6 +5815,7 @@ export function createGlyphStrokeEditor() {
         translatePath.disabled = !active || !chosenPath;
         scalePath.disabled = !active || drawing !== null || !chosenPath;
         rotatePath.disabled = !active || drawing !== null || !chosenPath;
+        shearPath.disabled = !active || drawing !== null || !chosenPath;
         reflectPath.disabled = !active || drawing !== null || !chosenPath;
         stylePath.disabled = !active || drawing !== null || !chosenPath;
         removePath.disabled = !active || drawing !== null || !chosenPath
@@ -6937,6 +6987,18 @@ export function createGlyphStrokeEditor() {
             const changed = rotateCandidatePath(strokes, character.value, selectedIndex, decimalWhole(pathRotateDegrees.value, true), decimalWhole(pathRotatePivotX.value), decimalWhole(pathRotatePivotY.value));
             commitInkEdit(changed.strokes, character.value, "pen path rotation", changed.selectedIndex);
             message("Rotated selected continuous pen path; unsaved");
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    shearPath.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null)
+            return;
+        try {
+            const changed = shearCandidatePath(strokes, character.value, selectedIndex, decimalWhole(pathShearDegrees.value, true), decimalWhole(pathShearBaseline.value));
+            commitInkEdit(changed.strokes, character.value, "pen path slant", changed.selectedIndex);
+            message("Slanted selected continuous pen path; unsaved");
         }
         catch (error) {
             message(String(error));

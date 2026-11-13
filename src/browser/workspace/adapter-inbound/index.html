@@ -1605,6 +1605,21 @@
               20. Shared directed joints remain intact; collapsed strokes,
               clipping and unchanged rounding refuse before editing. Other
               glyphs remain untouched. Download TSV explicitly to save.</p>
+            <label>Selected path slant (degrees, negative leans left)
+              <input id="glyph-path-shear-degrees" type="number" min="-20"
+                max="20" step="1" value="10" disabled>
+            </label>
+            <label>Selected path slant baseline Y (µm)
+              <input id="glyph-path-shear-baseline" type="number" min="0"
+                max="4500" step="1" value="3000" disabled>
+            </label>
+            <button id="glyph-path-shear" type="button" disabled>
+              Slant selected continuous pen path (undoable)
+            </button>
+            <p class="field-help">Tilt only the selected pen path with
+              signed whole degrees about a fixed horizontal baseline. Shared
+              joints stay connected; clipped or unchanged ink refuses.
+              Undo before exporting TSV to restore authored geometry.</p>
             <label>Reflect selected path across coordinate
               <select id="glyph-path-reflect-axis" disabled>
                 <option value="x">Vertical axis (X, left/right)</option>

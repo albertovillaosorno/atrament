@@ -1115,6 +1115,15 @@ impl GlyphOverlay {
                 )?;
                 self.rotate_path_ink(grapheme, from, degrees, pivot_x, pivot_y)
             }
+            "--shear-path" => {
+                let angle = next_signed_path_offset(
+                    iter, "path slant angle", 20,
+                )?;
+                let baseline = next_integer(
+                    iter, "path slant baseline", 0, 4500,
+                )?;
+                self.shear_path(grapheme, from, angle, baseline)
+            }
             "--scale-path" => {
                 let x = next_integer(iter, "path X percent", 50, 150)?;
                 let y = next_integer(iter, "path Y percent", 50, 150)?;
@@ -2072,7 +2081,8 @@ impl GlyphOverlay {
             | "--join-next-path-curved"
             | "--rotate-path"
             | "--move-path" | "--translate-path" | "--style-path"
-            | "--scale-path" | "--reflect-path" | "--remove-path"
+            | "--scale-path" | "--shear-path" | "--reflect-path"
+            | "--remove-path"
             | "--rotate-path-ink",
         );
         let grapheme = iter.next().ok_or(if path {
@@ -2125,6 +2135,17 @@ impl GlyphOverlay {
                         return Err("path rotation needs nonzero angle".into());
                     }
                     let _rotation = GlyphRotation::new(angle, x, y)?;
+                }
+                "--shear-path" => {
+                    let angle = next_signed_path_offset(
+                        iter, "path slant angle", 20,
+                    )?;
+                    let _baseline = next_integer(
+                        iter, "path slant baseline", 0, 4500,
+                    )?;
+                    if angle == 0 {
+                        return Err("path slant needs nonzero angle".into());
+                    }
                 }
                 "--scale-path" => {
                     let x = next_integer(iter, "path X percent", 50, 150)?;
@@ -2947,6 +2968,61 @@ impl GlyphOverlay {
                 translated_pen_coordinate(
                     stroke.end_um.1, dy, 4500, stroke.width_um)?,
             );
+        }
+        let original = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = original;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// Shear one inferred directed pen path against an explicit Y baseline.
+    /// Every shared joint uses the same signed whole-um rounding as the
+    /// browser; other paths and interleaved Unicode keys retain their rows.
+    #[expect(clippy::suboptimal_flops, reason =
+        "match the browser's angle-to-radians and coordinate rounding")]
+    pub(super) fn shear_path(
+        &mut self, grapheme: &str, ordinal: u32,
+        degrees: i32, baseline: u32,
+    ) -> Result<(), String> {
+        if degrees == 0 || degrees.unsigned_abs() > 20 || baseline > 4500 {
+            return Err(
+                "path slant needs nonzero -20..20 degrees and baseline".into()
+            );
+        }
+        let (positions, paths) = self.selected_candidate_paths(grapheme)?;
+        let index = checked_path_position(&paths, ordinal)?;
+        let path = paths.get(index).ok_or("path index outside bounds")?;
+        let slots = positions.get(path.clone())
+            .ok_or("path range outside glyph")?;
+        let slope = (f64::from(degrees) * PI / 180.0f64).tan();
+        let mut revised = self.strokes.clone();
+        let mut changed = false;
+        for slot in slots {
+            let stroke = revised.get_mut(*slot)
+                .ok_or("path segment outside library")?;
+            let shear = |point: (u32, u32)| -> Result<(u32, u32), String> {
+                let signed = GlyphVariation::round_js(
+                    f64::from(point.0) + slope
+                        * (f64::from(baseline) - f64::from(point.1)),
+                )?;
+                let x = translated_pen_coordinate(
+                    0, signed, 3500, stroke.width_um,
+                )?;
+                Ok((x, point.1))
+            };
+            let start = shear(stroke.start_um)?;
+            let end = shear(stroke.end_um)?;
+            if start == end {
+                return Err("path slant collapses a pen segment".into());
+            }
+            changed |= start != stroke.start_um || end != stroke.end_um;
+            stroke.start_um = start;
+            stroke.end_um = end;
+        }
+        if !changed {
+            return Err("path slant does not change selected ink".into());
         }
         let original = replace(&mut self.strokes, revised);
         if let Err(error) = self.encode_file() {

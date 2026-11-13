@@ -1488,3 +1488,30 @@ refused inputs; Linux preflight includes nine additional malformed curves.
 This advances opt-in cursive-like authoring without adding persistent pen-up
 identities, analytic curve records or inferred connections. The full
 correlated two-line handwriting acceptance remains open.
+
+## Explicit selected-path slant (partial) — 2026-11-13
+
+The Rust `glyphs --shear-path GRAPHEME PATH_INDEX DEG BASELINE_Y_UM`
+editor and localhost **Slant selected continuous pen path** action now
+tilt only one candidate connected contour about a chosen horizontal
+baseline. Signed whole degrees -20..20 (excluding zero), a baseline
+Y 0..4500 µm, exact Unicode identity and complete round-pen clearance
+are checked before a mutation or explicit file save.
+
+Each shared endpoint
+uses the same rounded X geometry in Rust and the browser, preserving
+direction, style, interleaved NFC/NFD glyph rows and other same-glyph paths.
+The browser change is one session-only Undo/Redo step; rejected edits do
+not replace the source or an existing target TSV.
+
+Three native Rust tests cover canonical save/reopen, exact PDF and
+transparent PNG parity with independently authored ink, preflight before
+open stdin, file sentinels, clipped/no-op refusal, closed paths and the
+complete 4096-stroke library. Three browser tests cover selected path and
+Unicode isolation, full-capacity contours, invalid input, explicit TSV
+download, Undo/Redo and reset. An additional 256-case direct production
+Rust/browser subprocess comparison checks full TSV equality and refusals.
+
+This is bounded manual geometry editing, not automatic cursive letterform
+synthesis, attached accents, calibrated pen pressure or persistent analytic
+curves. The complete two-line correlated P1-014 acceptance stays open.
