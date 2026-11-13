@@ -12647,3 +12647,184 @@ fn word_pigment_native_pdf_png_tsv_replay_and_invalid_output_are_atomic()
     fs::remove_file(target).map_err(|error| error.to_string())?;
     Ok(())
 }
+
+#[test]
+fn selected_flow_pitch_measures_unicode_lines_and_preserves_legacy_layout() {
+    let source = FlowSource::new(FlowFormat::Plain,
+        "n\u{303}\nn\u{303}\nn\u{303}\nn\u{303}")
+        .expect("exact decomposed graphemes");
+    let paper = NotebookProfile::default();
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 50_000, height: 45_000,
+    };
+    let default = layout_flow_with_region(
+        &source, &paper, None, HeadingDecoration::default(), Some(region),
+    ).expect("legacy 9-mm layout");
+    let minimum = |pitch| layout_flow_with_min_pitch(
+        &source, &paper, None, HeadingDecoration::default(), Some(region),
+        Some(pitch),
+    );
+    assert_eq!(default.2, 1);
+    assert_eq!(default.0.iter().map(|run| (run.page, run.origin_um.1))
+        .collect::<Vec<_>>(), [
+            (1, 42_500), (1, 51_500), (1, 60_500), (1, 69_500),
+        ]);
+    assert_eq!(minimum(9_000).expect("explicit default").0.iter()
+        .map(|run| (run.page, run.origin_um, run.text.as_str()))
+        .collect::<Vec<_>>(), default.0.iter()
+        .map(|run| (run.page, run.origin_um, run.text.as_str()))
+        .collect::<Vec<_>>());
+    let (runs, marks, pages) = minimum(18_000)
+        .expect("minimum physical row leading");
+    assert_eq!(pages, 2);
+    assert!(marks.is_empty());
+    assert_eq!(runs.iter().map(|run| (run.page, run.origin_um.1))
+        .collect::<Vec<_>>(), [
+            (1, 42_500), (1, 60_500), (2, 42_500), (2, 60_500),
+        ]);
+    assert!(runs.iter().all(|run| run.text == "n\u{303}"));
+    assert_eq!(minimum(30_000).expect("maximum accepted pitch").2, 4);
+    for invalid in [0, 8_999, 30_001, u32::MAX] {
+        let error = minimum(invalid)
+            .expect_err("typed pitch bypass must be rejected");
+        assert_eq!(error, "flow pitch must be within 9000..30000 um");
+    }
+}
+
+#[test]
+fn selected_flow_pitch_exports_replayable_pdf_png_and_page_ink() {
+    let base = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-text", "a\na\na\na",
+        "--flow-region", "30000", "40000", "50000", "60000",
+        "--flow-pitch-um", "18000",
+    ]);
+    let mut pdf_command = base.clone();
+    pdf_command.extend(args(&["--export-paper", "pdf"]));
+    let pdf = execute_notebook(&pdf_command)
+        .expect("two-page pitched PDF").expect("native PDF bytes");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    let streams = String::from_utf8_lossy(&pdf)
+        .split("\nstream\n").skip(1).count();
+    assert_eq!(streams, 2, "18-mm pitch requires two pages");
+    assert!(execute_notebook(&pdf_command)
+        .expect("PDF replay").expect("PDF bytes") == pdf);
+
+    // An explicit default is byte-for-byte identical to omitting pitch.
+    let mut unselected = pdf_command.clone();
+    let position = unselected.iter().position(|arg| arg == "--flow-pitch-um")
+        .expect("selected pitch flag");
+    drop(unselected.drain(position..position + 2));
+    let mut original = unselected.clone();
+    original.extend(args(&["--flow-pitch-um", "9000"]));
+    assert!(execute_notebook(&unselected).expect("default PDF")
+        == execute_notebook(&original).expect("explicit 9-mm PDF"));
+
+    let mut png_command = base.clone();
+    png_command.extend(args(&[
+        "--export-paper", "png", "--dpi", "72", "--png-page", "2",
+    ]));
+    let second = execute_notebook(&png_command)
+        .expect("second transparent physical PNG")
+        .expect("PNG bytes");
+    assert!(second.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert!(execute_notebook(&png_command)
+        .expect("PNG replay").expect("PNG bytes") == second);
+    let selected = png_command.last_mut().expect("selected page number");
+    *selected = "1".into();
+    let first = execute_notebook(&png_command)
+        .expect("first physical PNG").expect("PNG bytes");
+    assert!(first != second, "pagination changes visible ink");
+
+    let mut ink_command = base;
+    ink_command.push("--emit-ink-file".into());
+    let bytes = execute_notebook(&ink_command)
+        .expect("physical page ink TSV").expect("TSV bytes");
+    assert_eq!(bytes, execute_notebook(&ink_command)
+        .expect("TSV replay").expect("TSV bytes"));
+    let ink = String::from_utf8(bytes).expect("UTF-8 physical ink");
+    let rows = ink.lines().collect::<Vec<_>>();
+    assert_eq!(rows[0], "atrament.page-ink.v1");
+    assert_eq!(rows.len(), 5, "four physical authored glyph strokes");
+    assert_eq!(rows.iter().skip(1).map(|row| row.split('\t')
+        .next().expect("page field")).collect::<Vec<_>>(),
+        ["1", "1", "1", "2"]);
+}
+
+#[test]
+fn invalid_or_unsupported_flow_pitch_refuses_before_source_io_and_commit() {
+    let before_io = args(&[
+        "--flow-text-file", "-", "--glyph-file", "not-opened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (values, diagnostic) in [
+        (vec!["--flow-pitch-um", "8999"], "within 9000..30000"),
+        (vec!["--flow-pitch-um", "30001"], "within 9000..30000"),
+        (vec!["--flow-pitch-um", "-9000"], "within 9000..30000"),
+        (vec!["--flow-pitch-um", "+9000"], "within 9000..30000"),
+        (vec!["--flow-pitch-um", "4294967296"], "within 9000..30000"),
+        (vec!["--flow-pitch-um", ""], "within 9000..30000"),
+        (vec!["--flow-pitch-um"], "requires 9000..30000"),
+        (vec!["--flow-pitch-um", "18000", "--flow-pitch-um", "9000"],
+            "may appear only once"),
+    ] {
+        let mut command = before_io.clone();
+        command.extend(args(&values));
+        let error = preflight_notebook_sources(&command)
+            .expect_err("invalid late pitch must refuse before stdin or files");
+        assert!(error.contains(diagnostic), "{values:?}: {error}");
+    }
+    let error = preflight_notebook_sources(&args(&[
+        "--ink-file", "-", "--export-paper", "pdf",
+        "--flow-pitch-um", "18000",
+    ])).expect_err("flow-only pitch must refuse before stdin read");
+    assert_eq!(error, "--flow-pitch-um requires a text or Markdown flow");
+
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"keep-accepted-pdf")
+        .expect("owned original PDF sentinel");
+    let mut command = args(&[
+        "--export-paper", "pdf", "--pages", "1",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-text", "a\na\na\na",
+        "--flow-region", "30000", "40000", "50000", "45000",
+        "--flow-pitch-um", "18000",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("owned path"), "--replace",
+    ]));
+    let error = execute_notebook(&command)
+        .expect_err("requested one-page output cannot fit chosen leading");
+    assert!(error.contains("requires 2 physical pages"), "{error}");
+    assert_eq!(fs::read(&target).expect("sentinel unchanged"),
+        b"keep-accepted-pdf");
+    fs::remove_file(target).expect("remove test-owned file");
+}
+
+#[test]
+fn selected_minimum_pitch_cannot_compress_measured_handwriting_height() {
+    let statistics_json = execute_handwriting(&args(&[
+        "--set-glyph", "a", "height", "20000", "20000",
+        "20000", "20000", "0",
+    ])).expect("valid 20-mm glyph height").expect("canonical statistics");
+    let statistics = decode_statistics_json(
+        &statistics_json, &UnicodeGraphemeSegmentation,
+    ).expect("reopen selected exact height");
+    let paper = NotebookProfile::default();
+    let source = FlowSource::new(FlowFormat::Plain, "a\na")
+        .expect("two authored physical rows");
+    let render = |minimum| layout_flow_with_min_pitch(
+        &source, &paper, Some(&statistics), HeadingDecoration::default(),
+        None, minimum,
+    );
+    let (legacy, _, _) = render(None).expect("glyph-height-driven pitch");
+    let (small, _, _) = render(Some(18_000))
+        .expect("explicit minimum does not shrink tall glyphs");
+    let (large, _, _) = render(Some(30_000))
+        .expect("wider minimum may enlarge tall-glyph pitch");
+    assert_eq!(legacy[1].origin_um.1 - legacy[0].origin_um.1, 24_000);
+    assert_eq!(small[1].origin_um.1 - small[0].origin_um.1,
+        24_000, "measured contour remains authoritative");
+    assert_eq!(large[1].origin_um.1 - large[0].origin_um.1, 30_000);
+}

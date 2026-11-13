@@ -544,6 +544,27 @@ have enough space for the measured handwritten glyphs and row pitch.
 With the default paper, an impossible region is refused before reading selected
 files or stdin. Imported profiles keep their own authoritative margins.
 
+To add intentional line spacing to either plain or Markdown flow, select
+`--flow-pitch-um 18000` for an 18 mm **minimum** physical row pitch. The
+accepted inclusive range is 9,000–30,000 µm. The original 9 mm pitch
+remains the default, and a selected handwriting profile's larger measured
+glyph height or baseline clearance takes precedence over this minimum.
+The pitch repeats on every page, including a selected `--flow-region`:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-region 30000 40000 50000 60000 --flow-pitch-um 18000 \
+  --export-paper pdf --output spacious-notes.pdf
+```
+
+This option is export-only, requires one flow source, and does not mutate
+saved notebook JSON or manual `--place-text` positions. Invalid, duplicate
+or unsupported values refuse before reading selected source files or stdin.
+Wider leading can require more physical pages; the normal 32-page limit,
+explicit PDF `--pages` budget, region ink-clearance checks, and PNG page
+selection still apply. It does not add dynamic paragraph or word spacing.
+
 The CLI continues content on the next physical page when needed;
 `--pages` and `--png-page` still refuse impossible selections. Invalid,
 overlapping-margins or too-small areas refuse before any selected file

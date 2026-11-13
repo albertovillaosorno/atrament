@@ -53,6 +53,7 @@ const INSET_UM: u32 = 2_500;
 const EXTRA_RIGHT_UM: u32 = 1_500;
 const PARAGRAPH_GAP_UM: u32 = 4_000;
 const DEFAULT_PITCH_UM: u32 = 9_000;
+const MAX_SELECTED_PITCH_UM: u32 = 30_000;
 const SEPARATOR_CENTER_UM: u32 = 4_500;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -2717,6 +2718,7 @@ fn validate_flow_statistics(
 /// An optional fixed rectangle constrains every page's text and decoration.
 /// The whole printable rectangle remains the default when none is selected.
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
+#[cfg(test)]
 pub(super) fn layout_flow_with_region(
     source: &FlowSource,
     profile: &NotebookProfile,
@@ -2724,7 +2726,39 @@ pub(super) fn layout_flow_with_region(
     decoration: HeadingDecoration,
     region: Option<FlowRegion>,
 ) -> Result<(Vec<TextRun>, Vec<NotebookInkLine>, usize), String> {
-    let pitch = measured_pitch(source, statistics)?;
+    layout_flow_with_min_pitch(
+        source, profile, statistics, decoration, region, None,
+    )
+}
+
+// Validate typed callers too; CLI preflight performs the same bound check.
+fn measured_pitch_with_minimum(
+    source: &FlowSource,
+    statistics: Option<&HandwritingStatisticsProfile>,
+    minimum: Option<u32>,
+) -> Result<u32, String> {
+    if minimum.is_some_and(|pitch| {
+        !(DEFAULT_PITCH_UM..=MAX_SELECTED_PITCH_UM).contains(&pitch)
+    }) {
+        return Err("flow pitch must be within 9000..30000 um".into());
+    }
+    Ok(measured_pitch(source, statistics)?
+        .max(minimum.unwrap_or(DEFAULT_PITCH_UM)))
+}
+
+/// A caller-selected minimum row pitch increases deliberate notebook leading.
+/// Measured glyph heights still win; a selected value never compresses ink.
+/// This setting is export-only and does not modify the saved notebook profile.
+#[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
+pub(super) fn layout_flow_with_min_pitch(
+    source: &FlowSource,
+    profile: &NotebookProfile,
+    statistics: Option<&HandwritingStatisticsProfile>,
+    decoration: HeadingDecoration,
+    region: Option<FlowRegion>,
+    min_pitch_um: Option<u32>,
+) -> Result<(Vec<TextRun>, Vec<NotebookInkLine>, usize), String> {
+    let pitch = measured_pitch_with_minimum(source, statistics, min_pitch_um)?;
     let mut layout = initialize_layout(
         profile, statistics, decoration, source.format, region, pitch,
     )?;

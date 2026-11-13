@@ -273,6 +273,27 @@ remains byte-identical. This meets a limited fixed-text-region subcase,
 **not** image-aware page obstacles, independently positioned regions,
 persisted semantic block identities or end-to-end browser rendering.
 
+## Caller-selected minimum row pitch (partial) — 2026-11-12
+
+The native Rust flow CLI accepts `--flow-pitch-um 9000..30000` with one
+plain-text or Markdown source. It sets a minimum physical row pitch in
+micrometres, rather than overriding the taller height/baseline clearance
+measured from the rendered Unicode graphemes and handwriting statistics.
+Without this flag, the existing 9-mm row layout is unchanged. It changes
+only transient flow exports, never saved profile JSON, handwritten glyph
+shapes or manual page annotations.
+
+The selection is parsed and validated in the source-independent preflight
+before reading stdin or imported files. Duplicate flags, negative and
+out-of-range numbers, overflow and a pitch without flow all refuse. The
+real compositor uses the same pagination and fixed-region admission for
+PDF, transparent PNG and physical page-ink TSV, including strict explicit
+PDF page budgets. Native regressions cover exact NFD glyph row locations,
+9-mm replay, 18-mm pagination, the accepted 30-mm limit, deterministic
+multi-page exports, output-preserving refusal and pre-source-I/O validation.
+This remains a CLI flow-layout option, not persistent line-spacing semantics,
+a browser editor control or automatic obstacle-aware paragraph placement.
+
 ## Fixed-region post-transform ink clearance (partial) — 2026-11-03
 
 The CLI now revalidates **actual expanded** glyph and Markdown ornament

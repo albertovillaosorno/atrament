@@ -47,10 +47,10 @@ use std::str::from_utf8;
 use std::slice::{Iter, from_ref};
 
 #[cfg(test)]
-use flow::layout_flow;
+use flow::{layout_flow, layout_flow_with_region};
 use flow::{
     FlowFormat, FlowRegion, FlowSource, HeadingDecoration,
-    layout_flow_with_region,
+    layout_flow_with_min_pitch,
 };
 use glyph::{GlyphVariation, first_grapheme};
 
@@ -178,6 +178,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--flow-text TEXT | --flow-markdown MARKDOWN | \
      --flow-text-file FILE|- | --flow-markdown-file FILE|-] \
     [--flow-region LEFT_UM TOP_UM WIDTH_UM HEIGHT_UM] \
+    [--flow-pitch-um MIN_UM (9000..30000)] \
     [--handwriting-profile ink.json (requires glyph shapes)] \
     [--output FILE [--replace]]\n\
     Flow requires --export-paper pdf|png or --emit-ink-file; text is not \
@@ -214,6 +215,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     Both use physical printable regions and exact authored ink; \
     optional --flow-region repeats a fixed rectangle within margins on \
     every sheet, refusing invalid regions or unfit glyphs/rows. \
+    --flow-pitch-um selects minimum 9..30 mm physical row spacing; \
+    taller measured glyphs retain their necessary clearance. \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
     PDF page count includes the last manual ink page, with or without \
@@ -236,8 +239,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     --glyph-word-rise adds an independent seeded vertical offset per word \
     (0..150 um) without changing row pitch or pen contours. \
     --glyph-word-pressure varies shared physical pen width per word \
-    --glyph-word-pigment varies shared ink lightness by 0..20 percent \
     (0..20 percent), with invalid ink refused before commit. \
+    --glyph-word-pigment varies shared ink lightness by 0..20 percent. \
     --glyph-word-slant adds a shared baseline shear per word (0..5000 \
     millidegrees), with invalid physical pen geometry refused. \
     --glyph-word-width scales authored letter contours together per word \
@@ -324,6 +327,7 @@ struct NotebookRequest {
     dpi: u32,
     export_format: Option<NotebookExportFormat>,
     flow: Option<FlowSource>,
+    flow_pitch_um: Option<u32>,
     flow_region: Option<FlowRegion>,
     glyphs: GlyphOverlay,
     heading: HeadingDecoration,
@@ -450,6 +454,11 @@ impl NotebookFlagPreflight {
                 )?;
                 0
             }
+            "--flow-pitch-um" => {
+                self.unique(option, "--flow-pitch-um may appear only once")?;
+                let _pitch = parse_notebook_flow_pitch(iter)?;
+                0
+            }
             "--heading-style" | "--heading-color"
             | "--heading-marker-scale" | "--heading-ink-color"
             | "--heading-ink-scale" => {
@@ -508,7 +517,8 @@ impl NotebookFlagPreflight {
         // These relationships depend on selected flags, never on the bytes
         // supplied by a previous flow, glyph library or page-ink source.
         validate_notebook_flow_flag_compatibility(
-            flow_format, region_selected, self.heading,
+            flow_format, region_selected,
+            has("--flow-pitch-um"), self.heading,
             self.export_format,
         )?;
         // Explicit ink and glyph intent needs an output mode even before
@@ -1979,6 +1989,32 @@ fn parse_notebook_flow(
     Ok(())
 }
 
+fn parse_notebook_flow_pitch(
+    iter: &mut Iter<'_, String>,
+) -> Result<u32, String> {
+    let raw = iter.next()
+        .ok_or("--flow-pitch-um requires 9000..30000 um")?;
+    if raw.is_empty() || !raw.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err("flow pitch must be within 9000..30000 um".into());
+    }
+    let pitch = raw.parse::<u32>()
+        .map_err(|_error| "flow pitch must be within 9000..30000 um")?;
+    if !(9_000..=30_000).contains(&pitch) {
+        return Err("flow pitch must be within 9000..30000 um".into());
+    }
+    Ok(pitch)
+}
+
+fn select_notebook_flow_pitch(
+    iter: &mut Iter<'_, String>, selected: &mut Option<u32>,
+) -> Result<(), String> {
+    if selected.is_some() {
+        return Err("--flow-pitch-um may appear only once".into());
+    }
+    *selected = Some(parse_notebook_flow_pitch(iter)?);
+    Ok(())
+}
+
 fn parse_notebook_flow_region(
     iter: &mut Iter<'_, String>, selected: bool,
 ) -> Result<FlowRegion, String> {
@@ -2017,7 +2053,8 @@ fn load_notebook_paper_option(
 
 fn validate_notebook_flow_flag_compatibility(
     flow_format: Option<FlowFormat>, region_selected: bool,
-    heading: HeadingDecoration, export_format: Option<NotebookExportFormat>,
+    pitch_selected: bool, heading: HeadingDecoration,
+    export_format: Option<NotebookExportFormat>,
 ) -> Result<(), String> {
     // Transient text is not a field in the saved notebook v1 profile.
     if flow_format.is_some() && export_format.is_none() {
@@ -2030,6 +2067,9 @@ fn validate_notebook_flow_flag_compatibility(
     if region_selected && flow_format.is_none() {
         return Err("--flow-region requires a text or Markdown flow".into());
     }
+    if pitch_selected && flow_format.is_none() {
+        return Err("--flow-pitch-um requires a text or Markdown flow".into());
+    }
     heading.validate().map_err(str::to_owned)?;
     if heading.is_selected() && flow_format != Some(FlowFormat::Markdown) {
         return Err("heading customization requires --flow-markdown".into());
@@ -2040,10 +2080,11 @@ fn validate_notebook_flow_flag_compatibility(
 fn validate_notebook_flow_selection(
     flow: Option<&FlowSource>, glyphs: &GlyphOverlay,
     heading: HeadingDecoration, region: Option<FlowRegion>,
-    export: &NotebookExportOptions,
+    pitch_um: Option<u32>, export: &NotebookExportOptions,
 ) -> Result<(), String> {
     validate_notebook_flow_flag_compatibility(
-        flow.map(|source| source.format), region.is_some(), heading,
+        flow.map(|source| source.format), region.is_some(),
+        pitch_um.is_some(), heading,
         export.format,
     )?;
     if flow.is_none() {
@@ -2254,8 +2295,8 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
         }
     }
     // Imported-only ink is checked after its bounded source read.
-    glyph_preflight.validate_optional_rhythm()?;
-    preflight_notebook_export_and_ink(flags, flow_format, region_selected,
+    preflight_notebook_export_and_ink(
+        flags, flow_format, region_selected,
         &inline_ink, glyph_file_selected, handwriting_selected,
         &glyph_preflight)?;
     preflight_default_notebook_metadata(&preview, profile_edited,
@@ -2339,6 +2380,7 @@ fn preflight_notebook_export_and_ink(
     glyph_file_selected: bool, handwriting_selected: bool,
     glyphs: &GlyphOverlay,
 ) -> Result<(), String> {
+    glyphs.validate_optional_rhythm()?;
     let manual_last_page = inline_ink.iter().map(|line| line.page)
         .chain(glyphs.runs.iter().map(|run| run.page))
         .max().unwrap_or(0);
@@ -2406,7 +2448,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let (mut output, mut replace) = (None, false);
     let (mut export, mut ink) = (NotebookExportOptions::default(), Vec::new());
     let (mut glyphs, mut statistics) = (GlyphOverlay::default(), None);
-    let (mut flow, mut flow_region) = (None, None);
+    let (mut flow, mut flow_region, mut flow_pitch_um) = (None, None, None);
     let mut heading = HeadingDecoration::default();
     let mut stdin_selected = false;
     let (mut loaded, mut paper_loaded) = (false, false);
@@ -2444,6 +2486,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 heading.parse(option, &mut iter)?,
             "--flow-region" => flow_region = Some(parse_notebook_flow_region(
                 &mut iter, flow_region.is_some())?),
+            "--flow-pitch-um" => select_notebook_flow_pitch(
+                &mut iter, &mut flow_pitch_um)?,
             "--flow-text" | "--flow-markdown"
             | "--flow-text-file" | "--flow-markdown-file" =>
                 parse_notebook_flow(
@@ -2466,17 +2510,14 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--output" => output = Some(parse_selected_output(
                 &mut iter, output.is_some(),
             )?),
-            "--replace" => {
-                if replace {
-                    return Err("--replace may appear only once".into());
-                }
-                replace = true;
-            }
+            "--replace" => preflight_unique_selection(
+                &mut replace, "--replace may appear only once")?,
             _ => return Err(format!("unknown notebook option: {option}")),
         }
     }
     validate_notebook_flow_selection(
-        flow.as_ref(), &glyphs, heading, flow_region, &export,
+        flow.as_ref(), &glyphs, heading, flow_region, flow_pitch_um,
+        &export,
     )?;
     validate_notebook_export_flags(
         replace, output.as_deref(), inspect, &export, &ink,
@@ -2485,6 +2526,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     profile.validate()?;
     Ok(NotebookRequest {
         flow,
+        flow_pitch_um,
         flow_region,
         pages_explicit: export.pages.is_some(),
         glyphs,
@@ -2613,9 +2655,9 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     let manual_ink_count = request.ink.len();
     let mut flow_run_count = None;
     if let Some(source) = &request.flow {
-        let (runs, ornaments, flow_pages) = layout_flow_with_region(
+        let (runs, ornaments, flow_pages) = layout_flow_with_min_pitch(
             source, &request.profile, request.statistics.as_ref(),
-            request.heading, request.flow_region,
+            request.heading, request.flow_region, request.flow_pitch_um,
         )?;
         admit_flow_page_selection(&mut request, flow_pages)?;
         flow_run_count = Some(runs.len());
