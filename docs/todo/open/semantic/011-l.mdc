@@ -4435,3 +4435,23 @@ prior-byte equivalence of default/explicit-left, source-independent
 preflight refusal, typed Markdown-only validation, and immutable selected
 PDF output after an unfit composition. This is CLI-only and does not
 persist semantic list identities or complete the P1 notebook journey.
+
+## Opt-in authored ordered-list alignment (partial) — 2026-11-13
+
+The native `atrament-profiles notebook` Markdown flow CLI now accepts
+`--flow-ordered-align left|center|right`, independently of heading, prose,
+quote, unordered-bullet and checkbox alignment. It moves the *authored*
+numeric marker, delimiter and item glyphs together, including `1.` and
+`12)`, within each measured physical list row. For wrapped rows it first
+reserves the existing measured hanging label width, then aligns each
+continuation only inside the remaining writing band. Selected left/right
+list insets, actual page regions and pagination remain authoritative.
+
+Default and explicit `left` exports stay byte-identical. Four new Rust
+native regressions cover exact marker/body row coordinates, unchanged
+other Markdown rows, multi-page hanging continuations, deterministic
+PDF/transparent PNG/ink TSV output and rejection of invalid or duplicate
+flags before source I/O. Unfit physical rows refuse without replacing
+the selected existing PDF. This is export-only numeric-row placement,
+not semantic list indentation, automatic numbering or saved notebook
+content; the P1 semantic notebook acceptance criterion remains open.

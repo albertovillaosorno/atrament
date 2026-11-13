@@ -696,8 +696,9 @@ For unordered Markdown bullets and checkbox tasks, select
 `--flow-bullet-align center` or `right` to align each measured row of item
 text within the list writing band. The bullet dash or checkbox stays at
 its original structural gutter even after wrapping or moving to another
-page. Numbered labels such as `1.` and `2)` are authored handwriting and
-remain left-aligned; heading, quote and prose alignment are independent.
+page. Numbered labels such as `1.` and `2)` are authored handwriting;
+their alignment is a separate choice. Heading, quote and prose alignment
+are independent.
 
 ```sh
 cargo run -q -p atrament_profile_editor_cli -- notebook \
@@ -713,6 +714,27 @@ Markdown-only, export-only option measures nominal glyph contours; it does
 not move original list markers, persist notebook semantics or guarantee
 optical alignment after pen variation. Invalid selections refuse before
 source reads, and unfit layouts preserve existing selected output files.
+
+For authored Markdown numbered lists, opt into
+`--flow-ordered-align center` or `right` to place the handwritten numeral,
+delimiter and item text together within the available list writing row.
+Wrapped continuation rows retain the measured hanging label indent before
+applying alignment within their remaining width. The selected left/right
+list insets still constrain the ink. Other headings, quotes, bullets and
+body paragraphs are unaffected.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-ordered-align right --export-paper pdf \
+  --output right-aligned-numbers.pdf
+```
+
+Omitting the flag or explicitly selecting `left` preserves the old
+native PDF, transparent PNG and ink TSV bytes. The option is Markdown-only
+and transient; it does not renumber items, alter pen strokes, or establish
+persisted semantic list alignment. Invalid values, duplicates, and
+unrenderable rows refuse before replacing an output file.
 
 To indent only the **first physical row** of each Markdown prose block,
 select `--flow-body-first-line-indent-um 8000`. This shifts the first

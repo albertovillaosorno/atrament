@@ -79,16 +79,17 @@ pub(super) enum BodyAlign {
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
 pub(super) struct FlowTypography {
     pub(super) body_align: Option<BodyAlign>,
-    pub(super) bullet_align: Option<BodyAlign>,
-    pub(super) quote_align: Option<BodyAlign>,
     pub(super) body_continuation_indent: Option<u32>,
     pub(super) body_first_line_indent: Option<u32>,
     pub(super) body_inset: Option<u32>,
     pub(super) body_right_inset: Option<u32>,
+    pub(super) bullet_align: Option<BodyAlign>,
     pub(super) list_quote_inset: Option<u32>,
     pub(super) list_quote_right_inset: Option<u32>,
+    pub(super) ordered_align: Option<BodyAlign>,
     pub(super) paragraph_gap: Option<u32>,
     pub(super) pitch: Option<u32>,
+    pub(super) quote_align: Option<BodyAlign>,
 }
 
 #[derive(Debug)]
@@ -581,13 +582,12 @@ struct RuleChain {
 
 struct Layout<'model> {
     body_align: Option<BodyAlign>,
-    bullet_align: Option<BodyAlign>,
-    quote_align: Option<BodyAlign>,
     body_continuation_indent_um: u32,
     body_first_line_indent_um: u32,
     body_inset_um: u32,
     body_right_inset_um: u32,
     bottom: u32,
+    bullet_align: Option<BodyAlign>,
     heading: HeadingDecoration,
     // Whether the last heading was itself bound to an earlier title/rule.
     heading_attached_to_prior: bool,
@@ -600,11 +600,13 @@ struct Layout<'model> {
     lines: Vec<TextRun>,
     list_quote_inset_um: u32,
     list_quote_right_inset_um: u32,
+    ordered_align: Option<BodyAlign>,
     ornaments: Vec<NotebookInkLine>,
     page: usize,
     paragraph_gap_um: u32,
     pending_blank_rows: usize,
     pitch: u32,
+    quote_align: Option<BodyAlign>,
     right: u32,
     row_count: usize,
     rule_chain: Option<RuleChain>,
@@ -655,36 +657,6 @@ impl Layout<'_> {
             .ok_or_else(|| "flow body alignment position overflow".into())
     }
 
-    // Align text inside its structural row, not the quote bar, bullet or
-    // checkbox that owns the row's original left gutter. Ordered labels
-    // are authored text and intentionally do not use this policy.
-    fn aligned_structural_origin(
-        &self, text: &str, extent: u32, start_x: u32,
-        style: LineStyle, align: Option<BodyAlign>, kind: &str,
-    ) -> Result<u32, String> {
-        let Some(align) = align else {
-            return Ok(start_x);
-        };
-        if align == BodyAlign::Left {
-            return Ok(start_x);
-        }
-        let capacity = self.flow_row_bounds(style, false)?.1;
-        let ink_extent = heading_contour_extent(
-            text, extent, self.statistics,
-        )?;
-        let available = capacity.checked_sub(ink_extent)
-            .ok_or_else(|| format!(
-                "flow {kind} alignment exceeds writing row",
-            ))?;
-        let shift = if align == BodyAlign::Center {
-            available / 2
-        } else {
-            available
-        };
-        start_x.checked_add(shift)
-            .ok_or_else(|| format!("flow {kind} alignment position overflow"))
-    }
-
     // Horizontal placement includes every visible nominal glyph contour,
     // not merely the post-glyph advance cursor. Keep alignment independent
     // from the page number and the chosen heading ornament.
@@ -713,6 +685,75 @@ impl Layout<'_> {
         let x = start_x.checked_add(offset)
             .ok_or("heading alignment position overflow")?;
         Ok((x, ink_extent))
+    }
+
+    // A chosen row alignment is independent from the next physical row.
+    // Numbered labels stay attached to their item text when moved.
+    fn aligned_row_origin(
+        &self, text: &str, extent: u32, start_x: u32,
+        style: LineStyle, first: bool, protect_body: bool,
+    ) -> Result<(u32, Option<u32>), String> {
+        if matches!(style, LineStyle::Heading(_)) {
+            let (x, ink_extent) = self.aligned_heading_origin(
+                text, extent, start_x,
+            )?;
+            Ok((x, Some(ink_extent)))
+        } else if protect_body && matches!(style, LineStyle::Body) {
+            Ok((self.aligned_body_origin(
+                text, extent, start_x, first,
+            )?, None))
+        } else {
+            let (align, kind) = match style {
+                LineStyle::Quote => (self.quote_align, "quote"),
+                LineStyle::Bullet | LineStyle::Task(_) =>
+                    (self.bullet_align, "bullet"),
+                LineStyle::Ordered => (self.ordered_align, "ordered"),
+                LineStyle::Body | LineStyle::Heading(_) |
+                LineStyle::Separator => return Ok((start_x, None)),
+            };
+            Ok((self.aligned_structural_origin(
+                text, extent, start_x, style, align, kind,
+            )?, None))
+        }
+    }
+
+    // Align text inside its structural row, not the quote bar, bullet or
+    // checkbox that owns the row's original left gutter. Numbered
+    // labels are authored ink and move together with their item text.
+    fn aligned_structural_origin(
+        &self, text: &str, extent: u32, start_x: u32,
+        style: LineStyle, selection: Option<BodyAlign>, kind: &str,
+    ) -> Result<u32, String> {
+        let Some(align) = selection else {
+            return Ok(start_x);
+        };
+        if align == BodyAlign::Left {
+            return Ok(start_x);
+        }
+        let (base_x, full_capacity) = self.flow_row_bounds(style, false)?;
+        // A numbered continuation starts after its measured hanging label.
+        // Subtract that displacement before aligning within its shorter row.
+        let displacement = start_x.checked_sub(base_x)
+            .ok_or_else(|| format!("flow {kind} alignment origin underflow"))?;
+        let capacity = full_capacity.checked_sub(displacement)
+            .ok_or_else(|| format!(
+                "flow {kind} alignment exceeds writing row"
+            ))?;
+        let ink_extent = heading_contour_extent(
+            text, extent, self.statistics,
+        )?;
+        let available = capacity.checked_sub(ink_extent)
+            .ok_or_else(|| format!(
+                "flow {kind} alignment exceeds writing row",
+            ))?;
+        let shift = if align == BodyAlign::Center {
+            available.checked_div(2).ok_or_else(||
+                format!("flow {kind} center offset overflow"))?
+        } else {
+            available
+        };
+        start_x.checked_add(shift)
+            .ok_or_else(|| format!("flow {kind} alignment position overflow"))
     }
 
     fn arrange_wrapped_block(
@@ -1687,29 +1728,10 @@ impl Layout<'_> {
                 "flow indentation cannot fit first visible glyph".into()
             );
         }
-        // Preserve previous left-aligned ink with or without an explicit
-        // left selection. Move the heading glyphs and ornaments together.
-        let (row_x, heading_extent) =
-            if matches!(style, LineStyle::Heading(_)) {
-                let (x, ink_extent) = self.aligned_heading_origin(
-                    &text, extent, start_x,
-                )?;
-                (x, Some(ink_extent))
-            } else if protect_body && matches!(style, LineStyle::Body) {
-                (self.aligned_body_origin(
-                    &text, extent, start_x, first,
-                )?, None)
-            } else if matches!(style, LineStyle::Quote) {
-                (self.aligned_structural_origin(
-                    &text, extent, start_x, style, self.quote_align, "quote",
-                )?, None)
-            } else if matches!(style, LineStyle::Bullet | LineStyle::Task(_)) {
-                (self.aligned_structural_origin(
-                    &text, extent, start_x, style, self.bullet_align, "bullet",
-                )?, None)
-            } else {
-                (start_x, None)
-            };
+        // Explicit left/absent alignment preserves the original row ink.
+        let (row_x, heading_extent) = self.aligned_row_origin(
+            &text, extent, start_x, style, first, protect_body,
+        )?;
         let y = self.begin_row()?;
         self.remember_heading_chain(style, y);
         if let LineStyle::Heading(level) = style {
@@ -2906,6 +2928,7 @@ fn initialize_layout<'model>(
     Ok(Layout {
         body_align: spacing.body_align,
         bullet_align: spacing.bullet_align,
+        ordered_align: spacing.ordered_align,
         quote_align: spacing.quote_align,
         body_first_line_indent_um: spacing.body_first_line_indent.unwrap_or(0),
         body_continuation_indent_um:
@@ -3086,6 +3109,10 @@ pub(super) fn layout_flow_with_typography(
     if spacing.bullet_align.is_some()
         && source.format != FlowFormat::Markdown {
         return Err("flow bullet alignment requires Markdown flow".into());
+    }
+    if spacing.ordered_align.is_some()
+        && source.format != FlowFormat::Markdown {
+        return Err("flow ordered alignment requires Markdown flow".into());
     }
     if spacing.body_first_line_indent
         .is_some_and(|inset| inset > MAX_BODY_INSET_UM) {

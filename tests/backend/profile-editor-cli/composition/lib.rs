@@ -15259,3 +15259,211 @@ fn invalid_markdown_bullet_alignment_preflights_and_preserves_pdf() {
         b"preserve-existing-bullet-PDF");
     fs::remove_file(target).expect("clean test-owned sentinel");
 }
+
+#[test]
+fn selected_markdown_ordered_alignment_preserves_other_rows_and_labels() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "# a\n\na a\n\n1. a a\n\n12) a\n\n- a\n\n> a\n\n    a",
+    ).expect("mixed Markdown rows");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 70_000, height: 200_000,
+    };
+    let base = FlowTypography {
+        list_quote_inset: Some(4_000),
+        list_quote_right_inset: Some(10_000),
+        body_align: Some(BodyAlign::Right),
+        bullet_align: Some(BodyAlign::Center),
+        quote_align: Some(BodyAlign::Right),
+        ..FlowTypography::default()
+    };
+    let choose = |align| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), FlowTypography {
+            ordered_align: align, ..base
+        },
+    ).expect("selected ordered alignment");
+    let (default, marks, pages) = choose(None);
+    let (left, left_marks, left_pages) = choose(Some(BodyAlign::Left));
+    assert_eq!(pages, left_pages);
+    assert_eq!(marks, left_marks);
+    assert_eq!(default.iter().map(|row| (&row.text, row.origin_um))
+        .collect::<Vec<_>>(), left.iter()
+        .map(|row| (&row.text, row.origin_um)).collect::<Vec<_>>());
+    let (center, center_marks, _) = choose(Some(BodyAlign::Center));
+    let (right, right_marks, _) = choose(Some(BodyAlign::Right));
+    assert_eq!(marks, center_marks);
+    assert_eq!(marks, right_marks);
+    assert_eq!(default.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>(),
+        ["a", "a a", "1. a a", "12) a", "a", "a", "    a"]);
+    for (index, (normal, (middle, end))) in default.iter()
+        .zip(center.iter().zip(right.iter())).enumerate() {
+        assert_eq!((normal.page, normal.origin_um.1),
+            (middle.page, middle.origin_um.1));
+        assert_eq!((normal.page, normal.origin_um.1),
+            (end.page, end.origin_um.1));
+        let (shift_center, shift_right) = match index {
+            2 => (11_000, 22_000),
+            3 => (13_000, 26_000),
+            _ => (0, 0),
+        };
+        assert_eq!(middle.origin_um.0,
+            normal.origin_um.0 + shift_center);
+        assert_eq!(end.origin_um.0,
+            normal.origin_um.0 + shift_right);
+    }
+    assert_eq!(default[2].origin_um.0, 42_500);
+    assert_eq!(default[3].origin_um.0, 42_500);
+}
+
+#[test]
+fn selected_markdown_ordered_alignment_respects_hanging_continuations() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "12) a a a a a a a a\n\n1. a a a a a a",
+    ).expect("long numbered items");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 36_000, height: 25_000,
+    };
+    let base = FlowTypography {
+        list_quote_right_inset: Some(4_000),
+        ..FlowTypography::default()
+    };
+    let choose = |align| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), FlowTypography {
+            ordered_align: align, ..base
+        },
+    ).expect("numbered flow with hanging indent");
+    let (default, marks, pages) = choose(None);
+    let (right, shifted_marks, right_pages) = choose(Some(BodyAlign::Right));
+    assert_eq!(pages, right_pages);
+    assert!(pages >= 3);
+    assert_eq!(marks, shifted_marks);
+    assert!(default.iter().any(|row| row.text.starts_with("12) ")));
+    assert!(default.iter().any(|row| row.text.starts_with("1. ")));
+    assert!(default.iter().any(|row| row.text == "a"));
+    let right_edge = region.left + region.width - 1_500 - 4_000;
+    for (normal, aligned) in default.iter().zip(&right) {
+        assert_eq!((normal.page, &normal.text, normal.origin_um.1),
+            (aligned.page, &aligned.text, aligned.origin_um.1));
+        assert!(normal.origin_um.0 <= aligned.origin_um.0);
+        // Default uncalibrated glyphs advance by one 4-mm cell each.
+        let extent = u32::try_from(normal.text.chars().count())
+            .expect("bounded row length") * 4_000;
+        assert_eq!(aligned.origin_um.0 + extent, right_edge,
+            "each numbered row ends at its inset writing edge");
+    }
+    assert!(right.iter().any(|row| row.page > 1));
+}
+
+#[test]
+fn markdown_ordered_alignment_exports_deterministic_native_formats() {
+    let source = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060",
+        "--fallback-glyph", "1", "a",
+        "--fallback-glyph", "2", "a",
+        "--fallback-glyph", ".", "a",
+        "--fallback-glyph", ")", "a",
+        "--flow-markdown", "12) a a a a a a a a\n\n1. a a a\n\n- a\n\n> a",
+        "--flow-region", "30000", "40000", "36000", "25000",
+        "--flow-list-quote-right-inset-um", "4000",
+        "--flow-bullet-align", "right",
+        "--flow-quote-align", "center",
+    ]);
+    let render = |alignment: Option<&str>, format: &str| {
+        let mut command = source.clone();
+        if let Some(align) = alignment {
+            command.extend(args(&["--flow-ordered-align", align]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72", "--png-page", "2"]));
+        }
+        execute_notebook(&command).expect("native numbered export")
+            .expect("PDF, PNG or TSV output")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let baseline = render(None, format);
+        assert_eq!(baseline, render(Some("left"), format),
+            "ordered-left retains prior {format} bytes");
+        for alignment in ["center", "right"] {
+            let selected = render(Some(alignment), format);
+            assert_eq!(selected, render(Some(alignment), format),
+                "deterministic {alignment} ordered {format}");
+            assert_ne!(selected, baseline,
+                "selected {alignment} ordered text changes {format}");
+            match format {
+                "pdf" => assert!(selected.starts_with(b"%PDF-1.4")),
+                "png" => assert!(selected.starts_with(b"\x89PNG\r\n\x1a\n")),
+                _ => assert!(selected.starts_with(b"atrament.page-ink.v1\n")),
+            }
+        }
+    }
+}
+
+#[test]
+fn invalid_markdown_ordered_alignment_preflights_and_preserves_pdf() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "unopened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (tokens, expected) in [
+        (vec!["--flow-ordered-align", "justify"],
+            "--flow-ordered-align requires left, center or right"),
+        (vec!["--flow-ordered-align"],
+            "--flow-ordered-align requires left, center or right"),
+        (vec!["--flow-ordered-align", "left",
+            "--flow-ordered-align", "right"],
+            "--flow-ordered-align may appear only once"),
+    ] {
+        let mut command = source.clone();
+        command.extend(args(&tokens));
+        assert_eq!(preflight_notebook_sources(&command)
+            .expect_err("invalid option before selected input"), expected);
+    }
+    assert_eq!(preflight_notebook_sources(&args(&[
+        "--flow-text", "a", "--export-paper", "pdf",
+        "--flow-ordered-align", "center",
+    ])).expect_err("Markdown-only numbered alignment"),
+        "--flow-ordered-align requires a Markdown flow");
+    let plain = FlowSource::new(FlowFormat::Plain, "a")
+        .expect("plain source");
+    assert_eq!(layout_flow_with_typography(
+        &plain, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), None, FlowTypography {
+            ordered_align: Some(BodyAlign::Center),
+            ..FlowTypography::default()
+        },
+    ).expect_err("typed Markdown-only option"),
+        "flow ordered alignment requires Markdown flow");
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"preserve-existing-ordered-PDF")
+        .expect("test sentinel");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060",
+        "--fallback-glyph", "1", "a",
+        "--fallback-glyph", ".", "a",
+        "--flow-markdown", "1. a a",
+        "--flow-region", "30000", "40000", "21000", "26000",
+        "--flow-list-quote-right-inset-um", "12000",
+        "--flow-ordered-align", "right",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("test path"), "--replace",
+    ]));
+    let err = execute_notebook(&command)
+        .expect_err("unfit ordered row refuses before PDF replacement");
+    assert!(err.contains("flow list/quote right inset leaves no writing row"),
+        "{err}");
+    assert_eq!(fs::read(&target).expect("original PDF"),
+        b"preserve-existing-ordered-PDF");
+    fs::remove_file(target).expect("clean test-owned sentinel");
+}

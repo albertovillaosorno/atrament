@@ -189,6 +189,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--flow-body-align left|center|right (Markdown only)] \
     [--flow-quote-align left|center|right (Markdown only)] \
     [--flow-bullet-align left|center|right (Markdown only)] \
+    [--flow-ordered-align left|center|right (Markdown only)] \
     [--flow-body-first-line-indent-um INSET_UM (0..12000, Markdown only)] \
     [--flow-body-continuation-indent-um INSET_UM (0..12000, Markdown only)] \
     [--flow-body-right-inset-um INSET_UM (0..12000, Markdown only)] \
@@ -246,7 +247,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     --flow-quote-align centers or right-aligns quoted text only, \
     preserving each vertical quote rule in its original gutter. \
     --flow-bullet-align aligns unordered bullet and checkbox text \
-    while their symbols stay fixed; numbered list text is unchanged. \
+    while their symbols stay fixed. --flow-ordered-align aligns \
+    authored numbered list labels with their item text, preserving \
+    the measured hanging indent on continued rows. \
     --flow-list-quote-inset-um shifts list/quote ink 0..12 mm right; \
     --flow-list-quote-right-inset-um reserves 0..12 mm on their right. \
     Explicit --place-text overlays may coexist with flow, outside its \
@@ -406,14 +409,6 @@ struct NotebookFlagPreflight {
 // Output and heading selections do not depend on source bytes. Consume their
 // arity before opening an earlier file or waiting for stdin to close.
 impl NotebookFlagPreflight {
-    fn select_flow_align(
-        &mut self, option: &str, iter: &mut Iter<'_, String>,
-    ) -> Result<usize, String> {
-        self.unique(option, &format!("{option} may appear only once"))?;
-        let _alignment = parse_notebook_flow_align(iter, option)?;
-        Ok(0)
-    }
-
     fn select_body_row_indent(
         &mut self, option: &str, iter: &mut Iter<'_, String>,
     ) -> Result<usize, String> {
@@ -423,6 +418,24 @@ impl NotebookFlagPreflight {
         } else {
             let _inset = parse_notebook_flow_continuation_indent(iter)?;
         }
+        Ok(0)
+    }
+
+    fn select_flow_align(
+        &mut self, option: &str, iter: &mut Iter<'_, String>,
+    ) -> Result<usize, String> {
+        self.unique(option, &format!("{option} may appear only once"))?;
+        let _alignment = parse_notebook_flow_align(iter, option)?;
+        Ok(0)
+    }
+
+    fn select_flow_body_inset(
+        &mut self, option: &str, iter: &mut Iter<'_, String>,
+    ) -> Result<usize, String> {
+        self.unique(option, &format!("{option} may appear only once"))?;
+        let _inset = parse_notebook_flow_body_inset(
+            iter, option == "--flow-body-right-inset-um",
+        )?;
         Ok(0)
     }
 
@@ -542,18 +555,13 @@ impl NotebookFlagPreflight {
                 0
             }
             "--flow-body-align" | "--flow-quote-align"
-            | "--flow-bullet-align" =>
+            | "--flow-bullet-align" | "--flow-ordered-align" =>
                 self.select_flow_align(option, iter)?,
             "--flow-body-first-line-indent-um"
             | "--flow-body-continuation-indent-um" =>
                 self.select_body_row_indent(option, iter)?,
-            "--flow-body-inset-um" | "--flow-body-right-inset-um" => {
-                self.unique(option,
-                    &format!("{option} may appear only once"))?;
-                let _inset = parse_notebook_flow_body_inset(
-                    iter, option == "--flow-body-right-inset-um")?;
-                0
-            }
+            "--flow-body-inset-um" | "--flow-body-right-inset-um" =>
+                self.select_flow_body_inset(option, iter)?,
             "--flow-list-quote-inset-um"
             | "--flow-list-quote-right-inset-um" =>
                 self.select_list_quote_inset(option, iter)?,
@@ -622,6 +630,8 @@ impl NotebookFlagPreflight {
                 quote_align: has("--flow-quote-align")
                     .then_some(BodyAlign::Left),
                 bullet_align: has("--flow-bullet-align")
+                    .then_some(BodyAlign::Left),
+                ordered_align: has("--flow-ordered-align")
                     .then_some(BodyAlign::Left),
                 body_first_line_indent:
                     has("--flow-body-first-line-indent-um").then_some(0),
@@ -2283,11 +2293,12 @@ fn select_notebook_flow_typography(
                 iter, &mut typography.paragraph_gap,
             ),
         "--flow-body-align" | "--flow-quote-align"
-        | "--flow-bullet-align" => {
+        | "--flow-bullet-align" | "--flow-ordered-align" => {
             let selected = match option {
                 "--flow-body-align" => &mut typography.body_align,
                 "--flow-quote-align" => &mut typography.quote_align,
-                _ => &mut typography.bullet_align,
+                "--flow-bullet-align" => &mut typography.bullet_align,
+                _ => &mut typography.ordered_align,
             };
             if selected.is_some() {
                 return Err(format!("{option} may appear only once"));
@@ -2369,6 +2380,10 @@ fn validate_notebook_flow_flag_compatibility(
     if typography.bullet_align.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
         return Err("--flow-bullet-align requires a Markdown flow".into());
+    }
+    if typography.ordered_align.is_some()
+        && flow_format != Some(FlowFormat::Markdown) {
+        return Err("--flow-ordered-align requires a Markdown flow".into());
     }
     if typography.body_first_line_indent.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
@@ -2782,8 +2797,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let (mut glyphs, mut statistics) = (GlyphOverlay::default(), None);
     let (mut flow, mut flow_region) = (None, None);
     let mut flow_typography = FlowTypography::default();
-    let mut heading = HeadingDecoration::default();
-    let mut stdin_selected = false;
+    let (mut heading, mut stdin_used) = (HeadingDecoration::default(), false);
     let (mut loaded, mut paper_loaded, mut edited) = (false, false, false);
     let mut iter = args.iter();
     while let Some(option) = iter.next() {
@@ -2817,7 +2831,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--flow-region" => flow_region = Some(parse_notebook_flow_region(
                 &mut iter, flow_region.is_some())?),
             "--flow-pitch-um" | "--flow-body-align" | "--flow-quote-align"
-            | "--flow-bullet-align"
+            | "--flow-bullet-align" | "--flow-ordered-align"
             | "--flow-body-first-line-indent-um" | "--flow-body-inset-um"
             | "--flow-body-continuation-indent-um" | "--flow-paragraph-gap-um"
             | "--flow-body-right-inset-um" | "--flow-list-quote-inset-um"
@@ -2828,7 +2842,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--flow-text" | "--flow-markdown"
             | "--flow-text-file" | "--flow-markdown-file" =>
                 parse_notebook_flow(&mut iter, option, &mut flow,
-                    &mut stdin_selected)?,
+                    &mut stdin_used)?,
             "--emit-ink-file" | "--export-paper" | "--pages" | "--dpi"
             | "--png-page" | "--ink-line" | "--ink-file" | "--join-text-anchors"
             | "--glyph-stroke" | "--glyph-file" | "--place-text" | "--quality"
@@ -2839,7 +2853,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             | "--glyph-word-height" | "--glyph-word-tracking"
             | "--glyph-word-baseline-step" => {
                 parse_notebook_export_option(option, &mut iter,
-                    &mut export, &mut ink, &mut glyphs, &mut stdin_selected)?;
+                    &mut export, &mut ink, &mut glyphs, &mut stdin_used)?;
             }
             "--output" => output = Some(parse_selected_output(
                 &mut iter, output.is_some(),
