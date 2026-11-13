@@ -52,7 +52,8 @@ use flow::{
     layout_flow_with_spacing,
 };
 use flow::{
-    FlowFormat, FlowRegion, FlowSource, FlowTypography, HeadingDecoration,
+    BodyAlign, FlowFormat, FlowRegion, FlowSource, FlowTypography,
+    HeadingDecoration,
     layout_flow_with_typography,
 };
 use glyph::{GlyphVariation, first_grapheme};
@@ -185,6 +186,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--flow-pitch-um MIN_UM (9000..30000)] \
     [--flow-paragraph-gap-um GAP_UM (0..12000, Markdown only)] \
     [--flow-body-inset-um INSET_UM (0..12000, Markdown only)] \
+    [--flow-body-align left|center|right (Markdown only)] \
     [--flow-body-right-inset-um INSET_UM (0..12000, Markdown only)] \
     [--flow-list-quote-inset-um INSET_UM (0..12000, Markdown only)] \
     [--flow-list-quote-right-inset-um INSET_UM (0..12000, Markdown only)] \
@@ -231,6 +233,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     --flow-body-inset-um shifts Markdown prose right 0..12 mm; \
     --flow-body-right-inset-um reserves 0..12 mm to its right. \
     Titles and literal code stay unchanged by those prose insets; \
+    --flow-body-align centers or right-aligns each measured prose row \
+    within the remaining inset writing width; defaults to left. \
     --flow-list-quote-inset-um shifts list/quote ink 0..12 mm right; \
     --flow-list-quote-right-inset-um reserves 0..12 mm on their right. \
     Explicit --place-text overlays may coexist with flow, outside its \
@@ -390,6 +394,24 @@ struct NotebookFlagPreflight {
 // Output and heading selections do not depend on source bytes. Consume their
 // arity before opening an earlier file or waiting for stdin to close.
 impl NotebookFlagPreflight {
+    fn select_body_align(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<usize, String> {
+        self.unique("--flow-body-align",
+            "--flow-body-align may appear only once")?;
+        let _alignment = parse_notebook_flow_body_align(iter)?;
+        Ok(0)
+    }
+
+    fn select_flow_pitch(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<usize, String> {
+        self.unique("--flow-pitch-um",
+            "--flow-pitch-um may appear only once")?;
+        let _pitch = parse_notebook_flow_pitch(iter)?;
+        Ok(0)
+    }
+
     fn select_heading(&mut self, option: &str) -> Result<(), String> {
         let diagnostic = match option {
             "--heading-ink-scale" => "--heading-ink-scale repeated".to_owned(),
@@ -496,6 +518,7 @@ impl NotebookFlagPreflight {
                 let _gap = parse_notebook_flow_paragraph_gap(iter)?;
                 0
             }
+            "--flow-body-align" => self.select_body_align(iter)?,
             "--flow-body-inset-um" | "--flow-body-right-inset-um" => {
                 self.unique(option,
                     &format!("{option} may appear only once"))?;
@@ -506,11 +529,7 @@ impl NotebookFlagPreflight {
             "--flow-list-quote-inset-um"
             | "--flow-list-quote-right-inset-um" =>
                 self.select_list_quote_inset(option, iter)?,
-            "--flow-pitch-um" => {
-                self.unique(option, "--flow-pitch-um may appear only once")?;
-                let _pitch = parse_notebook_flow_pitch(iter)?;
-                0
-            }
+            "--flow-pitch-um" => self.select_flow_pitch(iter)?,
             "--heading-style" | "--heading-align" | "--heading-color"
             | "--heading-marker-scale" | "--heading-ink-color"
             | "--heading-ink-scale" => {
@@ -570,6 +589,8 @@ impl NotebookFlagPreflight {
         validate_notebook_flow_flag_compatibility(
             flow_format, region_selected,
             FlowTypography {
+                body_align: has("--flow-body-align")
+                    .then_some(BodyAlign::Left),
                 pitch: has("--flow-pitch-um").then_some(9_000),
                 paragraph_gap: has("--flow-paragraph-gap-um")
                     .then_some(0),
@@ -2175,6 +2196,17 @@ fn select_list_quote_inset(
     Ok(())
 }
 
+fn parse_notebook_flow_body_align(
+    iter: &mut Iter<'_, String>,
+) -> Result<BodyAlign, String> {
+    match iter.next().map(String::as_str) {
+        Some("left") => Ok(BodyAlign::Left),
+        Some("center") => Ok(BodyAlign::Center),
+        Some("right") => Ok(BodyAlign::Right),
+        _ => Err("--flow-body-align requires left, center or right".into()),
+    }
+}
+
 fn select_notebook_flow_typography(
     iter: &mut Iter<'_, String>, typography: &mut FlowTypography,
     option: &str,
@@ -2186,6 +2218,13 @@ fn select_notebook_flow_typography(
             select_notebook_flow_paragraph_gap(
                 iter, &mut typography.paragraph_gap,
             ),
+        "--flow-body-align" => {
+            if typography.body_align.is_some() {
+                return Err("--flow-body-align may appear only once".into());
+            }
+            typography.body_align = Some(parse_notebook_flow_body_align(iter)?);
+            Ok(())
+        }
         _ => select_flow_inset(iter, typography, option),
     }
 }
@@ -2248,6 +2287,10 @@ fn validate_notebook_flow_flag_compatibility(
     if typography.paragraph_gap.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
         return Err("--flow-paragraph-gap-um requires a Markdown flow".into());
+    }
+    if typography.body_align.is_some()
+        && flow_format != Some(FlowFormat::Markdown) {
+        return Err("--flow-body-align requires a Markdown flow".into());
     }
     if typography.body_inset.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
@@ -2651,8 +2694,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut flow_typography = FlowTypography::default();
     let mut heading = HeadingDecoration::default();
     let mut stdin_selected = false;
-    let (mut loaded, mut paper_loaded) = (false, false);
-    let mut edited = false;
+    let (mut loaded, mut paper_loaded, mut edited) = (false, false, false);
     let mut iter = args.iter();
     while let Some(option) = iter.next() {
         match option.as_str() {
@@ -2684,8 +2726,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             | "--heading-marker-scale" => heading.parse(option, &mut iter)?,
             "--flow-region" => flow_region = Some(parse_notebook_flow_region(
                 &mut iter, flow_region.is_some())?),
-            "--flow-pitch-um" | "--flow-paragraph-gap-um"
-            | "--flow-body-inset-um" | "--flow-body-right-inset-um"
+            "--flow-pitch-um" | "--flow-body-align"
+            | "--flow-paragraph-gap-um" | "--flow-body-inset-um"
+            | "--flow-body-right-inset-um"
             | "--flow-list-quote-inset-um"
             | "--flow-list-quote-right-inset-um" =>
                 select_notebook_flow_typography(

@@ -4345,3 +4345,19 @@ invalid or duplicate preflight, and preservation of an existing PDF when
 a heading cannot fit its one-line region. Ink still receives final native
 physical bounds checks after variation, and the setting is CLI-only.
 This does not persist semantic heading styles or complete the P1 journey.
+
+## Selected Markdown prose alignment (partial) — 2026-11-12
+
+The Rust CLI additionally admits `--flow-body-align left|center|right`
+for ordinary flowed Markdown prose. Each wrapped physical row is placed
+inside its available writing rectangle after independently selected body
+left/right insets; layout measures the farthest nominal glyph contour.
+Headings and their ornaments, list/checkbox text, quote rules, fenced
+code, literal four-space rows and manually placed ink stay anchored.
+
+Five native regressions cover physical row coordinates and unchanged
+structural ink, default/explicit-left byte identity, deterministic real
+PDF/transparent PNG/ink TSV for both nondefault alignments, measured
+compressed ink contours, multi-page wrapping, early source-independent
+refusal and preservation of an existing PDF on an unfit inset region. This option does not save semantic paragraph styles,
+compute optical placement from varied contours, or finish saved notebooks.

@@ -65,10 +65,20 @@ pub(super) enum FlowFormat {
     Plain,
 }
 
+/// Alignment of Markdown prose only, never headings or structural rows.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
+pub(super) enum BodyAlign {
+    Center,
+    Left,
+    Right,
+}
+
 /// CLI-only layout selections; absent fields keep previous physical ink.
 #[derive(Clone, Copy, Debug, Default)]
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
 pub(super) struct FlowTypography {
+    pub(super) body_align: Option<BodyAlign>,
     pub(super) body_inset: Option<u32>,
     pub(super) body_right_inset: Option<u32>,
     pub(super) list_quote_inset: Option<u32>,
@@ -566,6 +576,7 @@ struct RuleChain {
 }
 
 struct Layout<'model> {
+    body_align: Option<BodyAlign>,
     body_inset_um: u32,
     body_right_inset_um: u32,
     bottom: u32,
@@ -602,6 +613,34 @@ impl Layout<'_> {
             .checked_add(self.paragraph_gap_um)
             .ok_or("paragraph gap overflow")?;
         Ok(())
+    }
+
+    // Align only genuine flowing body rows. The measured contour can extend
+    // beyond the last nominal advance when letter spacing compresses ink.
+    // The selected insets already reduce the writing capacity on both sides.
+    fn aligned_body_origin(
+        &self, text: &str, extent: u32, start_x: u32,
+    ) -> Result<u32, String> {
+        let Some(align) = self.body_align else {
+            return Ok(start_x);
+        };
+        if align == BodyAlign::Left {
+            return Ok(start_x);
+        }
+        let capacity = self.flow_row_bounds(LineStyle::Body, true)?.1;
+        let ink_extent = heading_contour_extent(
+            text, extent, self.statistics,
+        )?;
+        let available = capacity.checked_sub(ink_extent)
+            .ok_or("flow body alignment exceeds writing row")?;
+        let shift = if align == BodyAlign::Center {
+            available.checked_div(2)
+                .ok_or("flow body center offset overflow")?
+        } else {
+            available
+        };
+        start_x.checked_add(shift)
+            .ok_or_else(|| "flow body alignment position overflow".into())
     }
 
     // Horizontal placement includes every visible nominal glyph contour,
@@ -1264,13 +1303,11 @@ impl Layout<'_> {
         let (hang, ordered_marker) = ordered_hang_and_label(
             style, content, cap, self.statistics,
         )?;
-        let mut row = String::new();
-        let mut width = 0u32;
+        let (mut row, mut width) = (String::new(), 0u32);
         // Pen contour can outlive a compressed glyph's nominal advance.
         // Reserve that occupied ink before admitting the next word.
         let mut row_ink_extent = 0u32;
-        let mut count = 0usize;
-        let mut first = true;
+        let (mut count, mut first) = (0usize, true);
         let mut pending_spaces = 0usize;
         for (index, word) in grapheme_word_slices(content)?.iter().enumerate() {
             if index > 0 {
@@ -1303,7 +1340,8 @@ impl Layout<'_> {
                 && !(first && ordered_marker == Some(row.as_str()))
             {
                 self.keep_wrapped_block_start(style, first, protect_body)?;
-                self.write_row(take(&mut row), start_x, width, style, first)?;
+                self.write_row(take(&mut row), start_x, width, style,
+                    first, protect_body)?;
                 start_continuation(first, &mut start_x, &mut cap, hang)?;
                 first = false;
                 width = 0;
@@ -1329,9 +1367,8 @@ impl Layout<'_> {
                             .into());
                     }
                     self.keep_wrapped_block_start(style, first, protect_body)?;
-                    self.write_row(
-                        take(&mut row), start_x, width, style, first,
-                    )?;
+                    self.write_row(take(&mut row), start_x, width, style,
+                        first, protect_body)?;
                     start_continuation(first, &mut start_x, &mut cap, hang)?;
                     first = false;
                     width = 0;
@@ -1358,7 +1395,8 @@ impl Layout<'_> {
                 count = count.checked_add(1).ok_or("flow line too long")?;
             }
         }
-        self.write_last_row(row, start_x, width, style, first)?;
+        self.write_last_row(row, start_x, width, style, first,
+            protect_body)?;
         self.arrange_wrapped_block(
             run_start, mark_start, heading_before_block,
             preceding_reservation, style, protect_body,
@@ -1486,13 +1524,15 @@ impl Layout<'_> {
 
     fn write_last_row(
         &mut self, row: String, start_x: u32, width: u32,
-        style: LineStyle, first: bool,
+        style: LineStyle, first: bool, protect_body: bool,
     ) -> Result<(), String> {
         if !row.is_empty() {
             if matches!(style, LineStyle::Heading(_)) && !first {
                 return Err("heading exceeds one-line fixed region".into());
             }
-            self.write_row(row, start_x, width, style, first)?;
+            self.write_row(
+                row, start_x, width, style, first, protect_body,
+            )?;
         }
         Ok(())
     }
@@ -1554,6 +1594,7 @@ impl Layout<'_> {
         extent: u32,
         style: LineStyle,
         first: bool,
+        protect_body: bool,
     ) -> Result<(), String> {
         if text.is_empty() {
             return Ok(());
@@ -1574,6 +1615,8 @@ impl Layout<'_> {
                     &text, extent, start_x,
                 )?;
                 (x, Some(ink_extent))
+            } else if protect_body && matches!(style, LineStyle::Body) {
+                (self.aligned_body_origin(&text, extent, start_x)?, None)
             } else {
                 (start_x, None)
             };
@@ -2755,6 +2798,7 @@ fn initialize_layout<'model>(
         printable
     };
     Ok(Layout {
+        body_align: spacing.body_align,
         body_inset_um: spacing.body_inset.unwrap_or(0),
         body_right_inset_um: spacing.body_right_inset.unwrap_or(0),
         list_quote_inset_um: spacing.list_quote_inset.unwrap_or(0),
@@ -2919,6 +2963,10 @@ pub(super) fn layout_flow_with_typography(
     if spacing.paragraph_gap.is_some()
         && source.format != FlowFormat::Markdown {
         return Err("flow paragraph gap requires Markdown flow".into());
+    }
+    if spacing.body_align.is_some()
+        && source.format != FlowFormat::Markdown {
+        return Err("flow body alignment requires Markdown flow".into());
     }
     if spacing.body_inset
         .is_some_and(|inset| inset > MAX_BODY_INSET_UM) {

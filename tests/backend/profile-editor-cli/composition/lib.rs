@@ -14053,3 +14053,253 @@ fn invalid_heading_alignment_preflights_and_preserves_existing_pdf() {
         b"keep-existing-heading-PDF");
     fs::remove_file(target).expect("clean test-owned sentinel");
 }
+
+#[test]
+fn markdown_body_alignment_respects_prose_rows_and_two_insets() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "a a a a a a\n\n# a\n\n- a\n\n> a\n\n    a",
+    ).expect("flowing prose, heading, list, quote and literal row");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 30_000, height: 180_000,
+    };
+    let render = |align| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region),
+        FlowTypography {
+            body_align: align,
+            body_inset: Some(4_000),
+            body_right_inset: Some(6_000),
+            ..FlowTypography::default()
+        },
+    ).expect("selected prose stays in the physical region");
+    let original = render(None);
+    let left = render(Some(BodyAlign::Left));
+    assert_eq!(original.0.len(), 7);
+    assert_eq!(original.0.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>(),
+        ["a a", "a a", "a a", "a", "a", "a", "    a"]);
+    assert_eq!(original.0.iter().map(|row| row.origin_um)
+        .collect::<Vec<_>>(),
+        left.0.iter().map(|row| row.origin_um)
+            .collect::<Vec<_>>());
+    assert_eq!(original.1, left.1);
+    for (align, shift) in [
+        (BodyAlign::Center, 2_000), (BodyAlign::Right, 4_000),
+    ] {
+        let moved = render(Some(align));
+        assert_eq!(moved.2, original.2);
+        assert_eq!(moved.1, original.1,
+            "only flowing prose shifts, never heading/list/quote ornaments");
+        for (index, row) in moved.0.iter().enumerate() {
+            let earlier = &original.0[index];
+            assert_eq!(row.text, earlier.text);
+            assert_eq!(row.page, earlier.page);
+            assert_eq!(row.origin_um.1, earlier.origin_um.1);
+            let prose = index < 3;
+            assert_eq!(row.origin_um.0, earlier.origin_um.0
+                + if prose { shift } else { 0 });
+        }
+    }
+}
+
+#[test]
+fn selected_markdown_body_alignment_replays_pdf_png_and_ink_tsv() {
+    let base = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060",
+        "--flow-markdown", "a a a a a a\n\n# a\n\n- a\n\n> a",
+        "--flow-region", "30000", "40000", "30000", "90000",
+        "--flow-body-inset-um", "4000",
+        "--flow-body-right-inset-um", "6000",
+    ]);
+    let render = |align: Option<&str>, format: &str| {
+        let mut command = base.clone();
+        if let Some(align) = align {
+            command.extend(args(&["--flow-body-align", align]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        execute_notebook(&command).expect("selected body export")
+            .expect("PDF, PNG or pen TSV bytes")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let original = render(None, format);
+        assert_eq!(original, render(Some("left"), format),
+            "explicit left leaves native {format} bytes unchanged");
+        let center = render(Some("center"), format);
+        let right = render(Some("right"), format);
+        assert_eq!(center, render(Some("center"), format));
+        assert_eq!(right, render(Some("right"), format));
+        assert_ne!(center, original, "center moves {format} prose ink");
+        assert_ne!(right, center, "right moves {format} prose ink");
+        if format == "pdf" {
+            assert!(right.starts_with(b"%PDF-1.4"));
+        } else if format == "png" {
+            assert!(right.starts_with(b"\x89PNG\r\n\x1a\n"));
+        } else {
+            assert!(right.starts_with(b"atrament.page-ink.v1\n"));
+        }
+    }
+}
+
+#[test]
+fn invalid_markdown_body_alignment_preflights_and_preserves_pdf() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "unopened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for tokens in [
+        vec!["--flow-body-align", "middle"],
+        vec!["--flow-body-align", ""],
+        vec!["--flow-body-align"],
+    ] {
+        let mut command = source.clone();
+        command.extend(args(&tokens));
+        assert_eq!(preflight_notebook_sources(&command)
+            .expect_err("bad alignment must refuse without opening stdin"),
+            "--flow-body-align requires left, center or right");
+    }
+    let mut duplicate = source.clone();
+    duplicate.extend(args(&["--flow-body-align", "left",
+        "--flow-body-align", "right"]));
+    assert_eq!(preflight_notebook_sources(&duplicate)
+        .expect_err("duplicate alignment must refuse without reading file"),
+        "--flow-body-align may appear only once");
+    let mut plain = args(&[
+        "--flow-text", "a", "--export-paper", "pdf",
+        "--glyph-file", "unopened.tsv", "--flow-body-align", "left",
+    ]);
+    assert_eq!(preflight_notebook_sources(&plain)
+        .expect_err("body alignment is Markdown-only"),
+        "--flow-body-align requires a Markdown flow");
+    plain[0] = "--flow-markdown".into();
+    assert!(preflight_notebook_sources(&plain).is_ok());
+
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"keep-existing-body-PDF").expect("test sentinel");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown", "a a",
+        "--flow-region", "30000", "40000", "27000", "32000",
+        "--flow-body-inset-um", "12000",
+        "--flow-body-right-inset-um", "12000",
+        "--flow-body-align", "right",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("test path"), "--replace",
+    ]));
+    let err = execute_notebook(&command)
+        .expect_err("unfit body alignment must refuse physical layout");
+    assert!(err.contains("flow body inset leaves no writing row")
+        || err.contains("flow body right inset leaves no writing row"),
+        "{err}");
+    assert_eq!(fs::read(&target).expect("unchanged sentinel"),
+        b"keep-existing-body-PDF");
+    fs::remove_file(target).expect("clean test-owned sentinel");
+}
+
+#[test]
+fn markdown_body_alignment_measures_compressed_nominal_ink_contours()
+-> Result<(), String> {
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(71);
+    for (dimension, mean) in [
+        (Dimension::Width, 12_000),
+        (Dimension::LetterSpacing, -10_000),
+    ] {
+        stats = stats.with_glyph("a", DimensionStatistics {
+            dimension,
+            statistics: ScalarStatistics {
+                minimum: mean, maximum: mean, mean, median: mean,
+                standard_deviation: 0,
+            },
+        }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    let source = FlowSource::new(FlowFormat::Markdown, "a a")?;
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 50_000, height: 40_000,
+    };
+    for (alignment, shift) in [
+        (BodyAlign::Left, 0), (BodyAlign::Center, 17_000),
+        (BodyAlign::Right, 34_000),
+    ] {
+        let (rows, marks, pages) = layout_flow_with_typography(
+            &source, &NotebookProfile::default(), Some(&stats),
+            HeadingDecoration::default(), Some(region),
+            FlowTypography {
+                body_align: Some(alignment),
+                ..FlowTypography::default()
+            },
+        )?;
+        assert_eq!(pages, 1);
+        assert!(marks.is_empty());
+        assert_eq!(rows.len(), 2);
+        for (index, row) in rows.iter().enumerate() {
+            assert_eq!(row.text, "a");
+            assert_eq!(row.origin_um, (
+                32_500 + shift, 42_500 + 9_000 * index as u32,
+            ));
+            assert!(row.origin_um.0 + 12_000 <= 80_000,
+                "actual 12 mm contour must fit after alignment");
+        }
+    }
+    let plain = FlowSource::new(FlowFormat::Plain, "a")?;
+    assert_eq!(layout_flow_with_typography(
+        &plain, &NotebookProfile::default(), Some(&stats),
+        HeadingDecoration::default(), Some(region),
+        FlowTypography {
+            body_align: Some(BodyAlign::Left),
+            ..FlowTypography::default()
+        },
+    ).expect_err("typed plain-text body alignment refused"),
+        "flow body alignment requires Markdown flow");
+    Ok(())
+}
+
+#[test]
+fn markdown_body_alignment_tracks_wrapped_rows_across_physical_pages() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "a a a a a a a a a a a a",
+    ).expect("one long authored paragraph");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 30_000, height: 29_000,
+    };
+    let render = |align| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region),
+        FlowTypography {
+            body_align: align,
+            body_inset: Some(4_000),
+            body_right_inset: Some(6_000),
+            ..FlowTypography::default()
+        },
+    ).expect("bounded multi-page prose");
+    let original = render(None);
+    assert_eq!(original.2, 3);
+    assert_eq!(original.0.len(), 6);
+    assert_eq!(original.0.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 1, 2, 2, 3, 3]);
+    for (align, shift) in [
+        (BodyAlign::Center, 2_000), (BodyAlign::Right, 4_000),
+    ] {
+        let changed = render(Some(align));
+        assert_eq!(changed.2, original.2);
+        assert_eq!(changed.1, original.1);
+        for (before, after) in original.0.iter().zip(&changed.0) {
+            assert_eq!(after.text, before.text);
+            assert_eq!(after.page, before.page);
+            assert_eq!(after.origin_um.1, before.origin_um.1);
+            assert_eq!(after.origin_um.0, before.origin_um.0 + shift);
+        }
+    }
+}

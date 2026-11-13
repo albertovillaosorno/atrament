@@ -649,6 +649,27 @@ output; combined insets must leave at least 4 mm for a prose row. Invalid
 or duplicate settings fail in source-independent preflight; failed physical
 admission leaves a selected existing output intact.
 
+Select `--flow-body-align center` or `--flow-body-align right` to place
+each wrapped Markdown prose row within its measured physical writing
+width. Both left/right body insets still bound that row; alignment uses
+its farthest nominal glyph contour, not just the advance of the last
+letter. Headings, list/checkbox rows, quote bars, literal four-space
+lines, fenced code and manually positioned glyphs retain their anchors.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-body-inset-um 4000 --flow-body-right-inset-um 6000 \
+  --flow-body-align center --export-paper pdf \
+  --output centered-prose.pdf
+```
+
+This is an export-only Markdown selection. Omitted alignment or explicit
+`left` retains the earlier PDF/PNG/ink TSV bytes. Invalid or repeated
+values refuse before source-file/standard-input access, and unfit
+writing rectangles cannot overwrite a previously accepted PDF. The
+horizontal center is nominal, not optical or based on varied ink paths.
+
 For a little more space to the right of Markdown list labels and quote
 rules, select `--flow-list-quote-inset-um 6000`. This adds 6 mm to the
 existing 6 mm offset of each bullet, ordered item, checkbox task and
