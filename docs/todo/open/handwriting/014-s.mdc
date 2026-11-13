@@ -1026,3 +1026,25 @@ transparent PNG and reusable page-ink TSV. Malformed, duplicate, unpaired,
 over-range and typed bypass requests refuse without changing accepted
 file bytes. The pigment is a bounded creative preview effect, not an
 ink-absorption or physical plotter color model; P1-014 remains open.
+
+## Session-only recovery for manual pen edits — 2026-11-13
+
+The localhost glyph editor now offers exact one-step undo/redo beyond the
+previous six whole-glyph transforms. One accepted pen trace, stroke addition,
+coordinate/color edit, reversal, reordering, deletion, pen-path reversal,
+closed-loop entry, closure, translation, path reorder, or short connector can
+be recovered. The single step stores exact native-compatible TSV bytes and
+the selected stroke index; undoing the first stroke can restore an empty
+in-memory draft without exporting an invalid zero-stroke TSV. Redo restores
+the accepted selection, input fields and ink without an automatic download.
+
+Recovery applies only to the exact selected Unicode grapheme, including
+independent NFC/NFD spellings. Rejected edits leave an earlier valid step
+intact; a successful later edit replaces it. A new TSV import or session
+reset clears the step. Geometric starter construction, bulk fills, glyph
+copy and accent composition currently invalidate old recovery rather than
+being recorded as a new step. This is a bounded authoring convenience, not
+persistent history or a general notebook undo stack. Focused browser tests
+cover the empty-draft boundary, exact Unicode-interleaved path replay,
+source imports, refused edits, selected coordinate restoration and session
+reset; native glyph TSV format and exporter remain unchanged.

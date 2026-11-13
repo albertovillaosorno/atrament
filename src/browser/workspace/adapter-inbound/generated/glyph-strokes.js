@@ -4006,6 +4006,10 @@ export function createGlyphStrokeEditor() {
     let drawing = null;
     let downloadUrl = null;
     let transformHistory = null;
+    const draftBytes = (ink) => ink.length === 0 ? "" : encodeGlyphLibrary([...ink]);
+    const recoveryLabel = (kind) => kind === "ink" ? "glyph pen thickness"
+        : (["slant", "height", "width", "move", "rotation"]
+            .includes(kind) ? `glyph ${kind}` : kind);
     // User-authored geometry is integral in micrometres/percent/degrees.
     // Do not reinterpret exponent, hexadecimal or signed-plus input before
     // producing a preview or committing a transform to the TSV draft.
@@ -4958,16 +4962,14 @@ export function createGlyphStrokeEditor() {
         }
         if (transformHistory !== null) {
             const expected = transformHistory[transformHistory.side];
-            if (strokes.length === 0
-                || encodeGlyphLibrary(strokes) !== expected) {
+            if (draftBytes(strokes) !== expected) {
                 transformHistory = null;
             }
         }
         const lastKind = transformHistory?.grapheme === character.value
             ? transformHistory.kind : null;
-        const transformLabel = lastKind === "ink"
-            ? "glyph pen thickness"
-            : lastKind === null ? "glyph transform" : `glyph ${lastKind}`;
+        const transformLabel = lastKind === null
+            ? "glyph transform" : recoveryLabel(lastKind);
         undoTransform.textContent = `Undo last ${transformLabel}`;
         redoTransform.textContent = `Redo last ${transformLabel}`;
         undoTransform.disabled = !active || drawing !== null
@@ -5317,8 +5319,7 @@ export function createGlyphStrokeEditor() {
             });
             const next = [...strokes, ...segments];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = next.length - 1;
+            commitInkEdit(next, current.grapheme, "pen trace", next.length - 1);
             message(strokes.length + " unsaved authored strokes");
         }
         catch (error) {
@@ -5360,20 +5361,27 @@ export function createGlyphStrokeEditor() {
             message(String(error));
         }
     });
-    const applyGlyphTransform = (next, target, kind) => {
-        const before = encodeGlyphLibrary(strokes);
-        const after = encodeGlyphLibrary(next);
-        strokes = next;
-        // A 100% resize or zero-degree slant is an identity, not a new
-        // edit. Retain any valid earlier recovery step on either side.
+    const commitInkEdit = (next, target, kind, selection) => {
+        const before = draftBytes(strokes);
+        const after = draftBytes(next);
+        // A no-op transform or edit is not a new history step. Any invalid
+        // proposed TSV refuses before touching the accepted draft/history.
         if (before !== after) {
             transformHistory = {
                 before, after, side: "after", grapheme: target, kind,
+                beforeSelection: selectedIndex, afterSelection: selection,
             };
         }
-        selectedIndex = null;
-        render();
+        strokes = next;
+        if (selection === null) {
+            selectedIndex = null;
+            render();
+        }
+        else {
+            choose(selection);
+        }
     };
+    const applyGlyphTransform = (next, target, kind) => commitInkEdit(next, target, kind, null);
     slantAuthored.addEventListener("click", () => {
         if (!active)
             return;
@@ -5502,19 +5510,28 @@ export function createGlyphStrokeEditor() {
             || history.grapheme !== character.value)
             return;
         try {
-            if (encodeGlyphLibrary(strokes) !== history[requiredSide]) {
+            if (draftBytes(strokes) !== history[requiredSide]) {
                 transformHistory = null;
                 throw new Error("Cannot restore transform after another ink edit");
             }
-            strokes = parseGlyphLibrary(history[side]);
+            strokes = history[side] === ""
+                ? [] : parseGlyphLibrary(history[side]);
             history.side = side;
-            selectedIndex = null;
-            render();
-            const label = history.kind === "ink"
-                ? "pen thickness" : history.kind;
+            const recoveredSelection = side === "before"
+                ? history.beforeSelection : history.afterSelection;
+            if (recoveredSelection === null) {
+                selectedIndex = null;
+                render();
+            }
+            else {
+                // Recover both the selected TSV row and its editable DOM
+                // fields; render() alone cannot preload numeric controls.
+                choose(recoveredSelection);
+            }
+            const label = recoveryLabel(history.kind);
             message(side === "before"
-                ? `Undid last glyph ${label}; unsaved`
-                : `Redid last glyph ${label}; unsaved`);
+                ? `Undid last ${label}; unsaved`
+                : `Redid last ${label}; unsaved`);
         }
         catch (error) {
             message(String(error));
@@ -5908,9 +5925,7 @@ export function createGlyphStrokeEditor() {
             }
             const next = [...strokes, editable()];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = next.length - 1;
-            render();
+            commitInkEdit(next, character.value, "stroke addition", next.length - 1);
             message(`${strokes.length} unsaved authored strokes`);
         }
         catch (error) {
@@ -5928,8 +5943,7 @@ export function createGlyphStrokeEditor() {
             const next = strokes.slice();
             next[index] = changed;
             encodeGlyphLibrary(next);
-            strokes = next;
-            render();
+            commitInkEdit(next, character.value, "stroke edit", index);
             message("Updated selected stroke; " + strokes.length
                 + " unsaved strokes");
         }
@@ -5950,8 +5964,7 @@ export function createGlyphStrokeEditor() {
             x2: existing.x1, y2: existing.y1,
         };
         encodeGlyphLibrary(next);
-        strokes = next;
-        choose(index);
+        commitInkEdit(next, character.value, "stroke direction", index);
         message("Reversed selected pen stroke; unsaved");
     });
     reversePath.addEventListener("click", () => {
@@ -5961,8 +5974,7 @@ export function createGlyphStrokeEditor() {
             const glyph = character.value;
             const changed = reverseCandidatePath(strokes, glyph, selectedIndex);
             encodeGlyphLibrary(changed.strokes);
-            strokes = changed.strokes;
-            choose(changed.selectedIndex);
+            commitInkEdit(changed.strokes, glyph, "pen path direction", changed.selectedIndex);
             message("Reversed selected continuous pen path; unsaved");
         }
         catch (error) {
@@ -5974,8 +5986,7 @@ export function createGlyphStrokeEditor() {
             return;
         try {
             const changed = rotateClosedCandidatePath(strokes, character.value, selectedIndex);
-            strokes = changed.strokes;
-            choose(changed.selectedIndex);
+            commitInkEdit(changed.strokes, character.value, "pen path start", changed.selectedIndex);
             message("Changed closed pen loop starting stroke; unsaved");
         }
         catch (error) {
@@ -5988,8 +5999,7 @@ export function createGlyphStrokeEditor() {
         try {
             const glyph = character.value;
             const changed = closeCandidatePath(strokes, glyph, selectedIndex);
-            strokes = changed.strokes;
-            choose(changed.selectedIndex);
+            commitInkEdit(changed.strokes, glyph, "pen path closure", changed.selectedIndex);
             message("Closed selected pen path with a short bridge; unsaved");
         }
         catch (error) {
@@ -6012,8 +6022,7 @@ export function createGlyphStrokeEditor() {
                 return value;
             };
             const changed = translateCandidatePath(strokes, character.value, selectedIndex, signed(pathDx.value, 3500), signed(pathDy.value, 4500));
-            strokes = changed.strokes;
-            choose(changed.selectedIndex);
+            commitInkEdit(changed.strokes, character.value, "pen path move", changed.selectedIndex);
             message("Translated selected continuous pen path; unsaved");
         }
         catch (error) {
@@ -6028,8 +6037,7 @@ export function createGlyphStrokeEditor() {
             const index = selectedIndex;
             const changed = moveCandidatePath(strokes, glyph, index, direction);
             encodeGlyphLibrary(changed.strokes);
-            strokes = changed.strokes;
-            choose(changed.selectedIndex);
+            commitInkEdit(changed.strokes, glyph, "pen path order", changed.selectedIndex);
             message("Reordered selected continuous pen path; unsaved");
         }
         catch (error) {
@@ -6048,8 +6056,7 @@ export function createGlyphStrokeEditor() {
         const next = strokes.slice();
         [next[index], next[target]] = [next[target], next[index]];
         encodeGlyphLibrary(next);
-        strokes = next;
-        choose(target);
+        commitInkEdit(next, character.value, "stroke order", target);
         message("Changed pen stroke order; unsaved");
     };
     earlier.addEventListener("click", () => move(-1));
@@ -6091,8 +6098,7 @@ export function createGlyphStrokeEditor() {
             next.splice(selectedIndex + 1, 0, bridge);
             encodeGlyphLibrary(next);
             const joinedIndex = selectedIndex + 1;
-            strokes = next;
-            choose(joinedIndex);
+            commitInkEdit(next, character.value, "pen connection", joinedIndex);
             message("Connected selected pen strokes; unsaved");
         }
         catch (error) {
@@ -6104,9 +6110,9 @@ export function createGlyphStrokeEditor() {
             return;
         if (strokes[selectedIndex]?.grapheme !== character.value)
             return;
-        strokes.splice(selectedIndex, 1);
-        selectedIndex = null;
-        render();
+        const next = strokes.slice();
+        next.splice(selectedIndex, 1);
+        commitInkEdit(next, character.value, "stroke removal", null);
         message(strokes.length + " unsaved authored strokes");
     });
     source.addEventListener("change", async () => {

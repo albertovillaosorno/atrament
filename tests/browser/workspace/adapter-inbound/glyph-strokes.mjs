@@ -8181,6 +8181,242 @@ test("last authored slant undo/redo restores exact Unicode without writes",
         }
     });
 
+test("one-step stroke undo restores empty drafts and directed edits",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        const nfd = "n\u{303}";
+        const undo = get("slant-undo");
+        const redo = get("slant-redo");
+        const save = async () => {
+            get("save").dispatch("click");
+            return downloads.at(-1).text();
+        };
+        editor.start();
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        for (const [axis, value] of Object.entries({
+            x1: 400, y1: 600, x2: 1000, y2: 1400, width: 250,
+        })) get(axis).value = String(value);
+        get("add").dispatch("click");
+        const original = [{
+            grapheme: nfd, x1: 400, y1: 600, x2: 1000, y2: 1400,
+            width: 250, color: "#243647",
+        }];
+        assert.equal(await save(), encodeGlyphLibrary(original));
+        assert.equal(undo.textContent, "Undo last stroke addition");
+        assert.equal(undo.disabled, false);
+        undo.dispatch("click");
+        assert.equal(get("preview").children.length, 0,
+            "first authored segment can be undone to an empty draft");
+        assert.equal(undo.disabled, true);
+        assert.equal(redo.disabled, false);
+        assert.equal(get("save").disabled, false,
+            "empty draft remains available for guarded explicit save");
+        const downloaded = downloads.length;
+        get("save").dispatch("click");
+        assert.match(get("status").textContent, /Save requires/);
+        assert.equal(downloads.length, downloaded,
+            "empty history state cannot export an invalid TSV");
+        redo.dispatch("click");
+        assert.equal(get("selected").value, "0");
+        assert.equal(await save(), encodeGlyphLibrary(original));
+        get("reverse").dispatch("click");
+        const reversed = [{ ...original[0],
+            x1: 1000, y1: 1400, x2: 400, y2: 600 }];
+        assert.equal(await save(), encodeGlyphLibrary(reversed));
+        assert.equal(undo.textContent, "Undo last stroke direction");
+        undo.dispatch("click");
+        assert.equal(get("selected").value, "0",
+            "selected physical stroke remains selected across undo");
+        assert.equal(get("x1").value, "400");
+        assert.equal(await save(), encodeGlyphLibrary(original));
+        redo.dispatch("click");
+        assert.equal(await save(), encodeGlyphLibrary(reversed));
+        get("x1").value = "1100";
+        get("update").dispatch("click");
+        const revised = [{ ...reversed[0], x1: 1100 }];
+        assert.equal(undo.textContent, "Undo last stroke edit");
+        assert.equal(await save(), encodeGlyphLibrary(revised));
+        get("x2").value = "1100";
+        get("y2").value = "1400";
+        get("update").dispatch("click");
+        assert.match(get("status").textContent, /endpoints must differ/);
+        assert.equal(undo.disabled, false,
+            "invalid proposal preserves last successful edit recovery");
+        undo.dispatch("click");
+        assert.equal(await save(), encodeGlyphLibrary(reversed));
+        get("remove").dispatch("click");
+        assert.equal(get("preview").children.length, 0);
+        assert.equal(undo.textContent, "Undo last stroke removal");
+        undo.dispatch("click");
+        assert.equal(await save(), encodeGlyphLibrary(reversed));
+        redo.dispatch("click");
+        assert.equal(get("preview").children.length, 0);
+        editor.reset();
+        assert.equal(undo.disabled, true);
+        assert.equal(redo.disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("manual pen trace, path reorder and join recover in selected TSV",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        const nfd = "n\u{303}";
+        const line = (grapheme, x1, y1, x2, y2) => ({
+            grapheme, x1, y1, x2, y2, width: 250,
+            color: "#243647",
+        });
+        const a = line(nfd, 400, 500, 1000, 500);
+        const b = line(nfd, 1000, 500, 1300, 900);
+        const other = line("ñ", 800, 2000, 1100, 2200);
+        const c = line(nfd, 1800, 1200, 2200, 1500);
+        const source = [a, other, b, c];
+        const save = async () => {
+            get("save").dispatch("click");
+            return downloads.at(-1).text();
+        };
+        const load = async (ink) => {
+            const raw = new TextEncoder().encode(encodeGlyphLibrary(ink));
+            get("load").files = [{ size: raw.length,
+                arrayBuffer: async () => raw.buffer }];
+            await get("load").dispatch("change");
+            get("character").value = nfd;
+            get("character").dispatch("input");
+        };
+        const select = (index) => {
+            get("selected").value = String(index);
+            get("selected").dispatch("change");
+        };
+        const roundtrip = async (accepted, original, label) => {
+            assert.equal(await save(), encodeGlyphLibrary(accepted),
+                `${label} accepted exact TSV`);
+            assert.equal(get("slant-undo").disabled, false);
+            get("slant-undo").dispatch("click");
+            assert.equal(await save(), encodeGlyphLibrary(original),
+                `${label} undo exact bytes`);
+            get("slant-redo").dispatch("click");
+            assert.equal(await save(), encodeGlyphLibrary(accepted),
+                `${label} redo exact bytes`);
+        };
+        editor.start();
+        await load(source);
+        const preview = get("preview");
+        const pointer = (x, y) => ({ clientX: x, clientY: y,
+            pointerId: 19, isPrimary: true, button: 0 });
+        preview.dispatch("pointerdown", pointer(230, 200));
+        preview.dispatch("pointermove", pointer(240, 210));
+        preview.dispatch("pointerup", pointer(250, 215));
+        const traced = [...source,
+            line(nfd, 2300, 2000, 2400, 2100),
+            line(nfd, 2400, 2100, 2500, 2150)];
+        assert.equal(get("slant-undo").textContent,
+            "Undo last pen trace");
+        await roundtrip(traced, source, "multi-segment trace");
+        assert.equal(get("selected").value, "5",
+            "redo restores selected final sampled pen segment");
+        await load(source);
+        select(0);
+        get("path-later").dispatch("click");
+        const moved = moveCandidatePath(source, nfd, 0, 1);
+        assert.equal(get("slant-undo").textContent,
+            "Undo last pen path order");
+        await roundtrip(moved.strokes, source, "path reorder");
+        assert.equal(get("selected").value,
+            String(moved.selectedIndex));
+        await load([a, other, c]);
+        select(0);
+        get("join").dispatch("click");
+        const bridge = line(nfd, 1000, 500, 1800, 1200);
+        const connected = [a, bridge, other, c];
+        assert.equal(get("slant-undo").textContent,
+            "Undo last pen connection");
+        await roundtrip(connected, [a, other, c], "pen bridge");
+        get("join").dispatch("click");
+        assert.match(get("status").textContent, /already continuous/);
+        assert.equal(get("slant-undo").disabled, false,
+            "refused repeated join cannot discard accepted recovery");
+        assert.equal(await save(), encodeGlyphLibrary(connected));
+    } finally {
+        ui.restore();
+    }
+});
+
+test("one-step path undo preserves Unicode slots and imported source",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const nfd = "o\u{301}";
+        const line = (grapheme, x1, y1, x2, y2) => ({
+            grapheme, x1, y1, x2, y2, width: 250,
+            color: "#243647",
+        });
+        const source = [
+            line(nfd, 400, 500, 1000, 500),
+            line("ó", 500, 1200, 800, 1400),
+            line(nfd, 1000, 500, 1000, 1300),
+            line(nfd, 1000, 1300, 600, 1300),
+        ];
+        const bytes = encodeGlyphLibrary(source);
+        const load = async (text) => {
+            const raw = new TextEncoder().encode(text);
+            get("load").files = [{
+                size: raw.length, arrayBuffer: async () => raw.buffer,
+            }];
+            await get("load").dispatch("change");
+        };
+        const save = async () => {
+            get("save").dispatch("click");
+            return downloads.at(-1).text();
+        };
+        await load(bytes);
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        get("selected").value = "0";
+        get("selected").dispatch("change");
+        get("reverse-path").dispatch("click");
+        const reversed = reverseCandidatePath(source, nfd, 0);
+        assert.equal(await save(), encodeGlyphLibrary(reversed.strokes));
+        assert.equal(get("slant-undo").textContent,
+            "Undo last pen path direction");
+        get("slant-undo").dispatch("click");
+        assert.equal(get("selected").value, "0");
+        assert.equal(await save(), bytes);
+        get("slant-redo").dispatch("click");
+        assert.equal(get("selected").value,
+            String(reversed.selectedIndex));
+        assert.equal(await save(), encodeGlyphLibrary(reversed.strokes));
+        await load(bytes);
+        assert.equal(get("slant-undo").disabled, true,
+            "loading a selected source erases previous recovery");
+        get("selected").value = "2";
+        get("selected").dispatch("change");
+        get("path-close").dispatch("click");
+        const closed = closeCandidatePath(source, nfd, 2);
+        assert.equal(await save(), encodeGlyphLibrary(closed.strokes));
+        get("slant-undo").dispatch("click");
+        assert.equal(await save(), bytes);
+        get("slant-redo").dispatch("click");
+        assert.equal(await save(), encodeGlyphLibrary(closed.strokes));
+        get("character").value = "ó";
+        get("character").dispatch("input");
+        assert.equal(get("slant-undo").disabled, true,
+            "a different exact Unicode key cannot undo the path");
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        assert.equal(get("slant-undo").disabled, false);
+    } finally {
+        ui.restore();
+    }
+});
+
 test("slant history is one-level and clears on import or ink edits",
     async () => {
     const ui = mountEditor();
@@ -8229,12 +8465,21 @@ test("slant history is one-level and clears on import or ink edits",
         get("selected").value = "0";
         get("selected").dispatch("change");
         get("remove").dispatch("click");
-        assert.equal(get("slant-undo").disabled, true);
+        assert.equal(get("slant-undo").disabled, false);
+        assert.equal(get("slant-undo").textContent,
+            "Undo last stroke removal");
         assert.equal(get("slant-redo").disabled, true);
         get("slant-undo").dispatch("click");
-        assert.equal(get("save").disabled, false);
-        assert.equal(get("status").textContent.startsWith("0 unsaved"),
-            true, "stale undo does not restore a removed stroke");
+        assert.equal(get("selected").value, "0",
+            "manual undo restores the previous selected stroke");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(italicizeGlyphStrokes(second, "o", 12,
+                3550)), "undo restores the removed glyph exactly");
+        assert.equal(get("slant-redo").disabled, false);
+        get("slant-redo").dispatch("click");
+        assert.equal(get("slant-undo").disabled, false,
+            "even an empty library can undo the last deletion");
     } finally {
         ui.restore();
     }
@@ -8800,9 +9045,10 @@ test("exact one-step transform undo restores slant height width and ink",
             get("character").value = nfd;
             get("character").dispatch("input");
             await recoverBytes(redo, thicker, "redo thickness exact bytes");
-            // Ordinary edits invalidate stale recovery, even on a sibling.
+            // A new manual edit replaces the older transform recovery.
             add("∞", [1650, 2300, 1750, 2400], 251);
-            assert.equal(undo.disabled, true);
+            assert.equal(undo.disabled, false);
+            assert.equal(undo.textContent, "Undo last stroke addition");
             assert.equal(redo.disabled, true);
             get("character").value = nfd;
             get("character").dispatch("input");

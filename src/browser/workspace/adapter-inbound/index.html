@@ -1264,6 +1264,13 @@
             <button id="glyph-slant-redo" type="button" disabled>
               Redo last glyph transform
             </button>
+            <p class="field-help">Undo/redo recovers one accepted local
+              edit: an authored glyph transform, pen trace, individual stroke,
+              pen path, or short connector. The exact selected grapheme and
+              stroke return with the ink. A new edit replaces the recovery
+              step; importing a TSV or ending the session clears it. Starter
+              fills, copies and accent composition do not create a recovery
+              step. Recovery never saves or downloads a file.</p>
             <div class="glyph-slant-preview-region">
               <svg id="glyph-slant-preview"
                 class="glyph-stroke-preview glyph-stroke-slant-preview"
