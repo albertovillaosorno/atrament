@@ -1322,6 +1322,11 @@ This is one-sided: a break *after* the dash remains permitted. These exact
 shapes must still be authored, and overly narrow rows retain measured
 single-grapheme fallback rather than inventing dictionary hyphenation.
 
+A U+2026 single-glyph ellipsis also stays with the preceding ink when an
+overlong word wraps. This is distinct from three separate ASCII dots;
+it still requires its own explicitly authored glyph, and never creates
+additional marks, synthetic dots or implied trailing content.
+
 
 The Markdown subset supports single-line `#` through `######` headings;
 spaces separating the ATX marker from the title (including expanded tabs)

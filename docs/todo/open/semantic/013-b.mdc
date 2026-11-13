@@ -295,6 +295,19 @@ This is advisory visual wrapping, not a Unicode line-break standard,
 logical bidirectional layout, semantic persistence or automatic dashes.
 P2-013 remains open.
 
+## Single-glyph ellipsis row protection (partial)
+
+The native overlong-word cluster policy also prevents an authored U+2026
+ellipsis from beginning a continuation row when it fits after the preceding
+grapheme. A break after the mark is permitted. The same exact source is
+retained through plain and Markdown flow without inferred dots or glyph
+substitution. Narrow 5-mm rows safely retain single-grapheme fallback.
+
+One red-before/green-after physical wrap, a 384-seed mixed punctuation
+NFC/NFD matrix, and real manual-stroke PDF/PNG byte comparisons now include
+the Unicode ellipsis. Missing authored ellipsis ink cannot replace an
+accepted export. This is still not a locale or full Unicode word breaker.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
