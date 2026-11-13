@@ -1264,14 +1264,14 @@
             <button id="glyph-slant-redo" type="button" disabled>
               Redo last glyph transform
             </button>
-            <p class="field-help">Undo/redo recovers one accepted local
-              edit: an authored glyph transform, pen trace, individual stroke,
-              pen path, short connector, geometric starter replacement,
-              glyph copy or accent composition. The exact selected grapheme
-              and stroke return with the ink. A new edit replaces recovery;
-              importing a TSV or ending the session clears it. One bulk fill
-              is also one recovery step, including every newly added glyph.
-              Recovery never downloads or saves a file.</p>
+            <p class="field-help">Undo/redo recovers the last eight accepted
+              local edits: authored glyph transforms, pen traces, individual
+              strokes, paths, connectors, starters, copies, accents and bulk
+              fills. Each action restores the exact Unicode grapheme, its
+              stroke selection and all prior ink. Select the grapheme of the
+              next history step to undo or redo it. A new edit after undo
+              discards the redo tail; importing a TSV or ending the session
+              clears history. Recovery never downloads or saves a file.</p>
             <div class="glyph-slant-preview-region">
               <svg id="glyph-slant-preview"
                 class="glyph-stroke-preview glyph-stroke-slant-preview"
@@ -1308,7 +1308,7 @@
               X, pen widths, stroke order, and other Unicode glyphs remain
               unchanged. Every preview is read-only. Scaling that clips a
               pen edge or collapses a line refuses without altering ink.
-              Each accepted transform replaces the one-step undo history.
+              Each accepted transform adds one bounded undo step.
               Save the original TSV before transforming.</p>
             <label>Authored glyph width (50–150% of current size)
               <input id="glyph-width-percent" type="number" min="50"

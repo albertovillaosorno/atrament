@@ -4180,9 +4180,10 @@ export function createGlyphStrokeEditor(): {
         overflow: boolean;
     } | null = null;
     let downloadUrl: string | null = null;
-    // One session-only recovery step for exact authored pen edits. Keep
-    // explicit empty-library snapshots because the native TSV needs ink.
-    // A subsequent edit replaces (not stacks onto) the recovery step.
+    // Keep at most eight accepted, session-only ink edits. Empty-library
+    // snapshots need a distinct sentinel because the native TSV needs ink.
+    // Saving, failed edits and read-only previews never add history entries.
+    const HISTORY_LIMIT = 8;
     type TransformKind = "slant" | "height" | "width" | "ink"
         | "move" | "rotation";
     type EditKind = TransformKind | "pen trace" | "stroke addition"
@@ -4197,12 +4198,18 @@ export function createGlyphStrokeEditor(): {
         | "punctuation fill" | "quotation fill"
         | "math fill" | "digit fill" | "capital fill"
         | "text mark fill" | "Spanish accent fill";
-    let transformHistory: {
+    type RecoveryStep = {
         before: string; after: string;
         beforeSelection: number | null; afterSelection: number | null;
-        side: "before" | "after"; grapheme: string;
-        kind: EditKind;
-    } | null = null;
+        grapheme: string; kind: EditKind;
+    };
+    let transformHistory: RecoveryStep[] = [];
+    // Number of accepted steps currently applied, from 0 to length.
+    let historyCursor = 0;
+    const clearHistory = (): void => {
+        transformHistory = [];
+        historyCursor = 0;
+    };
     const draftBytes = (ink: readonly Stroke[]): string =>
         ink.length === 0 ? "" : encodeGlyphLibrary([...ink]);
     const recoveryLabel = (kind: EditKind): string =>
@@ -5190,24 +5197,26 @@ export function createGlyphStrokeEditor(): {
                     + missing.slice(0, 8).map(display).join(", ")
                     + (missing.length > 8 ? ", …" : ""));
         }
-        if (transformHistory !== null) {
-            const expected = transformHistory[transformHistory.side];
-            if (draftBytes(strokes) !== expected) {
-                transformHistory = null;
-            }
+        const expected = historyCursor === 0
+            ? transformHistory[0]?.before
+            : transformHistory[historyCursor - 1]?.after;
+        if (expected !== undefined && draftBytes(strokes) !== expected) {
+            clearHistory();
         }
-        const lastKind = transformHistory?.grapheme === character.value
-            ? transformHistory.kind : null;
-        const transformLabel = lastKind === null
-            ? "glyph transform" : recoveryLabel(lastKind);
-        undoTransform.textContent = `Undo last ${transformLabel}`;
-        redoTransform.textContent = `Redo last ${transformLabel}`;
+        const undoStep = transformHistory[historyCursor - 1];
+        const redoStep = transformHistory[historyCursor];
+        const undoKind = undoStep?.grapheme === character.value
+            ? undoStep.kind : null;
+        const redoKind = redoStep?.grapheme === character.value
+            ? redoStep.kind : null;
+        undoTransform.textContent = `Undo last ${undoKind === null
+            ? "glyph transform" : recoveryLabel(undoKind)}`;
+        redoTransform.textContent = `Redo last ${redoKind === null
+            ? "glyph transform" : recoveryLabel(redoKind)}`;
         undoTransform.disabled = !active || drawing !== null
-            || transformHistory?.side !== "after"
-            || transformHistory.grapheme !== character.value;
+            || undoKind === null;
         redoTransform.disabled = !active || drawing !== null
-            || transformHistory?.side !== "before"
-            || transformHistory.grapheme !== character.value;
+            || redoKind === null;
         renderIdeal();
         const shown = strokes.flatMap((stroke, index) => {
             return stroke.grapheme === character.value
@@ -5578,10 +5587,17 @@ export function createGlyphStrokeEditor(): {
         // A no-op transform or edit is not a new history step. Any invalid
         // proposed TSV refuses before touching the accepted draft/history.
         if (before !== after) {
-            transformHistory = {
-                before, after, side: "after", grapheme: target, kind,
+            // Accepting a new edit after undo discards only the redo tail.
+            // Evict old snapshots at the fixed bound, never live TSV ink.
+            transformHistory.length = historyCursor;
+            transformHistory.push({
+                before, after, grapheme: target, kind,
                 beforeSelection: selectedIndex, afterSelection: selection,
-            };
+            });
+            if (transformHistory.length > HISTORY_LIMIT) {
+                transformHistory.shift();
+            }
+            historyCursor = transformHistory.length;
         }
         strokes = next;
         if (selection === null) {
@@ -5714,22 +5730,23 @@ export function createGlyphStrokeEditor(): {
         }
     });
     const restoreTransform = (side: "before" | "after"): void => {
-        if (!active || drawing !== null || transformHistory === null) return;
-        const history = transformHistory;
-        const requiredSide = side === "before" ? "after" : "before";
-        if (history.side !== requiredSide
-            || history.grapheme !== character.value) return;
+        if (!active || drawing !== null) return;
+        const step = side === "before"
+            ? transformHistory[historyCursor - 1]
+            : transformHistory[historyCursor];
+        if (step === undefined || step.grapheme !== character.value) return;
         try {
-            if (draftBytes(strokes) !== history[requiredSide]) {
-                transformHistory = null;
+            const requiredSide = side === "before" ? "after" : "before";
+            if (draftBytes(strokes) !== step[requiredSide]) {
+                clearHistory();
                 throw new Error(
-                    "Cannot restore transform after another ink edit");
+                    "Cannot restore ink after another edit");
             }
-            strokes = history[side] === ""
-                ? [] : parseGlyphLibrary(history[side]);
-            history.side = side;
+            strokes = step[side] === ""
+                ? [] : parseGlyphLibrary(step[side]);
+            historyCursor += side === "before" ? -1 : 1;
             const recoveredSelection = side === "before"
-                ? history.beforeSelection : history.afterSelection;
+                ? step.beforeSelection : step.afterSelection;
             if (recoveredSelection === null) {
                 selectedIndex = null;
                 render();
@@ -5738,7 +5755,7 @@ export function createGlyphStrokeEditor(): {
                 // fields; render() alone cannot preload numeric controls.
                 choose(recoveredSelection);
             }
-            const label = recoveryLabel(history.kind);
+            const label = recoveryLabel(step.kind);
             message(side === "before"
                 ? `Undid last ${label}; unsaved`
                 : `Redid last ${label}; unsaved`);
@@ -6307,7 +6324,7 @@ export function createGlyphStrokeEditor(): {
             const text = decoder.decode(bytes);
             const checked = parseGlyphLibrary(text);
             strokes = checked;
-            transformHistory = null;
+            clearHistory();
             drawing = null;
             selectedIndex = null;
             render();
@@ -6354,7 +6371,7 @@ export function createGlyphStrokeEditor(): {
         generation += 1;
         active = false;
         strokes = [];
-        transformHistory = null;
+        clearHistory();
         drawing = null;
         selectedIndex = null;
         for (const control of controls) control.disabled = true;

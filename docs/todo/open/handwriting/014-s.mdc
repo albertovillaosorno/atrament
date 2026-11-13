@@ -1053,3 +1053,20 @@ notebook undo stack. Focused browser tests
 cover the empty-draft boundary, exact Unicode-interleaved path replay,
 source imports, refused edits, selected coordinate restoration and session
 reset; native glyph TSV format and exporter remain unchanged.
+
+## Bounded multi-step glyph edit recovery — 2026-11-13
+
+The localhost glyph editor now retains at most eight accepted session-only
+edits as exact native TSV before/after snapshots with selected stroke indices.
+Undo/redo follows acceptance order across Unicode identities (NFC and NFD
+remain distinct); the user selects the next step's grapheme to recover it.
+One whole-library fill counts as one transaction. An edit after undo truncates
+only the redo tail, and the oldest step is evicted at the eight-step bound.
+Identity or refused edits leave history untouched, while an admitted import
+or session reset clears it. Restoring an empty draft is allowed in memory but
+still cannot produce an invalid empty TSV download.
+
+The existing Rust native glyph schema is unchanged: this is editor-only,
+nonpersistent history, not saved notebook undo/redo or automatic shape
+inference. Browser regressions exercise bounded eviction, branching, exact
+Unicode selection and bulk fills, refused edits and session boundaries.

@@ -8133,7 +8133,9 @@ test("last authored slant undo/redo restores exact Unicode without writes",
             get("character").dispatch("input");
             assert.equal(undo.disabled, false);
             undo.dispatch("click");
-            assert.equal(undo.disabled, true);
+            assert.equal(undo.disabled, false,
+                "earlier accepted pen additions remain recoverable");
+            assert.equal(undo.textContent, "Undo last stroke addition");
             assert.equal(redo.disabled, false);
             assert.match(get("status").textContent,
                 /Undid last glyph slant; unsaved/);
@@ -8569,7 +8571,7 @@ test("one-step path undo preserves Unicode slots and imported source",
     }
 });
 
-test("slant history is one-level and clears on import or ink edits",
+test("slant history walks multiple steps and clears after import",
     async () => {
     const ui = mountEditor();
     try {
@@ -8593,11 +8595,19 @@ test("slant history is one-level and clears on import or ink edits",
         get("save").dispatch("click");
         assert.equal(await downloads.at(-1).text(),
             encodeGlyphLibrary(first), "one undo reverses one slant only");
-        assert.equal(get("slant-undo").disabled, true);
+        assert.equal(get("slant-undo").disabled, false);
+        get("slant-undo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(original), "two undos recover both slants");
         get("slant-redo").dispatch("click");
         get("save").dispatch("click");
         assert.equal(await downloads.at(-1).text(),
-            encodeGlyphLibrary(second), "redo reapplies latest transform");
+            encodeGlyphLibrary(first), "first redo reapplies first slant");
+        get("slant-redo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(second), "second redo reapplies latest slant");
         // A successful load invalidates history even for identical bytes.
         const bytes = encodeGlyphLibrary(second);
         get("load").files = [{
@@ -8636,6 +8646,153 @@ test("slant history is one-level and clears on import or ink edits",
         ui.restore();
     }
 });
+
+test("eight-step history evicts only oldest edits and truncates redo tail",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const nfd = "n\u0303";
+            const undo = get("slant-undo");
+            const redo = get("slant-redo");
+            const visit = (glyph) => {
+                get("character").value = glyph;
+                get("character").dispatch("input");
+            };
+            const append = (glyph, i) => {
+                visit(glyph);
+                for (const [key, value] of Object.entries({
+                    x1: 350 + i * 25, y1: 1000,
+                    x2: 650 + i * 25, y2: 1400, width: 250,
+                })) get(key).value = String(value);
+                get("add").dispatch("click");
+                return {
+                    grapheme: glyph, x1: 350 + i * 25, y1: 1000,
+                    x2: 650 + i * 25, y2: 1400, width: 250,
+                    color: "#243647",
+                };
+            };
+            const saved = async () => {
+                get("save").dispatch("click");
+                return parseGlyphLibrary(await downloads.at(-1).text());
+            };
+            editor.start();
+            const all = Array.from({ length: 10 }, (_, i) => append(nfd, i));
+            assert.deepEqual(await saved(), all);
+            for (let i = 0; i < 8; i += 1) {
+                assert.equal(undo.disabled, false);
+                undo.dispatch("click");
+            }
+            assert.equal(undo.disabled, true,
+                "oldest two edits are now the unrecoverable base state");
+            assert.deepEqual(await saved(), all.slice(0, 2));
+            for (let i = 0; i < 8; i += 1) {
+                assert.equal(redo.disabled, false);
+                redo.dispatch("click");
+            }
+            assert.equal(redo.disabled, true);
+            assert.deepEqual(await saved(), all);
+
+            undo.dispatch("click");
+            undo.dispatch("click");
+            assert.deepEqual(await saved(), all.slice(0, 8));
+            get("authored-angle").value = "21";
+            get("slant-authored").dispatch("click");
+            assert.match(get("status").textContent, /Italic angle/);
+            assert.equal(redo.disabled, false,
+                "refused edit cannot truncate a valid redo branch");
+            get("authored-angle").value = "0";
+            get("slant-authored").dispatch("click");
+            assert.equal(redo.disabled, false,
+                "identity edit cannot truncate a valid redo branch");
+
+            const branched = append("ñ", 15);
+            assert.equal(redo.disabled, true);
+            visit(nfd);
+            assert.equal(redo.disabled, true,
+                "discarded future cannot return on its old Unicode key");
+            assert.equal(undo.disabled, true,
+                "history currently belongs to the new exact glyph");
+            visit("ñ");
+            undo.dispatch("click");
+            assert.deepEqual(await saved(), all.slice(0, 8));
+            assert.equal(redo.disabled, false);
+            redo.dispatch("click");
+            assert.deepEqual(await saved(), [...all.slice(0, 8), branched]);
+            editor.reset();
+            assert.equal(undo.disabled, true);
+            editor.start();
+            visit("ñ");
+            assert.equal(redo.disabled, true);
+        } finally {
+            ui.restore();
+        }
+    });
+
+test("multi-step history replays Unicode-specific ink and bulk fill exactly",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const nfd = "a\u0301";
+            const undo = get("slant-undo");
+            const redo = get("slant-redo");
+            const select = (glyph) => {
+                get("character").value = glyph;
+                get("character").dispatch("input");
+            };
+            const append = (glyph, offset) => {
+                select(glyph);
+                for (const [key, value] of Object.entries({
+                    x1: 500 + offset, y1: 1200,
+                    x2: 850 + offset, y2: 1600, width: 250,
+                })) get(key).value = String(value);
+                get("add").dispatch("click");
+                return { grapheme: glyph, x1: 500 + offset, y1: 1200,
+                    x2: 850 + offset, y2: 1600, width: 250,
+                    color: "#243647" };
+            };
+            const saved = async () => {
+                get("save").dispatch("click");
+                return await downloads.at(-1).text();
+            };
+            editor.start();
+            const first = append(nfd, 0);
+            const second = append("á", 50);
+            const beforeFill = encodeGlyphLibrary([first, second]);
+            get("seed-digits").dispatch("click");
+            const withFill = await saved();
+            assert.ok(parseGlyphLibrary(withFill).length > 20);
+            assert.equal(undo.textContent, "Undo last digit fill");
+            undo.dispatch("click");
+            assert.equal(await saved(), beforeFill,
+                "undo of one transaction clears all ten added numeral keys");
+            assert.equal(undo.textContent, "Undo last stroke addition");
+            undo.dispatch("click");
+            assert.equal(await saved(), encodeGlyphLibrary([first]));
+            select("á");
+            assert.equal(undo.disabled, true,
+                "NFC is not the previous NFD history owner");
+            select(nfd);
+            assert.equal(undo.disabled, false);
+            undo.dispatch("click");
+            assert.equal(get("preview").children.length, 0);
+            get("save").dispatch("click");
+            assert.match(get("status").textContent, /Save requires 1\.\.4096/,
+                "empty in-memory undo state cannot download invalid TSV");
+            redo.dispatch("click");
+            assert.equal(await saved(), encodeGlyphLibrary([first]));
+            select("á");
+            redo.dispatch("click");
+            assert.equal(await saved(), beforeFill);
+            redo.dispatch("click");
+            assert.equal(await saved(), withFill);
+            assert.equal(redo.disabled, true);
+            editor.reset();
+        } finally {
+            ui.restore();
+        }
+    });
 
 test("read-only authored slant guide predicts exact accepted pen coordinates",
     async () => {
@@ -9197,7 +9354,7 @@ test("exact one-step transform undo restores slant height width and ink",
             get("character").value = nfd;
             get("character").dispatch("input");
             await recoverBytes(redo, thicker, "redo thickness exact bytes");
-            // A new manual edit replaces the older transform recovery.
+            // A manual edit creates another history step across graphemes.
             add("∞", [1650, 2300, 1750, 2400], 251);
             assert.equal(undo.disabled, false);
             assert.equal(undo.textContent, "Undo last stroke addition");
