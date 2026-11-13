@@ -976,3 +976,32 @@ replacing a previously accepted output file.
 This remains command-only variation of caller-authored ink, not saved
 semantic text, inferred cursive connections or a calibrated personal writer.
 Full P1-014 acceptance remains open.
+
+## CLI-only seeded word-local baseline incline (partial) — 2026-11-12
+
+`atrament-profiles notebook --glyph-word-baseline-step MAX_UM` (0–150)
+now admits a separate seeded signed vertical increment per successive
+grapheme in each ASCII-space-delimited word, with `--glyph-variation`.
+The first letter keeps its original baseline, and each subsequent letter
+moves by its zero-based ordinal times the sampled step. Word boundaries,
+including repeated ASCII spaces, and physical text-run boundaries reset
+the trend. Authored Unicode grapheme shapes, pen widths, nominal advances
+and wrapping remain unchanged.
+
+The stream is independent of word-local horizontal tracking, line drift,
+word rise and other word rhythm parameters. The physical stroke engine
+places each shifted contour. Same-pen opt-in connectors are recomputed
+from the real directed endpoints; out-of-range connections or off-page
+pen edges refuse atomically instead of silently clipping the export.
+Zero spread is byte-identical to an omitted option.
+
+Four native regressions check independent hard-coded seed samples across
+two runs of exact NFD Unicode words; replay and independent composition
+with all existing word/line treatments; selected directed joins and
+saved mean baseline offsets; genuine PDF, transparent PNG and page-ink
+TSV reproducibility and reimport; and malformed/duplicate/unpaired flags
+plus A4 bottom-margin overshoot refusing without replacing output.
+
+This does not model a real writer's baseline statistics or infer cursive
+motion, and the CLI does not persist the option in a notebook document.
+Full P1-014 acceptance remains open.

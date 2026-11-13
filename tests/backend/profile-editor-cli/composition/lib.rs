@@ -12060,3 +12060,319 @@ fn word_tracking_refuses_right_margin_clipping_in_pdf_and_png()
     fs::remove_file(target).map_err(|error| error.to_string())?;
     Ok(())
 }
+
+#[test]
+fn word_baseline_step_replays_exact_unicode_words_and_composes_independently()
+-> Result<(), String> {
+    let glyph = "n\u{303}";
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        glyph, "600", "1000", "1600", "2800", "250", "#123456",
+    ]).iter())?;
+    let text = format!("{glyph}{glyph}  {glyph} {glyph}{glyph}");
+    for y in [30_000u32, 40_000u32] {
+        overlay.parse("--place-text", &mut args(&[
+            "1", "25000", &y.to_string(), &text,
+        ]).iter())?;
+    }
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    let original = overlay.expand(&[], None)?;
+    overlay.parse("--glyph-word-baseline-step",
+        &mut args(&["150"]).iter())?;
+    let changed = overlay.expand(&[], None)?;
+    // Independent uint32 avalanche/xorshift oracle. Repeated ASCII
+    // spaces cause one boundary, and runs draw different word samples.
+    let steps = [122i64, 142, -62, -149, 129, 81];
+    let ordinal = [0i64, 1, 0, 0, 1];
+    if changed.len() != 10 || original == changed
+        || changed != overlay.expand(&[], None)? {
+        return Err("word baseline step did not deterministically draw".into());
+    }
+    for (run, row) in changed.chunks_exact(5).enumerate() {
+        let y = if run == 0 { 30_000i64 } else { 40_000i64 };
+        for (index, stroke) in row.iter().enumerate() {
+            let word = match index { 0 | 1 => 0, 2 => 1, _ => 2 };
+            let shift = steps[run * 3 + word] * ordinal[index];
+            let expected_y = u32::try_from(y + 1_000 + shift)
+                .map_err(|error| error.to_string())?;
+            let expected_end_y = u32::try_from(y + 2_800 + shift)
+                .map_err(|error| error.to_string())?;
+            if stroke.start_um.1 != expected_y
+                || stroke.end_um.1 != expected_end_y
+                || stroke.start_um.0 != original[run * 5 + index].start_um.0
+                || stroke.end_um.0 != original[run * 5 + index].end_um.0
+                || stroke.width_um != 250
+                || stroke.rgb != [0x12, 0x34, 0x56] {
+                return Err(format!(
+                    "word baseline step changed wrong ink {run}/{index}: {stroke:?}"
+                ));
+            }
+        }
+    }
+    overlay.word_baseline_step_um = Some(0);
+    if overlay.expand(&[], None)? != original {
+        return Err("zero baseline step changed native ink".into());
+    }
+    overlay.word_baseline_step_um = Some(150);
+    overlay.word_drift_um = Some(90);
+    overlay.word_rise_um = Some(90);
+    overlay.line_drift_um = Some(120);
+    overlay.word_tracking_um = Some(100);
+    overlay.word_width_percent = Some(12);
+    overlay.word_height_percent = Some(12);
+    overlay.word_slant_millidegrees = Some(3_000);
+    overlay.word_pressure_percent = Some(15);
+    let combined = overlay.expand(&[], None)?;
+    overlay.word_baseline_step_um = Some(0);
+    let without = overlay.expand(&[], None)?;
+    for (index, (baseline, inclined)) in without.iter().zip(&combined)
+        .enumerate() {
+        let run = index / 5;
+        let word = match index % 5 { 0 | 1 => 0, 2 => 1, _ => 2 };
+        let shift = steps[run * 3 + word] * ordinal[index % 5];
+        if i64::from(inclined.start_um.1)
+            - i64::from(baseline.start_um.1) != shift
+            || i64::from(inclined.end_um.1)
+                - i64::from(baseline.end_um.1) != shift
+            || inclined.start_um.0 != baseline.start_um.0
+            || inclined.end_um.0 != baseline.end_um.0
+            || inclined.width_um != baseline.width_um
+            || inclined.rgb != baseline.rgb {
+            return Err("baseline slope changed other word rhythms".into());
+        }
+    }
+    overlay.word_baseline_step_um = Some(151);
+    if overlay.expand(&[], None).is_ok() {
+        return Err("typed baseline step out of range accepted".into());
+    }
+    overlay.word_baseline_step_um = Some(150);
+    overlay.variation = None;
+    if overlay.expand(&[], None).is_ok() {
+        return Err("unpaired typed baseline step accepted".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn word_baseline_step_preserves_directed_joins_and_statistical_baselines()
+-> Result<(), String> {
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "á", "150", "1200", "3370", "1200", "250", "#123456",
+    ]).iter())?;
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "áá áá",
+    ]).iter())?;
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    overlay.add_text_join_pair(&mut args(&["á", "á"]).iter())?;
+    overlay.parse("--glyph-word-baseline-step",
+        &mut args(&["150"]).iter())?;
+    let joined = overlay.expand(&[], None)?;
+    if joined.len() != 6 {
+        return Err(format!("word baseline step omitted bridges: {joined:?}"));
+    }
+    for (offset, expected_rise) in [(0usize, 122i64), (3, 142)] {
+        let [left, bridge, right] = joined.get(offset..offset + 3)
+            .ok_or("missing joined word")? else {
+            return Err("expected two strokes and one directed bridge".into());
+        };
+        if left.end_um != bridge.start_um
+            || bridge.end_um != right.start_um
+            || i64::from(bridge.end_um.1)
+                - i64::from(bridge.start_um.1) != expected_rise
+            || bridge.start_um.0 >= bridge.end_um.0
+            || bridge.width_um != left.width_um
+            || bridge.width_um != right.width_um {
+            return Err(format!(
+                "baseline trend broke physical pen join: {joined:?}"
+            ));
+        }
+    }
+    let profile = execute_handwriting(&args(&[
+        "--set-glyph", "á", "baseline_offset",
+        "500", "500", "500", "500", "0",
+    ]))?.ok_or("missing statistical profile")?;
+    let statistics = decode_statistics_json(
+        &profile, &UnicodeGraphemeSegmentation,
+    ).map_err(|error| format!("statistics: {error:?}"))?;
+    overlay.text_joins.clear();
+    overlay.runs.clear();
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "áá",
+    ]).iter())?;
+    let inclined = overlay.expand(&[], Some(&statistics))?;
+    overlay.word_baseline_step_um = Some(0);
+    let straight = overlay.expand(&[], Some(&statistics))?;
+    if inclined.len() != 2 || straight.len() != 2
+        || inclined[0] != straight[0]
+        || i64::from(inclined[1].start_um.1)
+            - i64::from(straight[1].start_um.1) != 122
+        || i64::from(inclined[1].end_um.1)
+            - i64::from(straight[1].end_um.1) != 122
+        || inclined[1].start_um.0 != straight[1].start_um.0
+        || inclined[1].end_um.0 != straight[1].end_um.0 {
+        return Err(format!(
+            "baseline slope lost saved statistical mean: {inclined:?}"
+        ));
+    }
+    Ok(())
+}
+
+#[test]
+fn word_baseline_step_pdf_png_and_page_ink_replay_and_invalid_options()
+-> Result<(), String> {
+    let prefix = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "á", "600", "1000", "1600", "2800",
+        "250", "#123456",
+        "--flow-markdown", "áá á áá\n\náá áá",
+        "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+    ]);
+    let render = |format: &str, seed: &str, options: &[&str]|
+        -> Result<Vec<u8>, String> {
+        let mut command = prefix.clone();
+        let index = command.iter().position(|v| v == "--glyph-variation")
+            .ok_or("missing variation seed")? + 1;
+        *command.get_mut(index).ok_or("missing seed")? = seed.into();
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        command.extend(args(options));
+        execute_notebook(&command)?.ok_or("missing native export".into())
+    };
+    for (format, signature) in [
+        ("pdf", b"%PDF-1.4".as_slice()),
+        ("png", b"\x89PNG\r\n\x1a\n".as_slice()),
+        ("ink", b"atrament.page-ink.v1\n".as_slice()),
+    ] {
+        let original = render(format, "42", &[])?;
+        if original != render(format, "42", &[
+            "--glyph-word-baseline-step", "0",
+        ])? {
+            return Err(format!("zero slope changed {format} bytes"));
+        }
+        let inclined = render(format, "42", &[
+            "--glyph-word-baseline-step", "150",
+        ])?;
+        if inclined == original || !inclined.starts_with(signature)
+            || inclined != render(format, "42", &[
+                "--glyph-word-baseline-step", "150",
+            ])? || inclined == render(format, "43", &[
+                "--glyph-word-baseline-step", "150",
+            ])? {
+            return Err(format!("{format} word baseline replay failed"));
+        }
+    }
+    let page_ink = render("ink", "42", &[
+        "--glyph-word-baseline-step", "150",
+    ])?;
+    let source = test_path().with_extension("tsv");
+    fs::write(&source, page_ink).map_err(|error| error.to_string())?;
+    let source_path = source.to_str().ok_or("non-UTF8 ink source")?;
+    for format in ["pdf", "png"] {
+        let mut command = args(&[
+            "--printed-sheet", "true", "--ink-file", source_path,
+            "--export-paper", format,
+        ]);
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        if execute_notebook(&command)? != Some(render(
+            format, "42", &["--glyph-word-baseline-step", "150"],
+        )?) {
+            return Err(format!("{format} baseline TSV reimport changed ink"));
+        }
+    }
+    fs::remove_file(source).map_err(|error| error.to_string())?;
+
+    let target = test_path();
+    fs::write(&target, b"preserved export")
+        .map_err(|error| error.to_string())?;
+    let name = target.to_str().ok_or("non-UTF8 target path")?;
+    for invalid in [
+        args(&["--glyph-word-baseline-step", "-1"]),
+        args(&["--glyph-word-baseline-step", "151"]),
+        args(&["--glyph-word-baseline-step", "4294967296"]),
+        args(&["--glyph-word-baseline-step", "150",
+            "--glyph-word-baseline-step", "1"]),
+    ] {
+        let mut command = prefix.clone();
+        command.extend(args(&[
+            "--export-paper", "pdf", "--output", name, "--replace",
+        ]));
+        command.extend(invalid);
+        if execute_notebook(&command).is_ok()
+            || fs::read(&target).map_err(|error| error.to_string())?
+                != b"preserved export" {
+            return Err("invalid baseline option replaced export".into());
+        }
+    }
+    let mut unpaired = prefix;
+    let index = unpaired.iter().position(|v| v == "--glyph-variation")
+        .ok_or("missing variation")?;
+    unpaired.drain(index..index + 8).for_each(drop);
+    unpaired.extend(args(&[
+        "--glyph-word-baseline-step", "150", "--export-paper", "pdf",
+        "--output", name, "--replace",
+    ]));
+    if execute_notebook(&unpaired).is_ok()
+        || fs::read(&target).map_err(|error| error.to_string())?
+            != b"preserved export" {
+        return Err("unpaired baseline option replaced export".into());
+    }
+    fs::remove_file(target).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[test]
+fn word_baseline_step_refuses_bottom_margin_overshoot_in_pdf_and_png()
+-> Result<(), String> {
+    // An A4 page has a 16 mm bottom margin: 281 mm is the ink boundary.
+    // Seed 42 moves the second letter down by 122 um; its last pen edge
+    // crosses 281000 um while the unchanged word remains printable.
+    let prefix = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "á", "600", "1000", "1600", "1200",
+        "250", "#123456",
+        "--place-text", "1", "25000", "279580", "áá",
+        "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+    ]);
+    let target = test_path();
+    let name = target.to_str().ok_or("non-UTF8 output path")?;
+    for format in ["pdf", "png"] {
+        let mut valid = prefix.clone();
+        valid.extend(args(&["--export-paper", format]));
+        if format == "png" {
+            valid.extend(args(&["--dpi", "72"]));
+        }
+        if execute_notebook(&valid)?.is_none() {
+            return Err("near-bottom baseline must be printable".into());
+        }
+        fs::write(&target, b"preserved page")
+            .map_err(|error| error.to_string())?;
+        valid.extend(args(&[
+            "--glyph-word-baseline-step", "150",
+            "--output", name, "--replace",
+        ]));
+        let error = execute_notebook(&valid)
+            .expect_err("word baseline slope must cross printable margin");
+        if !error.contains("page 1 ink needs printable endpoints")
+            || fs::read(&target).map_err(|e| e.to_string())?
+                != b"preserved page" {
+            return Err(format!(
+                "baseline overshoot unexpectedly changed {format}: {error}"
+            ));
+        }
+    }
+    fs::remove_file(target).map_err(|error| error.to_string())?;
+    Ok(())
+}

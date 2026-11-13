@@ -2126,12 +2126,31 @@ line drift and word offsets. Opt-in same-pen joins still use actual endpoints;
 tracking beyond a permitted join gap or physical page edge refuses instead
 of dropping strokes. `0` preserves exact PDF, PNG and page-ink TSV bytes.
 
+For a seeded word-local baseline incline, add
+`--glyph-word-baseline-step MAX_UM` (0–150) with
+`--glyph-variation`. Each ASCII-space-delimited word in a physical text run
+receives an independent signed micrometre step. The first exact Unicode glyph
+keeps its nominal baseline; each later glyph moves vertically by its
+zero-based ordinal times that word's step. The next word restarts at zero,
+even across repeated spaces. A negative step inclines the word upward and
+a positive step downward on the page.
+
+This option adds to line drift and shared word rise without changing original
+glyph contours, pen widths, glyph source, nominal advances, row pitch or text
+wrapping. Directed short joins use the actual final endpoints. Like tracking,
+this optional rhythm can run off the printable sheet or extend a requested
+bridge beyond 1200 µm; either condition refuses the whole export instead of
+silently clipping or disconnecting ink. A zero spread preserves PDF, PNG and
+page-ink TSV bytes exactly. It is a CLI-only creative treatment, not a learned
+writer's baseline or a saved notebook setting.
+
 For example, extend the preceding command with
 `--glyph-line-drift 120 --glyph-word-drift 90 --glyph-word-rise 90`
 and `--glyph-word-pressure 12 --glyph-word-slant 3000`
-with `--glyph-word-width 10 --glyph-word-height 10` and
-`--glyph-word-tracking 100` to produce reproducible line, word,
-letter-spacing, ink, width, height and italic rhythms. At `0`,
+with `--glyph-word-width 10 --glyph-word-height 10`,
+`--glyph-word-tracking 100` and `--glyph-word-baseline-step 90` to produce
+reproducible line, word, letter-spacing, baseline, ink, width, height and
+italic rhythms. At `0`,
 each extra option is
 byte-identical to omission for PDF/PNG and emitted ink TSV. Widths outside
 80–1500 µm and unprintable

@@ -232,6 +232,26 @@ impl GlyphVariation {
         seed ^ occurrence.wrapping_add(1).wrapping_mul(0x9E37_79B9)
     }
 
+    // A signed vertical increment shared by successive letters of one
+    // exact Unicode word. Keep this stream independent of line/word drift,
+    // tracking and the other treatments; no authored contour is modified.
+    fn word_baseline_step(
+        self, run_index: usize, word_index: u32, maximum_um: u32,
+    ) -> Result<i32, String> {
+        let run = u32::try_from(run_index)
+            .map_err(|_error| "word baseline run index overflow")?;
+        let mut identity = self.seed
+            ^ run.wrapping_add(1).wrapping_mul(0xF135_7AEA)
+            ^ word_index.wrapping_add(1).wrapping_mul(0x8EBD_17FC);
+        identity ^= identity >> 16i32;
+        identity = identity.wrapping_mul(0x7FEB_352D);
+        identity ^= identity >> 15i32;
+        identity = identity.wrapping_mul(0x846C_A68B);
+        identity ^= identity >> 16i32;
+        let mut random = XorShift32::new(identity);
+        Self::round_js(random.unit() * f64::from(maximum_um))
+    }
+
     // This is one horizontal offset per ASCII-space-delimited word, not
     // independent letter tracking. The distinct seeded stream preserves the
     // line-rhythm samples and keeps all intra-word joins aligned.
@@ -861,7 +881,7 @@ impl GlyphOverlay {
                     run, run_index, word_index, letter_index,
                     offset_um, tracking)?;
                 let glyph_y = self.glyph_origin_y(
-                    run, run_index, word_index, column, metrics,
+                    run, run_index, word_index, letter_index, column, metrics,
                 )?;
                 let style = self.glyph_style(run_index, word_index)?;
                 let rendered = selected.iter().map(|shape| placed_ink(
@@ -968,7 +988,7 @@ impl GlyphOverlay {
 
     fn glyph_origin_y(
         &self, run: &TextRun, run_index: usize, word_index: u32,
-        column: u32, metrics: Option<GlyphMetrics>,
+        letter_index: u32, column: u32, metrics: Option<GlyphMetrics>,
     ) -> Result<i64, String> {
         let drift = match (self.variation, self.line_drift_um) {
             (Some(variation), Some(maximum_um)) =>
@@ -980,12 +1000,20 @@ impl GlyphOverlay {
                 variation.word_rise(run_index, word_index, maximum_um)?,
             _ => 0i32,
         };
+        let step = match (self.variation, self.word_baseline_step_um) {
+            (Some(variation), Some(maximum_um)) =>
+                variation.word_baseline_step(run_index, word_index, maximum_um)?,
+            _ => 0i32,
+        };
+        let slope = i64::from(step).checked_mul(i64::from(letter_index))
+            .ok_or("word baseline slope overflow")?;
         i64::from(run.origin_um.1)
             .checked_add(i64::from(metrics.map_or(
                 0i32, |values| values.baseline_offset,
             )))
             .and_then(|value| value.checked_add(i64::from(drift)))
             .and_then(|value| value.checked_add(i64::from(rise)))
+            .and_then(|value| value.checked_add(slope))
             .ok_or_else(|| "glyph vertical origin overflow".into())
     }
 
@@ -1041,6 +1069,7 @@ impl GlyphOverlay {
             || self.word_width_percent.is_some()
             || self.word_height_percent.is_some()
             || self.word_tracking_um.is_some()
+            || self.word_baseline_step_um.is_some()
     }
 
     // Index once per expansion, retaining authored order for each exact key.
@@ -1404,6 +1433,7 @@ impl GlyphOverlay {
             }
             "--glyph-word-height" => self.parse_height_rhythm(iter)?,
             "--glyph-word-tracking" => self.parse_tracking_rhythm(iter)?,
+            "--glyph-word-baseline-step" => self.parse_baseline_step(iter)?,
             "--glyph-word-pressure" => {
                 if self.word_pressure_percent.is_some() {
                     return Err("duplicate --glyph-word-pressure".into());
@@ -1421,6 +1451,18 @@ impl GlyphOverlay {
             _ => return Err(format!("unknown glyph export option: {flag}")),
 
         }
+        Ok(())
+    }
+
+    fn parse_baseline_step(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        if self.word_baseline_step_um.is_some() {
+            return Err("duplicate --glyph-word-baseline-step".into());
+        }
+        self.word_baseline_step_um = Some(next_integer(
+            iter, "glyph word baseline step", 0, 150,
+        )?);
         Ok(())
     }
 
@@ -2248,6 +2290,18 @@ impl GlyphOverlay {
             }
             if self.variation.is_none() {
                 return Err("word width requires --glyph-variation".into());
+            }
+        }
+        if let Some(maximum_um) = self.word_baseline_step_um {
+            if maximum_um > 150 {
+                return Err(
+                    "glyph word baseline step must be within 0..150 um".into()
+                );
+            }
+            if self.variation.is_none() {
+                return Err(
+                    "word baseline step requires --glyph-variation".into()
+                );
             }
         }
         if let Some(maximum_um) = self.word_tracking_um {
