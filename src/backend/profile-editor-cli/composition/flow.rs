@@ -74,6 +74,15 @@ pub(super) enum BodyAlign {
     Right,
 }
 
+/// Physical shape of a synthetic Markdown unordered-list marker.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
+pub(super) enum BulletStyle {
+    Dash,
+    Dot,
+    Ring,
+}
+
 /// CLI-only layout selections; absent fields keep previous physical ink.
 #[derive(Clone, Copy, Debug, Default)]
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
@@ -84,6 +93,7 @@ pub(super) struct FlowTypography {
     pub(super) body_inset: Option<u32>,
     pub(super) body_right_inset: Option<u32>,
     pub(super) bullet_align: Option<BodyAlign>,
+    pub(super) bullet_style: Option<BulletStyle>,
     pub(super) list_quote_inset: Option<u32>,
     pub(super) list_quote_right_inset: Option<u32>,
     pub(super) ordered_align: Option<BodyAlign>,
@@ -589,6 +599,7 @@ struct Layout<'model> {
     body_right_inset_um: u32,
     bottom: u32,
     bullet_align: Option<BodyAlign>,
+    bullet_style: Option<BulletStyle>,
     heading: HeadingDecoration,
     // Whether the last heading was itself bound to an earlier title/rule.
     heading_attached_to_prior: bool,
@@ -1675,16 +1686,37 @@ impl Layout<'_> {
             let x1 = start_x
                 .checked_sub(4_400)
                 .ok_or("bullet left inset overflow")?;
-            let x2 = x1.checked_add(1_700).ok_or("bullet width overflow")?;
             let marker_y = y.checked_add(2_200)
                 .ok_or("bullet height overflow")?;
-            self.ornaments.push(NotebookInkLine {
-                page: self.page,
-                start_um: (x1, marker_y),
-                end_um: (x2, marker_y),
-                width_um: 450,
-                rgb: [30, 48, 74],
-            });
+            let bullet_style = self.bullet_style.unwrap_or(BulletStyle::Dash);
+            // All alternatives fit the original 1.7-mm marker band.
+            // Never move the text/checkbox gutter or silently synthesize
+            // an authored Unicode glyph for a Markdown list marker.
+            let (vertices, width): (&[(u32, u32)], u32) = match bullet_style {
+                BulletStyle::Dash => (&[(0, 850), (1_700, 850)], 450),
+                BulletStyle::Dot => (&[(700, 850), (1_000, 850)], 850),
+                BulletStyle::Ring => (&[
+                    (850, 0), (1_451, 249), (1_700, 850),
+                    (1_451, 1_451), (850, 1_700), (249, 1_451),
+                    (0, 850), (249, 249), (850, 0),
+                ], 350),
+            };
+            let top = marker_y.checked_sub(850)
+                .ok_or("bullet top inset overflow")?;
+            for (&start, &end) in vertices.iter().zip(vertices.iter().skip(1)) {
+                let start_um = (
+                    x1.checked_add(start.0).ok_or("bullet X overflow")?,
+                    top.checked_add(start.1).ok_or("bullet Y overflow")?,
+                );
+                let end_um = (
+                    x1.checked_add(end.0).ok_or("bullet X overflow")?,
+                    top.checked_add(end.1).ok_or("bullet Y overflow")?,
+                );
+                self.ornaments.push(NotebookInkLine {
+                    page: self.page, start_um, end_um, width_um: width,
+                    rgb: [30, 48, 74],
+                });
+            }
         }
         Ok(())
     }
@@ -2931,6 +2963,7 @@ fn initialize_layout<'model>(
     Ok(Layout {
         body_align: spacing.body_align,
         bullet_align: spacing.bullet_align,
+        bullet_style: spacing.bullet_style,
         ordered_align: spacing.ordered_align,
         quote_align: spacing.quote_align,
         task_align: spacing.task_align,
@@ -3113,6 +3146,10 @@ pub(super) fn layout_flow_with_typography(
     if spacing.bullet_align.is_some()
         && source.format != FlowFormat::Markdown {
         return Err("flow bullet alignment requires Markdown flow".into());
+    }
+    if spacing.bullet_style.is_some()
+        && source.format != FlowFormat::Markdown {
+        return Err("flow bullet style requires Markdown flow".into());
     }
     if spacing.ordered_align.is_some()
         && source.format != FlowFormat::Markdown {

@@ -715,6 +715,32 @@ not move original list markers, persist notebook semantics or guarantee
 optical alignment after pen variation. Invalid selections refuse before
 source reads, and unfit layouts preserve existing selected output files.
 
+Markdown unordered lists can also choose a **physical bullet mark**
+without changing their text: `--flow-bullet-style dash|dot|ring`. The
+omitted/default `dash` keeps the existing short horizontal pen stroke;
+`dot` uses a short, heavier ink stroke, and `ring` draws a small closed,
+eight-segment outline. These are deterministic Rust vector pen segments,
+not a substituted glyph or a raster stamp. All three fit in the same
+fixed marker gutter, including list continuations and page turns.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-bullet-style ring --export-paper pdf \
+  --output ring-bullet-notes.pdf
+```
+
+The choice applies to `-`, `*`, and `+` unordered bullets only. Checkbox
+outlines/checks, authored numbered labels, quotes, headings and prose
+remain unchanged; bullet text still obeys its independent alignment and
+insets. Explicit `dash` is byte-equivalent to the omitted selection in
+PDF, transparent PNG and exported ink TSV.
+
+A ring uses eight pen segments instead of one, counting toward the existing
+total physical ink limit. Invalid values, repeated options or non-Markdown
+selection refuse before reading sources. This export-only control does not
+persist semantic lists.
+
 For authored Markdown numbered lists, opt into
 `--flow-ordered-align center` or `right` to place the handwritten numeral,
 delimiter and item text together within the available list writing row.

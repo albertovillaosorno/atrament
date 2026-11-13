@@ -4472,3 +4472,21 @@ TSV replay and source-independent preflight refusal. A failed physical
 layout cannot overwrite existing selected export bytes. This remains
 CLI-only styling rather than the persisted semantic notebook export
 required for P1 acceptance.
+
+## Selectable synthetic unordered-list pen markers (partial) — 2026-11-13
+
+The native Markdown flow CLI now accepts `--flow-bullet-style dash|dot|ring`.
+Omission and explicit `dash` preserve the previous one-segment marker
+bytes; a heavier short dot or eight-segment closed outlined ring is
+projected as bounded physical pen geometry in the same list gutter.
+The selection changes only `-`, `*`, and `+` unordered bullets, not checkbox
+marks, numbered labels, quoted bars, or the item text/wrapping. All selected
+alignment/inset policies and page region bounds remain authoritative.
+
+Four focused native regressions verify exact markers and stable other ink,
+wrapped multi-page continuations without duplicate bullets, deterministic
+PDF/transparent PNG/ink TSV replay, and both typed/CLI source-independent
+refusals and preserved selected output on geometry failure. Closed rings
+consume eight actual pen segments and remain subject to the existing ink
+budget. This is export-only styling, not persistent semantic list identity
+or completion of the P1 notebook journey.

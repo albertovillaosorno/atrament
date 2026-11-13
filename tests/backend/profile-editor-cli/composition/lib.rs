@@ -15723,3 +15723,208 @@ fn invalid_markdown_ordered_alignment_preflights_and_preserves_pdf() {
         b"preserve-existing-ordered-PDF");
     fs::remove_file(target).expect("clean test-owned sentinel");
 }
+
+#[test]
+fn markdown_bullet_style_changes_only_unordered_marker_geometry() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "- a\n* a\n+ a\n- [x] a\n1. a\n> a\n\na",
+    ).expect("mixed Markdown rows");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 80_000, height: 160_000,
+    };
+    let choose = |bullet_style| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), FlowTypography {
+            bullet_style,
+            bullet_align: Some(BodyAlign::Right),
+            list_quote_inset: Some(4_000),
+            ..FlowTypography::default()
+        },
+    ).expect("selected marker geometry");
+    let (rows, dashes, pages) = choose(None);
+    let (explicit_rows, explicit_dashes, explicit_pages) =
+        choose(Some(BulletStyle::Dash));
+    assert_eq!(pages, explicit_pages);
+    let row_coordinates = |runs: &[TextRun]| runs.iter()
+        .map(|run| (run.text.clone(), run.page, run.origin_um))
+        .collect::<Vec<_>>();
+    assert_eq!(row_coordinates(&rows), row_coordinates(&explicit_rows));
+    assert_eq!(dashes, explicit_dashes,
+        "default dash must retain every byte of native ornament ink");
+    let (dot_rows, dots, dot_pages) = choose(Some(BulletStyle::Dot));
+    let (ring_rows, rings, ring_pages) = choose(Some(BulletStyle::Ring));
+    assert_eq!((pages, pages), (dot_pages, ring_pages));
+    assert_eq!(row_coordinates(&rows), row_coordinates(&dot_rows));
+    assert_eq!(row_coordinates(&rows), row_coordinates(&ring_rows));
+    assert_eq!(dashes.len(), 10,
+        "three dash markers, six checkbox segments and one quote bar");
+    assert_eq!(dots.len(), dashes.len());
+    assert_eq!(rings.len(), 31,
+        "three eight-segment rings, checkbox and quote unchanged");
+    let first_dash = dashes.first().expect("first dash");
+    let first_dot = dots.first().expect("first dot");
+    let first_ring = rings.first().expect("first ring");
+    assert_eq!(first_dash.start_um, (38_100, 44_700));
+    assert_eq!(first_dash.end_um, (39_800, 44_700));
+    assert_eq!(first_dash.width_um, 450);
+    assert_eq!(first_dot.start_um, (38_800, 44_700));
+    assert_eq!(first_dot.end_um, (39_100, 44_700));
+    assert_eq!(first_dot.width_um, 850);
+    assert_eq!(first_ring.start_um, (38_950, 43_850));
+    assert_eq!(first_ring.end_um, (39_551, 44_099));
+    assert_eq!(first_ring.width_um, 350);
+    for marker in 0..3 {
+        let ring_start = rings.get(marker * 8).expect("ring start");
+        let ring_end = rings.get(marker * 8 + 7).expect("ring end");
+        let dash = dashes.get(marker).expect("bullet dash");
+        assert_eq!(ring_start.start_um, ring_end.end_um,
+            "every outlined ring closes without guessing glyph strokes");
+        assert_eq!(dash.page, ring_start.page);
+    }
+    assert_eq!(dashes.get(3..), dots.get(3..),
+        "tasks, numbers and quotes keep their native markers");
+    assert_eq!(dashes.get(3..), rings.get(24..));
+}
+
+#[test]
+fn markdown_ring_bullets_do_not_repeat_on_wrapped_page_continuations() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "- a a a a a a a a a a a a\n\n+ a a a a a a a a a a a a",
+    ).expect("wrapped bullets");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 24_000, height: 25_000,
+    };
+    let choose = |bullet_style| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), FlowTypography {
+            bullet_style,
+            list_quote_right_inset: Some(1_000),
+            ..FlowTypography::default()
+        },
+    ).expect("paginated bullet markers");
+    let (dash_rows, dashes, dash_pages) = choose(None);
+    let (ring_rows, rings, ring_pages) = choose(Some(BulletStyle::Ring));
+    assert_eq!(dash_pages, ring_pages);
+    let row_coordinates = |runs: &[TextRun]| runs.iter()
+        .map(|run| (run.text.clone(), run.page, run.origin_um))
+        .collect::<Vec<_>>();
+    assert_eq!(row_coordinates(&dash_rows), row_coordinates(&ring_rows));
+    assert!(ring_pages >= 3, "long list must paginate");
+    assert_eq!(dashes.len(), 2, "one synthetic mark per source list item");
+    assert_eq!(rings.len(), 16, "eight segments per outlined marker");
+    let first_dash = dashes.first().expect("first dash");
+    let next_dash = dashes.get(1).expect("next dash");
+    let first_ring = rings.first().expect("first ring");
+    let next_ring = rings.get(8).expect("next ring");
+    assert!(first_dash.page < next_dash.page);
+    assert_eq!((first_ring.page, next_ring.page),
+        (first_dash.page, next_dash.page));
+    assert_eq!(ring_rows.first().expect("first row").page, first_ring.page);
+    assert_eq!(ring_rows.last().expect("last continuation").page,
+        ring_pages);
+}
+
+#[test]
+fn markdown_bullet_styles_replay_native_pdf_png_and_ink() {
+    let source = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060",
+        "--glyph-stroke", "1", "900", "900", "900", "3400",
+        "250", "#204060",
+        "--glyph-stroke", ".", "1500", "3200", "1650", "3400",
+        "250", "#204060",
+        "--flow-markdown", "- a a\n\n* a\n\n+ a\n\n- [x] a\n\n1. a",
+        "--flow-bullet-align", "center",
+    ]);
+    let render = |choice: Option<&str>, format: &str| {
+        let mut command = source.clone();
+        if let Some(style) = choice {
+            command.extend(args(&["--flow-bullet-style", style]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        execute_notebook(&command).expect("native styled-list export")
+            .expect("PDF, PNG or versioned ink bytes")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let original = render(None, format);
+        assert_eq!(original, render(Some("dash"), format),
+            "explicit dash preserves default {format} bytes");
+        for style in ["dot", "ring"] {
+            let changed = render(Some(style), format);
+            assert_eq!(changed, render(Some(style), format),
+                "selected {style} {format} must replay deterministically");
+            assert_ne!(changed, original,
+                "selected {style} must alter physical {format} ink");
+            match format {
+                "pdf" => assert!(changed.starts_with(b"%PDF-1.4")),
+                "png" => assert!(changed.starts_with(b"\x89PNG\r\n\x1a\n")),
+                _ => assert!(changed.starts_with(b"atrament.page-ink.v1\n")),
+            }
+        }
+    }
+}
+
+#[test]
+fn markdown_bullet_style_rejects_early_and_preserves_selected_output() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "unopened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (tokens, expected) in [
+        (vec!["--flow-bullet-style", "square"],
+            "--flow-bullet-style requires dash, dot or ring"),
+        (vec!["--flow-bullet-style"],
+            "--flow-bullet-style requires dash, dot or ring"),
+        (vec!["--flow-bullet-style", "dot",
+            "--flow-bullet-style", "ring"],
+            "--flow-bullet-style may appear only once"),
+    ] {
+        let mut command = source.clone();
+        command.extend(args(&tokens));
+        assert_eq!(preflight_notebook_sources(&command)
+            .expect_err("refuse before reading selected inputs"), expected);
+    }
+    assert_eq!(preflight_notebook_sources(&args(&[
+        "--flow-text", "a", "--export-paper", "pdf",
+        "--flow-bullet-style", "ring",
+    ])).expect_err("Markdown-only selection"),
+        "--flow-bullet-style requires a Markdown flow");
+    let plain = FlowSource::new(FlowFormat::Plain, "a")
+        .expect("plain text");
+    assert_eq!(layout_flow_with_typography(
+        &plain, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), None, FlowTypography {
+            bullet_style: Some(BulletStyle::Ring),
+            ..FlowTypography::default()
+        },
+    ).expect_err("typed Markdown-only selection"),
+        "flow bullet style requires Markdown flow");
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"preserve-original-bullet-PDF")
+        .expect("sentinel PDF");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown", "- a a",
+        "--flow-region", "30000", "40000", "8000", "10000",
+        "--flow-bullet-style", "ring",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("test path"), "--replace",
+    ]));
+    let error = execute_notebook(&command)
+        .expect_err("narrow row refuses before replacement");
+    assert!(error.contains("writing row")
+        || error.contains("printable region"), "{error}");
+    assert_eq!(fs::read(&target).expect("unchanged PDF"),
+        b"preserve-original-bullet-PDF");
+    fs::remove_file(target).expect("remove test-owned sentinel");
+}

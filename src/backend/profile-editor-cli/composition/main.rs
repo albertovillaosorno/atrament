@@ -52,7 +52,7 @@ use flow::{
     layout_flow_with_spacing,
 };
 use flow::{
-    BodyAlign, FlowFormat, FlowRegion, FlowSource, FlowTypography,
+    BodyAlign, BulletStyle, FlowFormat, FlowRegion, FlowSource, FlowTypography,
     HeadingDecoration,
     layout_flow_with_typography,
 };
@@ -189,6 +189,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--flow-body-align left|center|right (Markdown only)] \
     [--flow-quote-align left|center|right (Markdown only)] \
     [--flow-bullet-align left|center|right (Markdown only)] \
+    [--flow-bullet-style dash|dot|ring (Markdown only)] \
     [--flow-ordered-align left|center|right (Markdown only)] \
     [--flow-task-align left|center|right (Markdown only)] \
     [--flow-body-first-line-indent-um INSET_UM (0..12000, Markdown only)] \
@@ -248,7 +249,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     --flow-quote-align centers or right-aligns quoted text only, \
     preserving each vertical quote rule in its original gutter. \
     --flow-bullet-align aligns unordered bullet and checkbox text \
-    while their symbols stay fixed. --flow-ordered-align aligns \
+    while their symbols stay fixed. --flow-bullet-style selects \
+    dash, dot or outlined ring for unordered bullets only. \
+    --flow-ordered-align aligns \
     authored numbered list labels with their item text, preserving \
     the measured hanging indent on continued rows. \
     --flow-task-align overrides bullet alignment for checkbox text; \
@@ -442,6 +445,15 @@ impl NotebookFlagPreflight {
         Ok(0)
     }
 
+    fn select_flow_bullet_style(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<usize, String> {
+        self.unique("--flow-bullet-style",
+            "--flow-bullet-style may appear only once")?;
+        let _style = parse_notebook_flow_bullet_style(iter)?;
+        Ok(0)
+    }
+
     fn select_flow_pitch(
         &mut self, iter: &mut Iter<'_, String>,
     ) -> Result<usize, String> {
@@ -561,6 +573,7 @@ impl NotebookFlagPreflight {
             | "--flow-bullet-align" | "--flow-ordered-align"
             | "--flow-task-align" =>
                 self.select_flow_align(option, iter)?,
+            "--flow-bullet-style" => self.select_flow_bullet_style(iter)?,
             "--flow-body-first-line-indent-um"
             | "--flow-body-continuation-indent-um" =>
                 self.select_body_row_indent(option, iter)?,
@@ -635,6 +648,8 @@ impl NotebookFlagPreflight {
                     .then_some(BodyAlign::Left),
                 bullet_align: has("--flow-bullet-align")
                     .then_some(BodyAlign::Left),
+                bullet_style: has("--flow-bullet-style")
+                    .then_some(BulletStyle::Dash),
                 ordered_align: has("--flow-ordered-align")
                     .then_some(BodyAlign::Left),
                 task_align: has("--flow-task-align")
@@ -2276,6 +2291,17 @@ fn select_list_quote_inset(
     Ok(())
 }
 
+fn parse_notebook_flow_bullet_style(
+    iter: &mut Iter<'_, String>,
+) -> Result<BulletStyle, String> {
+    match iter.next().map(String::as_str) {
+        Some("dash") => Ok(BulletStyle::Dash),
+        Some("dot") => Ok(BulletStyle::Dot),
+        Some("ring") => Ok(BulletStyle::Ring),
+        _ => Err("--flow-bullet-style requires dash, dot or ring".into()),
+    }
+}
+
 fn parse_notebook_flow_align(
     iter: &mut Iter<'_, String>, option: &str,
 ) -> Result<BodyAlign, String> {
@@ -2294,6 +2320,14 @@ fn select_notebook_flow_typography(
     match option {
         "--flow-pitch-um" =>
             select_notebook_flow_pitch(iter, &mut typography.pitch),
+        "--flow-bullet-style" => {
+            if typography.bullet_style.is_some() {
+                return Err("--flow-bullet-style may appear only once".into());
+            }
+            typography.bullet_style =
+                Some(parse_notebook_flow_bullet_style(iter)?);
+            Ok(())
+        }
         "--flow-paragraph-gap-um" =>
             select_notebook_flow_paragraph_gap(
                 iter, &mut typography.paragraph_gap,
@@ -2388,6 +2422,10 @@ fn validate_notebook_flow_flag_compatibility(
     if typography.bullet_align.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
         return Err("--flow-bullet-align requires a Markdown flow".into());
+    }
+    if typography.bullet_style.is_some()
+        && flow_format != Some(FlowFormat::Markdown) {
+        return Err("--flow-bullet-style requires a Markdown flow".into());
     }
     if typography.ordered_align.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
@@ -2843,10 +2881,10 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--flow-region" => flow_region = Some(parse_notebook_flow_region(
                 &mut iter, flow_region.is_some())?),
             "--flow-pitch-um" | "--flow-body-align" | "--flow-quote-align"
-            | "--flow-bullet-align" | "--flow-ordered-align"
-            | "--flow-task-align" | "--flow-body-first-line-indent-um"
-            | "--flow-body-inset-um"
-            | "--flow-body-continuation-indent-um" | "--flow-paragraph-gap-um"
+            | "--flow-bullet-align" | "--flow-bullet-style"
+            | "--flow-ordered-align" | "--flow-task-align"
+            | "--flow-body-first-line-indent-um" | "--flow-paragraph-gap-um"
+            | "--flow-body-inset-um" | "--flow-body-continuation-indent-um"
             | "--flow-body-right-inset-um" | "--flow-list-quote-inset-um"
             | "--flow-list-quote-right-inset-um" =>
                 select_notebook_flow_typography(
