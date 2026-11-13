@@ -692,6 +692,26 @@ bytes. This Markdown-only CLI option does not save an alignment style or
 move manually placed ink, and nominal contours do not predict varied pen
 extents. Unsupported or duplicate selections refuse before source reads.
 
+Select `--flow-quote-color '#1070E0'` to change the physical pen color
+of the vertical Markdown quote rules independently of their text.
+Every wrapped physical row, including rows balanced across page turns,
+retains its own correctly positioned bar in the selected RGB. The option
+does not tint quoted handwriting, page decorations, headings, bullets,
+checkboxes, thematic rules, or manually placed ink.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-quote-align center --flow-quote-color '#1070E0' \
+  --export-paper pdf --output colored-quotes.pdf
+```
+
+Omitted colors and explicit historical `#1E304A` produce identical
+PDF/transparent PNG/ink TSV bytes. This transient Markdown-only selection
+accepts exactly six hexadecimal RGB digits, refuses invalid/duplicate
+flags before opening selected sources, and cannot replace existing
+output when physical layout fails.
+
 For unordered Markdown bullets and checkbox tasks, select
 `--flow-bullet-align center` or `right` to align each measured row of item
 text within the list writing band. The bullet dash or checkbox stays at

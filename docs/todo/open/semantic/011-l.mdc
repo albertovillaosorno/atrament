@@ -4528,3 +4528,19 @@ and versioned ink TSV, source-independent invalid/duplicate/non-Markdown
 refusals, typed Markdown admission and preserved selected PDF bytes
 after geometric failure. This remains transient CLI decoration, not
 saved semantic list identity or complete notebook content Export.
+
+
+## Independent Markdown blockquote bar ink (partial) — 2026-11-13
+
+Native transient Markdown flow accepts `--flow-quote-color '#RRGGBB'`
+to color only physical vertical blockquote rule strokes, independent
+of `--flow-quote-align` and selected list/quote insets. Wrapped rows,
+widow-balanced page tails, and subsequent pages keep their exact quote
+bar geometry; the supplied handwriting and other ornaments retain
+their colors. Omitted or explicit #1E304A preserves original output
+bytes.
+
+Four focused regressions cover mixed independent marker colors,
+wrapped multi-page bars, deterministic PDF/PNG/ink TSV export, and
+source-independent/typed preflight plus atomic PDF refusal. This is
+CLI export decoration only, not a persisted semantic quote identity.

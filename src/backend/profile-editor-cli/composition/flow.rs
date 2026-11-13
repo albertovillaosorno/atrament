@@ -109,6 +109,7 @@ pub(super) struct FlowTypography {
     pub(super) paragraph_gap: Option<u32>,
     pub(super) pitch: Option<u32>,
     pub(super) quote_align: Option<BodyAlign>,
+    pub(super) quote_color: Option<[u8; 3]>,
     pub(super) task_align: Option<BodyAlign>,
     pub(super) task_color: Option<[u8; 3]>,
     pub(super) task_style: Option<TaskStyle>,
@@ -631,6 +632,7 @@ struct Layout<'model> {
     pending_blank_rows: usize,
     pitch: u32,
     quote_align: Option<BodyAlign>,
+    quote_color: Option<[u8; 3]>,
     right: u32,
     row_count: usize,
     rule_chain: Option<RuleChain>,
@@ -1752,7 +1754,7 @@ impl Layout<'_> {
             start_um: (rule_x, rule_top),
             end_um: (rule_x, rule_bottom),
             width_um: 400,
-            rgb: [30, 48, 74],
+            rgb: self.quote_color.unwrap_or([30, 48, 74]),
         });
         Ok(())
     }
@@ -3000,6 +3002,7 @@ fn initialize_layout<'model>(
         bullet_style: spacing.bullet_style,
         ordered_align: spacing.ordered_align,
         quote_align: spacing.quote_align,
+        quote_color: spacing.quote_color,
         task_align: spacing.task_align,
         task_color: spacing.task_color,
         task_style: spacing.task_style,
@@ -3160,6 +3163,10 @@ fn validate_flow_structural_typography(
     if spacing.quote_align.is_some()
         && format != FlowFormat::Markdown {
         return Err("flow quote alignment requires Markdown flow".into());
+    }
+    if spacing.quote_color.is_some()
+        && format != FlowFormat::Markdown {
+        return Err("flow quote color requires Markdown flow".into());
     }
     if spacing.bullet_align.is_some()
         && format != FlowFormat::Markdown {

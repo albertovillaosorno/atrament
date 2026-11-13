@@ -16383,3 +16383,212 @@ fn markdown_list_marker_colors_preflight_and_preserve_output() {
         b"preserve-selected-color-PDF");
     fs::remove_file(target).expect("remove test sentinel");
 }
+
+#[test]
+fn markdown_quote_color_changes_only_quote_bars() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "# a\n\na a\n\n> a a  \n> a\n\n- a\n\n- [x] a\n\n1. a\n\n---",
+    ).expect("mixed Markdown including two quote bars");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 70_000, height: 200_000,
+    };
+    let choose = |quote_color| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), FlowTypography {
+            quote_color,
+            quote_align: Some(BodyAlign::Right),
+            list_quote_inset: Some(4_000),
+            list_quote_right_inset: Some(6_000),
+            bullet_color: Some([20, 200, 40]),
+            task_color: Some([220, 30, 60]),
+            ..FlowTypography::default()
+        },
+    ).expect("colored quote bars with other Markdown ornaments");
+    let (default_rows, default_marks, default_pages) = choose(None);
+    let (old_rows, old_marks, old_pages) =
+        choose(Some([30, 48, 74]));
+    let rows = |runs: &[TextRun]| runs.iter().map(|run|
+        (run.page, run.origin_um, run.text.clone())
+    ).collect::<Vec<_>>();
+    assert_eq!(default_pages, old_pages);
+    assert_eq!(rows(&default_rows), rows(&old_rows));
+    assert_eq!(default_marks, old_marks);
+    let (chosen_rows, chosen_marks, chosen_pages) =
+        choose(Some([30, 120, 240]));
+    assert_eq!(default_pages, chosen_pages);
+    assert_eq!(rows(&default_rows), rows(&chosen_rows));
+    assert_eq!(default_marks.len(), chosen_marks.len());
+    assert_eq!(default_marks.len(), 11,
+        "heading one, quotes two, bullet one, task six, rule one");
+    let mut changed = 0;
+    for (original, recolored) in
+        default_marks.iter().zip(chosen_marks.iter()) {
+        assert_eq!((original.page, original.start_um, original.end_um,
+            original.width_um), (recolored.page, recolored.start_um,
+            recolored.end_um, recolored.width_um));
+        if original.width_um == 400
+            && original.start_um.0 == original.end_um.0 {
+            assert_eq!(original.rgb, [30, 48, 74]);
+            assert_eq!(recolored.rgb, [30, 120, 240]);
+            changed += 1;
+        } else {
+            assert_eq!(original.rgb, recolored.rgb,
+                "non-quote ornaments remain independently colored");
+        }
+    }
+    assert_eq!(changed, 2, "only two quote bars receive new ink");
+}
+
+#[test]
+fn markdown_quote_color_keeps_wrapped_bars_on_their_actual_pages() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "> a a a a a a a a a a a a a a a a",
+    ).expect("long quoted paragraph");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 34_000, height: 25_000,
+    };
+    let choose = |quote_color| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), FlowTypography {
+            quote_color, quote_align: Some(BodyAlign::Center),
+            list_quote_right_inset: Some(6_000),
+            ..FlowTypography::default()
+        },
+    ).expect("multi-page quoted paragraph");
+    let (original_rows, original_bars, original_pages) = choose(None);
+    let (colored_rows, colored_bars, colored_pages) =
+        choose(Some([16, 32, 240]));
+    assert!(original_pages >= 3);
+    assert_eq!(original_pages, colored_pages);
+    let rows = |runs: &[TextRun]| runs.iter().map(|run|
+        (run.page, run.origin_um, run.text.clone())
+    ).collect::<Vec<_>>();
+    assert_eq!(rows(&original_rows), rows(&colored_rows));
+    assert_eq!(original_bars.len(), original_rows.len(),
+        "each physical quoted row owns a bar");
+    assert_eq!(original_bars.len(), colored_bars.len());
+    for (original, chosen) in original_bars.iter()
+        .zip(colored_bars.iter()) {
+        assert_eq!((original.page, original.start_um, original.end_um,
+            original.width_um), (chosen.page, chosen.start_um,
+            chosen.end_um, chosen.width_um),
+            "bar placement including balanced page tails is unchanged");
+        assert_eq!(original.rgb, [30, 48, 74]);
+        assert_eq!(chosen.rgb, [16, 32, 240]);
+    }
+    assert_eq!(colored_bars.last().map(|mark| mark.page),
+        Some(original_pages));
+}
+
+#[test]
+fn markdown_quote_color_replays_real_pdf_png_and_ink() {
+    let source = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown",
+        "> a a a a a a a a a a\n\n- a\n\n- [x] a",
+        "--flow-region", "30000", "40000", "30000", "26000",
+        "--flow-list-quote-inset-um", "4000",
+        "--flow-quote-align", "center",
+        "--flow-bullet-color", "#006400",
+        "--flow-task-color", "#FA0340",
+    ]);
+    let render = |color: Option<&str>, format: &str| {
+        let mut command = source.clone();
+        if let Some(value) = color {
+            command.extend(args(&["--flow-quote-color", value]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72", "--png-page", "2"]));
+        }
+        execute_notebook(&command).expect("native colored quote export")
+            .expect("physical export bytes")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let default = render(None, format);
+        assert_eq!(default, render(Some("#1E304A"), format),
+            "historic quote ink remains byte-equivalent in {format}");
+        let chosen = render(Some("#1070E0"), format);
+        assert_eq!(chosen, render(Some("#1070E0"), format),
+            "chosen quote ink is deterministic in {format}");
+        assert_ne!(default, chosen,
+            "changed quote ink must affect {format} output");
+        match format {
+            "pdf" => assert!(chosen.starts_with(b"%PDF-1.4")),
+            "png" => assert!(chosen.starts_with(b"\x89PNG\r\n\x1a\n")),
+            _ => {
+                assert!(chosen.starts_with(b"atrament.page-ink.v1\n"));
+                let ink = str::from_utf8(&chosen)
+                    .expect("physical TSV is UTF-8");
+                assert!(ink.contains("#1070E0"));
+                assert!(ink.contains("#006400"));
+                assert!(ink.contains("#FA0340"));
+            }
+        }
+    }
+}
+
+#[test]
+fn markdown_quote_color_refuses_early_without_overwriting_pdf() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "unopened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (choice, expected) in [
+        (vec!["--flow-quote-color", "purple"],
+            "--flow-quote-color requires #RRGGBB"),
+        (vec!["--flow-quote-color", "#ABCDG1"],
+            "--flow-quote-color requires #RRGGBB"),
+        (vec!["--flow-quote-color"],
+            "--flow-quote-color requires #RRGGBB"),
+        (vec!["--flow-quote-color", "#000000",
+            "--flow-quote-color", "#FFFFFF"],
+            "--flow-quote-color may appear only once"),
+    ] {
+        let mut command = source.clone();
+        command.extend(args(&choice));
+        assert_eq!(preflight_notebook_sources(&command)
+            .expect_err("invalid quote color before source IO"), expected);
+    }
+    assert_eq!(preflight_notebook_sources(&args(&[
+        "--flow-text", "a", "--export-paper", "pdf",
+        "--flow-quote-color", "#123456",
+    ])).expect_err("Markdown-only quote color"),
+        "--flow-quote-color requires a Markdown flow");
+    let plain = FlowSource::new(FlowFormat::Plain, "a")
+        .expect("plain source");
+    assert_eq!(layout_flow_with_typography(
+        &plain, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), None, FlowTypography {
+            quote_color: Some([1, 2, 3]),
+            ..FlowTypography::default()
+        },
+    ).expect_err("typed Markdown-only quote color"),
+        "flow quote color requires Markdown flow");
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"preserve-quote-color-PDF")
+        .expect("test sentinel");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown", "> a a",
+        "--flow-region", "30000", "40000", "21000", "26000",
+        "--flow-list-quote-right-inset-um", "12000",
+        "--flow-quote-color", "#1070E0",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("test path"), "--replace",
+    ]));
+    let error = execute_notebook(&command)
+        .expect_err("unfit quote layout cannot replace PDF");
+    assert!(error.contains("flow list/quote right inset leaves no writing row"),
+        "{error}");
+    assert_eq!(fs::read(&target).expect("old PDF"),
+        b"preserve-quote-color-PDF");
+    fs::remove_file(target).expect("remove test sentinel");
+}

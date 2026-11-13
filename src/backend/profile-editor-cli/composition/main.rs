@@ -189,6 +189,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--flow-body-inset-um INSET_UM (0..12000, Markdown only)] \
     [--flow-body-align left|center|right (Markdown only)] \
     [--flow-quote-align left|center|right (Markdown only)] \
+    [--flow-quote-color '#RRGGBB' (Markdown only)] \
     [--flow-bullet-align left|center|right (Markdown only)] \
     [--flow-bullet-style dash|dot|ring (Markdown only)] \
     [--flow-bullet-color '#RRGGBB' (Markdown only)] \
@@ -252,6 +253,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     within the remaining inset writing width; defaults to left. \
     --flow-quote-align centers or right-aligns quoted text only, \
     preserving each vertical quote rule in its original gutter. \
+    --flow-quote-color changes only the quote rule pen ink. \
     --flow-bullet-align aligns unordered bullet and checkbox text \
     while their symbols stay fixed. --flow-bullet-style selects \
     dash, dot or outlined ring for unordered bullets only. \
@@ -462,7 +464,7 @@ impl NotebookFlagPreflight {
         Ok(0)
     }
 
-    fn select_flow_marker_color(
+    fn select_flow_pen_color(
         &mut self, option: &str, iter: &mut Iter<'_, String>,
     ) -> Result<usize, String> {
         self.unique(option, &format!("{option} may appear only once"))?;
@@ -518,9 +520,8 @@ impl NotebookFlagPreflight {
     fn select_option(
         &mut self, option: &str, iter: &mut Iter<'_, String>,
     ) -> Result<Option<usize>, String> {
-        if option == "--ink-file" {
-            self.imported_ink_count = self.imported_ink_count.saturating_add(1);
-        }
+        self.imported_ink_count = self.imported_ink_count
+            .saturating_add(usize::from(option == "--ink-file"));
         let operands = match option {
             "--inspect" => {
                 self.unique(option, "--inspect may appear only once")?;
@@ -598,8 +599,9 @@ impl NotebookFlagPreflight {
                 self.select_flow_align(option, iter)?,
             "--flow-bullet-style" => self.select_flow_bullet_style(iter)?,
             "--flow-task-style" => self.select_flow_task_style(iter)?,
-            "--flow-bullet-color" | "--flow-task-color" =>
-                self.select_flow_marker_color(option, iter)?,
+            "--flow-bullet-color" | "--flow-task-color"
+            | "--flow-quote-color" =>
+                self.select_flow_pen_color(option, iter)?,
             "--flow-body-first-line-indent-um"
             | "--flow-body-continuation-indent-um" =>
                 self.select_body_row_indent(option, iter)?,
@@ -672,6 +674,8 @@ impl NotebookFlagPreflight {
                     .then_some(BodyAlign::Left),
                 quote_align: has("--flow-quote-align")
                     .then_some(BodyAlign::Left),
+                quote_color: has("--flow-quote-color")
+                    .then_some([30, 48, 74]),
                 bullet_align: has("--flow-bullet-align")
                     .then_some(BodyAlign::Left),
                 bullet_style: has("--flow-bullet-style")
@@ -2397,11 +2401,12 @@ fn select_notebook_flow_typography(
                 Some(parse_notebook_flow_task_style(iter)?);
             Ok(())
         }
-        "--flow-bullet-color" | "--flow-task-color" => {
-            let selected = if option == "--flow-bullet-color" {
-                &mut typography.bullet_color
-            } else {
-                &mut typography.task_color
+        "--flow-bullet-color" | "--flow-task-color"
+        | "--flow-quote-color" => {
+            let selected = match option {
+                "--flow-bullet-color" => &mut typography.bullet_color,
+                "--flow-task-color" => &mut typography.task_color,
+                _ => &mut typography.quote_color,
             };
             if selected.is_some() {
                 return Err(format!("{option} may appear only once"));
@@ -2499,6 +2504,10 @@ fn validate_notebook_flow_flag_compatibility(
     if typography.quote_align.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
         return Err("--flow-quote-align requires a Markdown flow".into());
+    }
+    if typography.quote_color.is_some()
+        && flow_format != Some(FlowFormat::Markdown) {
+        return Err("--flow-quote-color requires a Markdown flow".into());
     }
     if typography.bullet_align.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
@@ -2937,6 +2946,7 @@ fn preflight_notebook_ink_requirements(
 fn is_notebook_flow_typography_option(option: &str) -> bool {
     matches!(option,
         "--flow-pitch-um" | "--flow-body-align" | "--flow-quote-align"
+        | "--flow-quote-color"
         | "--flow-bullet-align" | "--flow-bullet-style"
         | "--flow-bullet-color" | "--flow-task-color"
         | "--flow-ordered-align" | "--flow-task-align" | "--flow-task-style"
