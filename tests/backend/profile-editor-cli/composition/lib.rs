@@ -14303,3 +14303,290 @@ fn markdown_body_alignment_tracks_wrapped_rows_across_physical_pages() {
         }
     }
 }
+
+#[test]
+fn markdown_first_line_indent_wraps_only_first_prose_row() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "a a a a a a\n\n# a\n\n- a\n\n> a\n\n    a",
+    ).expect("prose and structural blocks");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 30_000, height: 180_000,
+    };
+    let render = |indent, align| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region),
+        FlowTypography {
+            body_first_line_indent: indent,
+            body_align: align,
+            body_inset: Some(4_000),
+            body_right_inset: Some(6_000),
+            ..FlowTypography::default()
+        },
+    ).expect("bounded first line and structural ink");
+    let unchanged = render(None, None);
+    assert_eq!(unchanged.0.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>(),
+        ["a a", "a a", "a a", "a", "a", "a", "    a"]);
+    let zero = render(Some(0), None);
+    assert_eq!(zero.0.iter().map(|row| (row.text.as_str(),
+        row.origin_um, row.page)).collect::<Vec<_>>(),
+        unchanged.0.iter().map(|row| (row.text.as_str(),
+            row.origin_um, row.page)).collect::<Vec<_>>());
+    assert_eq!(zero.1, unchanged.1);
+    let indented = render(Some(8_000), None);
+    assert_eq!(indented.0.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>(),
+        ["a", "a a", "a a", "a", "a", "a", "a", "    a"]);
+    assert_eq!(indented.0.iter().map(|row| row.origin_um.0)
+        .collect::<Vec<_>>(),
+        [44_500, 36_500, 36_500, 36_500, 32_500, 38_500, 38_500,
+            32_500]);
+    assert_eq!(indented.1.iter().map(|mark| (mark.start_um.0,
+        mark.end_um.0, mark.width_um, mark.rgb)).collect::<Vec<_>>(),
+        unchanged.1.iter().map(|mark| (mark.start_um.0,
+            mark.end_um.0, mark.width_um, mark.rgb))
+            .collect::<Vec<_>>(),
+        "structural ornaments keep their x anchor and ink style");
+    for (align, first, continuation, final_row) in [
+        (BodyAlign::Center, 46_500, 38_500, 42_500),
+        (BodyAlign::Right, 48_500, 40_500, 48_500),
+    ] {
+        let moved = render(Some(8_000), Some(align));
+        assert_eq!(moved.1, indented.1,
+            "alignment must not shift structural decoration");
+        assert_eq!(moved.0.iter().map(|row| row.origin_um.0)
+            .collect::<Vec<_>>(), [first, continuation, continuation,
+                final_row, 32_500, 38_500, 38_500, 32_500]);
+        assert_eq!(moved.0.iter().map(|row| row.text.as_str())
+            .collect::<Vec<_>>(),
+            indented.0.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>());
+    }
+}
+
+#[test]
+fn markdown_first_line_indent_applies_once_across_page_turns() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "a a a a a a a a a a a a",
+    ).expect("multi-page flowing paragraph");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 30_000, height: 29_000,
+    };
+    let (rows, _, pages) = layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region),
+        FlowTypography {
+            body_first_line_indent: Some(8_000),
+            body_inset: Some(4_000),
+            body_right_inset: Some(6_000),
+            ..FlowTypography::default()
+        },
+    ).expect("page-boundary paragraph");
+    assert!(pages >= 3);
+    assert_eq!(rows.first().expect("first physical row").origin_um.0,
+        44_500);
+    assert_eq!(rows.first().expect("first physical row").text, "a");
+    assert!(rows.iter().skip(1).all(|row| row.origin_um.0 == 36_500));
+    assert!(rows.iter().any(|row| row.page > 1),
+        "paragraph continuation appears on another page");
+}
+
+#[test]
+fn selected_markdown_first_line_indent_replays_native_outputs() {
+    let base = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060",
+        "--flow-markdown", "a a a a a a\n\n# a\n\n- a\n\n> a",
+        "--flow-region", "30000", "40000", "30000", "90000",
+        "--flow-body-inset-um", "4000",
+        "--flow-body-right-inset-um", "6000",
+        "--flow-body-align", "center",
+    ]);
+    let render = |indent: Option<&str>, format: &str| {
+        let mut command = base.clone();
+        if let Some(indent) = indent {
+            command.extend(args(&[
+                "--flow-body-first-line-indent-um", indent,
+            ]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        execute_notebook(&command).expect("native first-row export")
+            .expect("PDF, PNG or TSV data")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let default = render(None, format);
+        assert_eq!(default, render(Some("0"), format),
+            "zero first-line indent retains {format} bytes");
+        let indented = render(Some("8000"), format);
+        assert_eq!(indented, render(Some("8000"), format),
+            "first-line indent replays deterministic {format}");
+        assert_ne!(indented, default, "first-line indent changes {format}");
+        if format == "pdf" {
+            assert!(indented.starts_with(b"%PDF-1.4"));
+        } else if format == "png" {
+            assert!(indented.starts_with(b"\x89PNG\r\n\x1a\n"));
+        } else {
+            assert!(indented.starts_with(b"atrament.page-ink.v1\n"));
+        }
+    }
+}
+
+#[test]
+fn invalid_markdown_first_line_indent_preflights_and_preserves_pdf() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "unopened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (tokens, expected) in [
+        (vec!["--flow-body-first-line-indent-um", "-1"],
+            "flow body first-line indent must be within 0..12000 um"),
+        (vec!["--flow-body-first-line-indent-um", "12001"],
+            "flow body first-line indent must be within 0..12000 um"),
+        (vec!["--flow-body-first-line-indent-um"],
+            "--flow-body-first-line-indent-um requires 0..12000 um"),
+        (vec!["--flow-body-first-line-indent-um", "4000",
+            "--flow-body-first-line-indent-um", "5000"],
+            "--flow-body-first-line-indent-um may appear only once"),
+    ] {
+        let mut command = source.clone();
+        command.extend(args(&tokens));
+        assert_eq!(preflight_notebook_sources(&command)
+            .expect_err("preflight must not read stdin or glyph files"),
+            expected);
+    }
+    let plain = args(&[
+        "--flow-text", "a", "--export-paper", "pdf",
+        "--flow-body-first-line-indent-um", "0",
+    ]);
+    assert_eq!(preflight_notebook_sources(&plain)
+        .expect_err("Markdown-only first line indentation"),
+        "--flow-body-first-line-indent-um requires a Markdown flow");
+    let plain_source = FlowSource::new(FlowFormat::Plain, "a")
+        .expect("plain source");
+    assert_eq!(layout_flow_with_typography(
+        &plain_source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), None,
+        FlowTypography {
+            body_first_line_indent: Some(0),
+            ..FlowTypography::default()
+        },
+    ).expect_err("typed Markdown-only setting"),
+        "flow body first-line indent requires Markdown flow");
+    let source = FlowSource::new(FlowFormat::Markdown, "a")
+        .expect("Markdown source");
+    assert_eq!(layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), None,
+        FlowTypography {
+            body_first_line_indent: Some(12_001),
+            ..FlowTypography::default()
+        },
+    ).expect_err("typed first line bound"),
+        "flow body first-line indent must be within 0..12000 um");
+
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"keep-existing-first-line-PDF")
+        .expect("test sentinel");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown", "a a",
+        "--flow-region", "30000", "40000", "27000", "32000",
+        "--flow-body-inset-um", "8000",
+        "--flow-body-right-inset-um", "8000",
+        "--flow-body-first-line-indent-um", "8000",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("test path"), "--replace",
+    ]));
+    let err = execute_notebook(&command)
+        .expect_err("narrow first-row area must refuse before writing");
+    assert!(err.contains("flow body first-line indent leaves no writing row"),
+        "{err}");
+    assert_eq!(fs::read(&target).expect("PDF preserved"),
+        b"keep-existing-first-line-PDF");
+    fs::remove_file(target).expect("clean test-owned sentinel");
+}
+
+#[test]
+fn markdown_first_line_indent_restarts_after_explicit_hard_breaks() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "a a  \na a\n\na a",
+    ).expect("hard break and blank separated prose");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 30_000, height: 180_000,
+    };
+    let (rows, marks, pages) = layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region),
+        FlowTypography {
+            body_first_line_indent: Some(8_000),
+            body_inset: Some(4_000),
+            body_right_inset: Some(6_000),
+            ..FlowTypography::default()
+        },
+    ).expect("new composed block after hard row break");
+    assert_eq!(pages, 1);
+    assert!(marks.is_empty());
+    assert_eq!(rows.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>(), ["a", "a", "a", "a", "a", "a"]);
+    assert_eq!(rows.iter().map(|row| row.origin_um.0)
+        .collect::<Vec<_>>(),
+        [44_500, 36_500, 44_500, 36_500, 44_500, 36_500]);
+}
+
+#[test]
+fn markdown_first_line_indent_alignment_respects_compressed_ink() {
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(71);
+    for (dimension, mean) in [
+        (Dimension::Width, 12_000),
+        (Dimension::LetterSpacing, -10_000),
+    ] {
+        stats = stats.with_glyph("a", DimensionStatistics {
+            dimension,
+            statistics: ScalarStatistics {
+                minimum: mean, maximum: mean, mean, median: mean,
+                standard_deviation: 0,
+            },
+        }, &UnicodeGraphemeSegmentation)
+            .expect("compressed nominal advance");
+    }
+    let source = FlowSource::new(FlowFormat::Markdown, "a")
+        .expect("single authored contour");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 50_000, height: 40_000,
+    };
+    for (align, origin) in [
+        (BodyAlign::Left, 44_500),
+        (BodyAlign::Center, 52_500),
+        (BodyAlign::Right, 60_500),
+    ] {
+        let (rows, marks, pages) = layout_flow_with_typography(
+            &source, &NotebookProfile::default(), Some(&stats),
+            HeadingDecoration::default(), Some(region),
+            FlowTypography {
+                body_align: Some(align),
+                body_first_line_indent: Some(8_000),
+                body_inset: Some(4_000),
+                body_right_inset: Some(6_000),
+                ..FlowTypography::default()
+            },
+        ).expect("measured ink fits first-row region");
+        assert_eq!(pages, 1);
+        assert!(marks.is_empty());
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].origin_um.0, origin);
+        assert!(rows[0].origin_um.0 + 12_000 <= 72_500,
+            "nominal 12 mm contour stays before reserved right margin");
+    }
+}

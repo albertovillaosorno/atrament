@@ -187,6 +187,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--flow-paragraph-gap-um GAP_UM (0..12000, Markdown only)] \
     [--flow-body-inset-um INSET_UM (0..12000, Markdown only)] \
     [--flow-body-align left|center|right (Markdown only)] \
+    [--flow-body-first-line-indent-um INSET_UM (0..12000, Markdown only)] \
     [--flow-body-right-inset-um INSET_UM (0..12000, Markdown only)] \
     [--flow-list-quote-inset-um INSET_UM (0..12000, Markdown only)] \
     [--flow-list-quote-right-inset-um INSET_UM (0..12000, Markdown only)] \
@@ -231,6 +232,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     --flow-paragraph-gap-um selects Markdown blank-line spacing \
     from 0..12 mm; default is 4 mm. Plain rows are unchanged. \
     --flow-body-inset-um shifts Markdown prose right 0..12 mm; \
+    --flow-body-first-line-indent-um indents only the first physical \
+    row of each Markdown prose block by 0..12 mm. \
     --flow-body-right-inset-um reserves 0..12 mm to its right. \
     Titles and literal code stay unchanged by those prose insets; \
     --flow-body-align centers or right-aligns each measured prose row \
@@ -403,6 +406,15 @@ impl NotebookFlagPreflight {
         Ok(0)
     }
 
+    fn select_first_line_indent(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<usize, String> {
+        self.unique("--flow-body-first-line-indent-um",
+            "--flow-body-first-line-indent-um may appear only once")?;
+        let _inset = parse_notebook_flow_first_line_indent(iter)?;
+        Ok(0)
+    }
+
     fn select_flow_pitch(
         &mut self, iter: &mut Iter<'_, String>,
     ) -> Result<usize, String> {
@@ -519,6 +531,8 @@ impl NotebookFlagPreflight {
                 0
             }
             "--flow-body-align" => self.select_body_align(iter)?,
+            "--flow-body-first-line-indent-um" =>
+                self.select_first_line_indent(iter)?,
             "--flow-body-inset-um" | "--flow-body-right-inset-um" => {
                 self.unique(option,
                     &format!("{option} may appear only once"))?;
@@ -591,6 +605,8 @@ impl NotebookFlagPreflight {
             FlowTypography {
                 body_align: has("--flow-body-align")
                     .then_some(BodyAlign::Left),
+                body_first_line_indent:
+                    has("--flow-body-first-line-indent-um").then_some(0),
                 pitch: has("--flow-pitch-um").then_some(9_000),
                 paragraph_gap: has("--flow-paragraph-gap-um")
                     .then_some(0),
@@ -2131,6 +2147,14 @@ fn parse_notebook_flow_body_inset(
         else { "--flow-body-inset-um" };
     let label = if right { "flow body right inset" }
         else { "flow body inset" };
+    parse_bounded_flow_inset(iter, option, label)
+}
+
+// All Markdown insets use one unsigned 0..12 mm parse contract. Retain
+// their distinct option names and diagnostics in both preflight and CLI.
+fn parse_bounded_flow_inset(
+    iter: &mut Iter<'_, String>, option: &str, label: &str,
+) -> Result<u32, String> {
     let raw = iter.next()
         .ok_or_else(|| format!("{option} requires 0..12000 um"))?;
     if raw.is_empty() || !raw.bytes().all(|byte| byte.is_ascii_digit()) {
@@ -2144,10 +2168,25 @@ fn parse_notebook_flow_body_inset(
     Ok(inset)
 }
 
+fn parse_notebook_flow_first_line_indent(
+    iter: &mut Iter<'_, String>,
+) -> Result<u32, String> {
+    parse_bounded_flow_inset(iter,
+        "--flow-body-first-line-indent-um", "flow body first-line indent")
+}
+
 fn select_flow_inset(
     iter: &mut Iter<'_, String>, typography: &mut FlowTypography,
     option: &str,
 ) -> Result<(), String> {
+    if option == "--flow-body-first-line-indent-um" {
+        if typography.body_first_line_indent.is_some() {
+            return Err(format!("{option} may appear only once"));
+        }
+        typography.body_first_line_indent =
+            Some(parse_notebook_flow_first_line_indent(iter)?);
+        return Ok(());
+    }
     if matches!(option, "--flow-list-quote-inset-um"
         | "--flow-list-quote-right-inset-um") {
         return select_list_quote_inset(iter, typography, option);
@@ -2169,17 +2208,7 @@ fn parse_notebook_flow_list_quote_inset(
         else { "--flow-list-quote-inset-um" };
     let label = if right { "flow list/quote right inset" }
         else { "flow list/quote inset" };
-    let raw = iter.next()
-        .ok_or_else(|| format!("{option} requires 0..12000 um"))?;
-    if raw.is_empty() || !raw.bytes().all(|byte| byte.is_ascii_digit()) {
-        return Err(format!("{label} must be within 0..12000 um"));
-    }
-    let inset = raw.parse::<u32>()
-        .map_err(|_error| format!("{label} must be within 0..12000 um"))?;
-    if inset > 12_000 {
-        return Err(format!("{label} must be within 0..12000 um"));
-    }
-    Ok(inset)
+    parse_bounded_flow_inset(iter, option, label)
 }
 
 fn select_list_quote_inset(
@@ -2291,6 +2320,12 @@ fn validate_notebook_flow_flag_compatibility(
     if typography.body_align.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
         return Err("--flow-body-align requires a Markdown flow".into());
+    }
+    if typography.body_first_line_indent.is_some()
+        && flow_format != Some(FlowFormat::Markdown) {
+        return Err(
+            "--flow-body-first-line-indent-um requires a Markdown flow".into()
+        );
     }
     if typography.body_inset.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
@@ -2727,8 +2762,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--flow-region" => flow_region = Some(parse_notebook_flow_region(
                 &mut iter, flow_region.is_some())?),
             "--flow-pitch-um" | "--flow-body-align"
-            | "--flow-paragraph-gap-um" | "--flow-body-inset-um"
-            | "--flow-body-right-inset-um"
+            | "--flow-body-first-line-indent-um" | "--flow-body-inset-um"
+            | "--flow-paragraph-gap-um" | "--flow-body-right-inset-um"
             | "--flow-list-quote-inset-um"
             | "--flow-list-quote-right-inset-um" =>
                 select_notebook_flow_typography(

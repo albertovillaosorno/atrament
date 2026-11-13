@@ -4359,5 +4359,26 @@ Five native regressions cover physical row coordinates and unchanged
 structural ink, default/explicit-left byte identity, deterministic real
 PDF/transparent PNG/ink TSV for both nondefault alignments, measured
 compressed ink contours, multi-page wrapping, early source-independent
-refusal and preservation of an existing PDF on an unfit inset region. This option does not save semantic paragraph styles,
-compute optical placement from varied contours, or finish saved notebooks.
+refusal and preservation of an existing PDF on an unfit inset region.
+This option does not save semantic paragraph styles, compute optical
+placement from varied contours, or finish saved notebooks.
+
+## Selected Markdown first-row prose indent (partial) — 2026-11-12
+
+The native CLI admits `--flow-body-first-line-indent-um 0..12000` for
+ordinary Markdown prose blocks. It shortens and shifts only the first
+physical row within the already selected left/right body writing
+bounds. Wrapped continuation rows, including across page turns,
+retain the original writing width and left inset. Center/right
+alignment uses the narrowed rectangle of that first row, without
+moving headings, list/checkbox markers, quote rules, fenced code,
+literal four-space rows or manually positioned ink.
+
+Six native regressions verify measured row origins, first-row wrap,
+physical pagination, unchanged structural ink, default/zero byte
+identity, deterministic PDF/transparent PNG/versioned ink TSV export,
+source-independent refusal, typed bounds and preservation of an
+existing PDF when the first writing row cannot fit. Markdown hard
+breaks start independently compiled prose blocks and are indented
+again. This export-only selection is not a persisted semantic
+paragraph style and does not finish the complete P1 notebook journey.

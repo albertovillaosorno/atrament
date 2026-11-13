@@ -670,6 +670,32 @@ values refuse before source-file/standard-input access, and unfit
 writing rectangles cannot overwrite a previously accepted PDF. The
 horizontal center is nominal, not optical or based on varied ink paths.
 
+To indent only the **first physical row** of each Markdown prose block,
+select `--flow-body-first-line-indent-um 8000`. This shifts the first
+row 8 mm right and shortens its writing width by the same amount; wrapped
+continuation rows use the original body insets and full remaining width.
+A hard Markdown row break starts a new physical block, so its next row
+also receives the indent. Headings, list/checkbox labels, quotes, fenced
+code, literal four-space rows and manual placements are unaffected.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-body-inset-um 4000 --flow-body-right-inset-um 6000 \
+  --flow-body-first-line-indent-um 8000 \
+  --export-paper pdf --output indented-first-rows.pdf
+```
+
+The `0..12000` µm choice is export-only and composes with centered or
+right-aligned body text inside the first row's narrower writing area.
+Omission or explicit zero keeps older PDF, PNG and ink TSV bytes.
+
+The first-row rectangle must still fit at least 4 mm; impossible combinations
+refuse before changing an existing output. Invalid and repeated options
+fail before the CLI reads a selected file or standard input. This is not
+a saved semantic paragraph style or automatic typographic first-line
+indentation across explicit hard breaks.
+
 For a little more space to the right of Markdown list labels and quote
 rules, select `--flow-list-quote-inset-um 6000`. This adds 6 mm to the
 existing 6 mm offset of each bullet, ordered item, checkbox task and
