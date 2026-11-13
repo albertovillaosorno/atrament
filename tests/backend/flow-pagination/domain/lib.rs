@@ -160,11 +160,18 @@ fn reference_mixed_units(
     pages: &[PageRegion<u64>],
     units: &[MeasuredFlowUnit<u64>],
 ) -> Result<Vec<PlacedFragment<u64, u64>>, PaginationError<u64, u64>> {
-    let proposed = reference_mixed_once(pages, units, true);
-    if proposed.is_err()
-        && units.iter().any(|unit| unit.policy
-            == FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible)
-        && let Ok(fallback) = reference_mixed_once(pages, units, false)
+    let proposed = reference_mixed_once(pages, units, true, true);
+    if proposed.is_ok() {
+        return proposed;
+    }
+    if units.iter().any(|unit| unit.policy
+        == FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible)
+        && let Ok(fallback) = reference_mixed_once(pages, units, false, true)
+    {
+        return Ok(fallback);
+    }
+    if units.iter().any(|unit| unit.policy != FlowUnitPolicy::Independent)
+        && let Ok(fallback) = reference_mixed_once(pages, units, false, false)
     {
         return Ok(fallback);
     }
@@ -175,6 +182,7 @@ fn reference_mixed_once(
     pages: &[PageRegion<u64>],
     units: &[MeasuredFlowUnit<u64>],
     balance_opening: bool,
+    use_preferences: bool,
 ) -> Result<Vec<PlacedFragment<u64, u64>>, PaginationError<u64, u64>> {
     let mut cursor = ReferenceCursor {
         page_index: 0,
@@ -183,6 +191,13 @@ fn reference_mixed_once(
     let mut placements = Vec::new();
     for (unit_index, unit) in units.iter().enumerate() {
         if unit.fragments.is_empty() {
+            continue;
+        }
+        if !use_preferences {
+            reference_place_group(
+                pages, &unit.fragments, unit_index,
+                &mut cursor, &mut placements,
+            )?;
             continue;
         }
         match unit.policy {
@@ -1667,6 +1682,173 @@ fn long_keep_with_next_chain_reserves_one_page_in_source_order() {
     assert!(plan.placements.iter().skip(1).all(|placed| placed.page == 2));
     assert_eq!(plan.placements.last().map(|placed| placed.top),
         Some(Length::from_micrometres(36_384)));
+    assert_placement_source_bijection(&pages, &units, &plan.placements);
+}
+
+#[test]
+fn keep_with_next_cannot_exhaust_usable_pages_by_skipping_an_opening() {
+    let pages = [
+        page(80, 100, 30, 8), page(5, 200, 5, 12),
+        page(60, 300, 30, 7),
+    ];
+    let units = [
+        unit(FlowUnitPolicy::Independent, vec![fragment(1, 20, 5)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
+            vec![fragment(2, 20, 2)]),
+        unit(FlowUnitPolicy::Independent, vec![fragment(3, 20, 4)]),
+        unit(FlowUnitPolicy::Independent, vec![fragment(4, 20, 2)]),
+    ];
+    assert_eq!(reference_mixed_once(&pages, &units, true, true),
+        Err(PaginationError::NoPageAvailable { owner: 4 }));
+    let plan = paginate(&pages, &units)
+        .expect("an advisory heading group must not exhaust the next row");
+    assert_eq!(plan.covered_pages, pages);
+    assert_eq!(plan.placements.iter().map(|placed| placed.page)
+        .collect::<Vec<_>>(), [80, 80, 60, 60]);
+    assert_eq!(plan.placements.iter().map(|placed| placed.top.micrometres())
+        .collect::<Vec<_>>(), [100, 105, 300, 304]);
+    assert_eq!(plan.placements,
+        reference_mixed_once(&pages, &units, false, false)
+            .expect("independent reference can fit all fragments"));
+    assert_placement_source_bijection(&pages, &units, &plan.placements);
+}
+
+#[test]
+fn keep_together_page_preference_cannot_strand_later_measured_rows() {
+    let pages = [page(40, 100, 30, 8), page(17, 300, 30, 7)];
+    for policy in [
+        FlowUnitPolicy::KeepTogetherWhenPossible,
+        FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible,
+        FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible,
+    ] {
+        let units = [
+            unit(FlowUnitPolicy::Independent, vec![fragment(1, 20, 5)]),
+            unit(policy, vec![fragment(2, 20, 2), fragment(3, 20, 2)]),
+            unit(FlowUnitPolicy::Independent, vec![fragment(4, 20, 4)]),
+        ];
+        assert_eq!(reference_mixed_once(&pages, &units, true, true),
+            Err(PaginationError::NoPageAvailable { owner: 4 }));
+        let plan = paginate(&pages, &units)
+            .expect("full-unit preference must yield to a valid split");
+        assert_eq!(plan.placements.iter().map(|placed| placed.page)
+            .collect::<Vec<_>>(), [40, 40, 17, 17]);
+        assert_eq!(plan.placements.iter().map(
+            |placed| placed.top.micrometres())
+            .collect::<Vec<_>>(), [100, 105, 300, 302]);
+        assert_eq!(plan.placements,
+            reference_mixed_once(&pages, &units, false, false)
+                .expect("independent reference fits"));
+        assert_placement_source_bijection(&pages, &units, &plan.placements);
+
+        // An impossible final row must still refuse with its original
+        // source owner, even if a fallback can split the earlier group.
+        let mut impossible = units.clone();
+        impossible[2].fragments[0].height =
+            Length::from_micrometres(8);
+        assert_eq!(paginate(&pages, &impossible),
+            Err(PaginationError::FragmentDoesNotFitAnyPage { owner: 4 }));
+    }
+}
+
+#[test]
+fn exhausted_group_preferences_match_exhaustive_split_reference() {
+    let mut cases = 0usize;
+    let mut salvaged = [0usize; 2];
+    for (policy_index, policy) in [
+        FlowUnitPolicy::KeepWithNextWhenPossible,
+        FlowUnitPolicy::KeepTogetherWhenPossible,
+    ].into_iter().enumerate() {
+        for first_page_height in 2..=10 {
+            for last_page_height in 2..=10 {
+                let pages = [
+                    page(19, 100, 20, first_page_height),
+                    page(3, 300, 20, last_page_height),
+                ];
+                for prior_height in 1..=6 {
+                    for first_height in 1..=6 {
+                        for last_height in 1..=6 {
+                            let grouped = if policy
+                                == FlowUnitPolicy::KeepWithNextWhenPossible
+                            {
+                                [
+                                    unit(policy,
+                                        vec![fragment(2, 20, first_height)]),
+                                    unit(FlowUnitPolicy::Independent,
+                                        vec![fragment(3, 20, last_height)]),
+                                ]
+                            } else {
+                                [
+                                    unit(policy,
+                                        vec![fragment(2, 20, first_height),
+                                            fragment(3, 20, last_height)]),
+                                    unit(FlowUnitPolicy::Independent, vec![]),
+                                ]
+                            };
+                            for final_height in 1..=6 {
+                                let units = [
+                                    unit(FlowUnitPolicy::Independent,
+                                        vec![fragment(1, 20, prior_height)]),
+                                    grouped[0].clone(), grouped[1].clone(),
+                                    unit(FlowUnitPolicy::Independent,
+                                        vec![fragment(4, 20, final_height)]),
+                                ];
+                                let proposed = reference_mixed_once(
+                                    &pages, &units, true, true);
+                                let independent = reference_mixed_once(
+                                    &pages, &units, false, false);
+                                if proposed.is_err() && independent.is_ok() {
+                                    salvaged[policy_index] += 1;
+                                }
+                                let expected = proposed.or_else(|original| {
+                                    independent.map_err(|_| original)
+                                });
+                                let actual = paginate(&pages, &units);
+                                assert_eq!(actual.map(|plan| plan.placements),
+                                    expected,
+                                    "case {cases}, policy {policy:?}");
+                                cases += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(cases, 209_952);
+    assert!(salvaged.into_iter().all(|count| count > 100));
+}
+
+#[test]
+fn group_preference_replay_preserves_structural_input_refusals() {
+    let units = [unit(FlowUnitPolicy::KeepWithNextWhenPossible,
+        vec![fragment(2, 10, 2)]),
+        unit(FlowUnitPolicy::Independent, vec![fragment(3, 10, 2)])];
+    let duplicate = [page(11, 100, 30, 8), page(11, 300, 30, 8)];
+    assert_eq!(paginate(&duplicate, &units),
+        Err(PaginationError::DuplicatePageIdentity { page: 11 }));
+    let invalid = [page(11, u64::MAX, 30, 8)];
+    assert_eq!(paginate(&invalid, &units),
+        Err(PaginationError::InvalidPageRegion { page: 11 }));
+    let mut zero = units.clone();
+    zero[1].fragments[0].height = Length::ZERO;
+    assert_eq!(paginate(&[page(11, 100, 30, 8)], &zero),
+        Err(PaginationError::ZeroHeightFragment { owner: 3 }));
+}
+
+#[test]
+fn successful_keep_preference_is_not_weakened_by_fallback() {
+    let pages = [page(1, 100, 30, 8), page(2, 300, 30, 8)];
+    let units = [
+        unit(FlowUnitPolicy::Independent, vec![fragment(1, 20, 5)]),
+        unit(FlowUnitPolicy::KeepTogetherWhenPossible,
+            vec![fragment(2, 20, 2), fragment(3, 20, 2)]),
+        unit(FlowUnitPolicy::Independent, vec![fragment(4, 20, 2)]),
+    ];
+    let plan = paginate(&pages, &units).expect("preferred group fits");
+    assert_eq!(plan.placements.iter().map(|placed| placed.page)
+        .collect::<Vec<_>>(), [1, 2, 2, 2]);
+    assert_eq!(plan.placements.iter().map(|placed| placed.top.micrometres())
+        .collect::<Vec<_>>(), [100, 300, 302, 304]);
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 }
 

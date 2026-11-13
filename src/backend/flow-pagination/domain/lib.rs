@@ -178,6 +178,13 @@ struct GroupExtent {
     width: Length,
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum PaginationMode {
+    IndependentFallback,
+    Preferred,
+    TailOnly,
+}
+
 /// Paginate immutable measured fragments over the supplied page sequence.
 ///
 /// `KeepTogetherWhenPossible` moves a complete unit to the earliest remaining
@@ -198,6 +205,9 @@ struct GroupExtent {
 /// changing the original successful placement or its cursor. If a later unit
 /// then fails, the complete flow is replayed once without opening preferences;
 /// a valid tail-only layout wins over such speculative page exhaustion.
+/// If a keep-with-next or keep-together preference still exhausts pages, one
+/// final independent-fragment replay can rescue the otherwise valid flow.
+/// These replays never replace a successful preferred plan or its identities.
 ///
 /// When every supplied unit has no measured fragments, pagination returns an
 /// empty plan without consulting page authority because no placement exists.
@@ -215,23 +225,41 @@ where
     Identity: Copy,
     PageIdentity: Copy + Ord,
 {
-    let proposed = paginate_once(pages, units, true);
-    if proposed.is_err()
-        && units.iter().any(|unit| unit.policy
-            == FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible)
-        && let Ok(fallback) = paginate_once(pages, units, false)
+    let proposed = paginate_once(pages, units, PaginationMode::Preferred);
+    if !matches!(&proposed,
+        Err(PaginationError::NoPageAvailable { .. }
+            | PaginationError::FragmentDoesNotFitAnyPage { .. }))
+    {
+        return proposed;
+    }
+    if units.iter().any(|unit| {
+        !unit.fragments.is_empty()
+            && unit.policy
+                == FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible
+    })
+        && let Ok(fallback) = paginate_once(
+            pages, units, PaginationMode::TailOnly,
+        )
+    {
+        return Ok(fallback);
+    }
+    if units.iter().any(|unit| !unit.fragments.is_empty()
+        && unit.policy != FlowUnitPolicy::Independent)
+        && let Ok(fallback) = paginate_once(
+            pages, units, PaginationMode::IndependentFallback,
+        )
     {
         return Ok(fallback);
     }
     proposed
 }
 
-/// Replay without opening-row preferences when a later unit cannot fit.
-/// This preserves successful tail-only layouts without an unbounded search.
+/// Replay bounded advisory preferences when later fragments run out of pages.
+/// Independent fallback retains the same checked page and fragment authority.
 fn paginate_once<Identity, PageIdentity>(
     pages: &[PageRegion<PageIdentity>],
     units: &[MeasuredFlowUnit<Identity>],
-    balance_opening: bool,
+    mode: PaginationMode,
 ) -> PaginationResult<Identity, PageIdentity>
 where
     Identity: Copy,
@@ -253,7 +281,11 @@ where
             }
         }
     }
-    let keep_reservations = keep_with_next_reservations(units);
+    let keep_reservations = if mode == PaginationMode::IndependentFallback {
+        Vec::new()
+    } else {
+        keep_with_next_reservations(units)
+    };
     let mut cursor = Cursor {
         page_index: 0,
         used_height: Length::ZERO,
@@ -261,6 +293,13 @@ where
     let mut placements = Vec::new();
     for (unit_index, unit) in units.iter().enumerate() {
         if unit.fragments.is_empty() {
+            continue;
+        }
+        if mode == PaginationMode::IndependentFallback {
+            place_independent(
+                pages, &unit.fragments, unit_index,
+                &mut cursor, &mut placements,
+            )?;
             continue;
         }
         match unit.policy {
@@ -298,7 +337,7 @@ where
                     pages, &unit.fragments, unit_index,
                     &mut cursor, &mut placements,
                 )?;
-                if balance_opening && unit.policy
+                if mode == PaginationMode::Preferred && unit.policy
                     == FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible
                 {
                     balance_lone_opening_fragment(

@@ -124,10 +124,11 @@ otherwise the original successful rows and typed behavior remain intact. The
 ordinary lone-final-row guard then runs on the selected placement.
 
 If a subsequently measured block cannot fit after an opening-row move, Rust
-replays the complete source flow **once** using the established tail-only
-behavior instead. A valid replay wins, so an optional opening preference
-cannot turn a tail-only success into a page-exhaustion failure. If both
-attempts fail, the original typed failure is returned.
+first replays the source flow using the established tail-only behavior. A
+valid replay wins, so the opening preference cannot itself exhaust the page
+budget. A final independent-fragment replay may then rescue a later blocked
+row if any remaining keep-group preference spent a page unnecessarily.
+If all attempts fail, the original typed failure is preserved.
 
 This can span three or more physical pages, with skipped narrow pages
 retained in `covered_pages`. Later measured units start at the final
@@ -147,3 +148,36 @@ The policy does not infer Markdown semantics or rewrite a stored notebook.
 It neither solves fixed-obstacle geometry nor changes the independent native
 CLI's existing paragraph-tail behavior. The full source-to-PDF notebook
 journey and automatic policy selection remain open.
+
+### Whole-flow rescue from advisory page skipping (partial) — 2026-11-13
+
+Keep-with-next and keep-together preferences can place an intact measured
+unit on a later sheet even when its opening fragment fits the current one.
+That valid local preference may strand a later unit on the final physical
+page, despite a complete source-ordered layout existing if the group splits.
+The pure paginator now retries the **complete** measured flow independently
+only after a preferred layout has refused, and after the established tail-only
+replay when opening balancing is selected. An already successful preferred
+plan is never replaced, and no extra page is invented or newly admitted.
+
+The final replay uses the same checked input page regions and original
+measured fragments; each retains its owner, width, height, unit index and
+fragment index. It disables all advisory keep/balance moves rather than
+mutating accepted semantic policy or silently clipping a row. If the simple
+independent greedy placement also fails, the initial typed error is returned.
+
+This is a bounded recovery, **not** an exhaustive globally optimal layout
+search. Invalid page/fragment inputs retain their normal typed refusals.
+
+Four direct domain regressions demonstrate a skipped narrow sheet, all
+three keep-together variants, unchanged preferred successes and refusal of
+an indivisible overlarge final row. A 209,952-case two-page reference sweep
+checks both keep-with-next and keep-together policies against independent
+fragment placement, requiring real recovered outcomes in both families.
+An accepted-revision application regression checks actual 277-mm writable
+sheets, semantic owner/source identity, exact physical row tops and sealed
+flow/revision authority under a rescued heading group.
+
+This recovery only affects caller-measured vertical flow placement. It does
+not connect the CLI Markdown parser, persist semantic paragraphs, resolve
+fixed obstacles or produce a complete notebook PDF/PNG Export.

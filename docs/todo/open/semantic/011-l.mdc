@@ -4601,8 +4601,10 @@ complete remaining unit can still paginate. A speculative retry that
 would exhaust pages or violate measured widths is discarded atomically.
 
 If a later block still runs out of room after an opening-row move, the
-full flow is replayed once with the original tail-only policy. A successful
-baseline replay wins; otherwise the existing typed refusal is preserved.
+full flow is first replayed without opening balancing. A successful replay
+wins; an additional independent-fragment fallback can now recover page
+space lost to other optional group reservations. Unsuccessful retries retain
+the initial typed refusal.
 
 Four direct domain regressions, 52,488 deterministic three-page oracle
 cases, the 10,000-case mixed-policy suite and an accepted-revision
@@ -4611,3 +4613,19 @@ nonsequential/skipped page identities, immutable owners/source indices and
 later block progression. The original tail-only policy remains unchanged.
 This is not an automatic Markdown option, a saved semantic body compiler,
 or complete notebook PDF/transparent PNG delivery; ATR-P2-011 stays open.
+
+## Advisory group-page exhaustion fallback (partial) — 2026-11-13
+
+The pure measured-flow paginator now rescues a complete valid source flow
+when a keep-with-next or keep-together preference moves early rows to a
+later sheet but strands a later row. It keeps successful preferred layouts,
+tries the existing tail-only replay first when applicable, and finally
+attempts source-ordered independent fragments on the same accepted pages.
+If the greedy fallback also fails, original typed errors remain unchanged.
+
+Four focused domain regressions, a 209,952-case independent two-page oracle
+and one accepted-revision semantic notebook fixture check skipped/narrow
+physical sheets, source/page/revision identities, exact physical positions,
+non-regression of successful preferences and genuine recovery outcomes.
+This does not infer actual Markdown measurements or complete the saved
+notebook-to-PDF/PNG workflow; ATR-P2-011 remains open.

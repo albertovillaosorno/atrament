@@ -7511,6 +7511,72 @@ fn accepted_revision_keep_with_next_moves_heading_with_body() {
 }
 
 #[test]
+fn accepted_revision_recovers_from_heading_page_preference_exhaustion() {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let added = (0..3).map(|_| ids.allocate_candidate()
+        .expect("new measured block")).collect::<Vec<_>>();
+    for block in &added {
+        fixture.notebook.pages[0].flows[0].blocks.push(Block {
+            content: BlockContent::Rule,
+            extensions: vec![],
+            id: *block,
+            provenance: None,
+            style: None,
+        });
+    }
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else { panic!("accepted two-page notebook"); };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let pages = [fixture.page_one, fixture.page_two]
+        .map(|page| accepted_for(&mapping, page));
+    let owners = [fixture.block, added[0], added[1], added[2]]
+        .map(|block| accepted_for(&mapping, block));
+    let heights = [100_000, 100_000, 100_000, 80_000];
+    let mut measured = RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: owners.iter().zip(heights).map(|(owner, height)| {
+            MeasuredFlowUnit {
+                fragments: vec![MeasuredFragment {
+                    height: Length::from_micrometres(height),
+                    owner: *owner,
+                    width: Length::from_micrometres(50_000),
+                }],
+                policy: FlowUnitPolicy::Independent,
+            }
+        }).collect(),
+    };
+    let accepted = session.current().expect("accepted profile authority");
+    let baseline = paginate_revision(accepted, &measured)
+        .expect("independent fragments fit on two accepted pages");
+    measured.units[1].policy = FlowUnitPolicy::KeepWithNextWhenPossible;
+    let rescued = paginate_revision(accepted, &measured)
+        .expect("advisory heading move cannot strand the final block");
+    assert_eq!(rescued.revision(), revision);
+    assert_eq!(rescued.flow(), flow);
+    assert_eq!(rescued.covered_pages().iter().map(|page| page.page)
+        .collect::<Vec<_>>(), pages);
+    assert_eq!(rescued.placements(), baseline.placements());
+    assert_eq!(rescued.placements().iter().map(|row| row.owner)
+        .collect::<Vec<_>>(), owners);
+    assert_eq!(rescued.placements().iter().map(|row| row.source.unit)
+        .collect::<Vec<_>>(), [0, 1, 2, 3]);
+    assert_eq!(rescued.placements().iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [pages[0], pages[0], pages[1], pages[1]]);
+    assert_eq!(rescued.placements().iter().map(
+        |row| row.top.micrometres())
+        .collect::<Vec<_>>(), [20_000, 120_000, 20_000, 120_000]);
+    for row in rescued.placements() {
+        assert_eq!(row.writable, rescued.covered_pages().iter()
+            .find(|page| page.page == row.page)
+            .expect("accepted physical page matches placement").writable);
+    }
+}
+
+#[test]
 fn accepted_revision_balances_long_measured_paragraph_tail() {
     let ids = IdentityAllocator::new();
     let fixture = candidate_fixture(&ids);
