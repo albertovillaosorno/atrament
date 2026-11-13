@@ -177,7 +177,9 @@ fn reference_mixed_units(
                 &mut cursor,
                 &mut placements,
             )?,
-            FlowUnitPolicy::KeepTogetherWhenPossible => {
+            FlowUnitPolicy::KeepTogetherWhenPossible
+            | FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible => {
+                let first_placement = placements.len();
                 let total_height = unit
                     .fragments
                     .iter()
@@ -234,6 +236,12 @@ fn reference_mixed_units(
                     &mut cursor,
                     &mut placements,
                 )?;
+                if unit.policy
+                    == FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible
+                {
+                    reference_balance_tail(pages, first_placement,
+                        &mut cursor, &mut placements);
+                }
             },
             FlowUnitPolicy::KeepWithNextWhenPossible => {
                 if let Some((height, width)) =
@@ -267,6 +275,52 @@ fn reference_mixed_units(
         }
     }
     Ok(placements)
+}
+
+// Separate integer-coordinate reference for a lone last row of a long
+// measured unit. Inspect the oracle's actual emitted rows, not a production
+// reservation, to decide whether the final physical sheet can hold two.
+fn reference_balance_tail(
+    pages: &[PageRegion<u64>],
+    start: usize,
+    cursor: &mut ReferenceCursor,
+    placements: &mut [PlacedFragment<u64, u64>],
+) {
+    let Some(rows) = placements.get(start..) else { return; };
+    let Some(tail_start) = rows.len().checked_sub(4) else {
+        return;
+    };
+    let Some([first_old, second_old, to_move, last]) =
+        rows.get(tail_start..) else { return; };
+    let Some(target) = pages.get(cursor.page_index) else { return; };
+    let can_balance = first_old.page == to_move.page
+        && second_old.page == to_move.page
+        && to_move.page != last.page
+        && last.page == target.page
+        && last.top == target.writable.y
+        && cursor.used_height == last.height.micrometres()
+        && to_move.width <= target.writable.width
+        && to_move.height.micrometres()
+            .checked_add(last.height.micrometres())
+            .is_some_and(|height| height <=
+                target.writable.height.micrometres());
+    if !can_balance {
+        return;
+    }
+    let Some(new_height) = to_move.height.micrometres()
+        .checked_add(last.height.micrometres()) else { return; };
+    let Some(new_final_top) = target.writable.y.micrometres()
+        .checked_add(to_move.height.micrometres()) else { return; };
+    let Some(pair_start) = placements.len().checked_sub(2) else {
+        return;
+    };
+    let Some([moved_row, trailing_row]) =
+        placements.get_mut(pair_start..) else { return; };
+    moved_row.page = target.page;
+    moved_row.top = target.writable.y;
+    moved_row.writable = target.writable;
+    trailing_row.top = Length::from_micrometres(new_final_top);
+    cursor.used_height = new_height;
 }
 
 // An independent reference derives sheet coverage from *reference*
@@ -357,8 +411,8 @@ fn mixed_policy_pagination_matches_reference_oracle() {
     let mut seed = 0x5eed_f10f_u64;
     let mut seen_page_counts = [false; 4];
     let mut seen_unit_counts = [false; 4];
-    let mut seen_policies = [false; 3];
-    let mut seen_fragment_counts = [false; 4];
+    let mut seen_policies = [false; 4];
+    let mut seen_fragment_counts = [false; 6];
     let mut saw_success = false;
     let mut saw_failure = false;
     for case in 0..CASES {
@@ -381,14 +435,19 @@ fn mixed_policy_pagination_matches_reference_oracle() {
         let mut units = Vec::with_capacity(unit_count);
         let mut owner = 1u64;
         for _ in 0..unit_count {
-            let policy_index = (next_case_value(&mut seed) % 3) as usize;
+            let policy_index = usize::try_from(
+                next_case_value(&mut seed).rem_euclid(4),
+            ).unwrap_or_default();
             seen_policies[policy_index] = true;
             let policy = match policy_index {
                 0 => FlowUnitPolicy::Independent,
                 1 => FlowUnitPolicy::KeepTogetherWhenPossible,
-                _ => FlowUnitPolicy::KeepWithNextWhenPossible,
+                2 => FlowUnitPolicy::KeepWithNextWhenPossible,
+                _ => FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible,
             };
-            let fragment_count = (next_case_value(&mut seed) % 4) as usize;
+            let fragment_count = usize::try_from(
+                next_case_value(&mut seed).rem_euclid(6),
+            ).unwrap_or_default();
             seen_fragment_counts[fragment_count] = true;
             let mut fragments = Vec::with_capacity(fragment_count);
             for _ in 0..fragment_count {
@@ -1538,4 +1597,175 @@ fn long_keep_with_next_chain_reserves_one_page_in_source_order() {
     assert_eq!(plan.placements.last().map(|placed| placed.top),
         Some(Length::from_micrometres(36_384)));
     assert_placement_source_bijection(&pages, &units, &plan.placements);
+}
+
+#[test]
+fn balanced_tail_moves_one_long_paragraph_row_without_stranding_its_start() {
+    let pages = [page(17, 100, 100, 70), page(3, 500, 100, 70)];
+    let rows = vec![
+        fragment(1, 40, 20), fragment(2, 40, 20),
+        fragment(3, 40, 20), fragment(4, 40, 20),
+    ];
+    let units = [
+        unit(FlowUnitPolicy::Independent, vec![fragment(9, 40, 10)]),
+        unit(FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible,
+            rows.clone()),
+        unit(FlowUnitPolicy::Independent, vec![fragment(10, 40, 30)]),
+    ];
+    let outcome1 = paginate(&pages, &units);
+    assert!(outcome1.is_ok(), "expected pagination: {outcome1:?}");
+    let Ok(plan) = outcome1 else { return; };
+    assert_eq!(plan.covered_pages, pages);
+    assert_eq!(plan.placements.iter().map(|placed| placed.page)
+        .collect::<Vec<_>>(), [17, 17, 17, 3, 3, 3]);
+    assert_eq!(plan.placements.iter().map(|placed| placed.top.micrometres())
+        .collect::<Vec<_>>(), [100, 110, 130, 500, 520, 540]);
+    assert_eq!(plan.placements.iter().map(|placed| placed.owner)
+        .collect::<Vec<_>>(), [9, 1, 2, 3, 4, 10]);
+    assert_placement_source_bijection(&pages, &units, &plan.placements);
+
+    let baseline_units = [
+        unit(FlowUnitPolicy::Independent, vec![fragment(9, 40, 10)]),
+        unit(FlowUnitPolicy::KeepTogetherWhenPossible, rows),
+        unit(FlowUnitPolicy::Independent, vec![fragment(10, 40, 30)]),
+    ];
+    let outcome2 = paginate(&pages, &baseline_units);
+    assert!(outcome2.is_ok(), "expected pagination: {outcome2:?}");
+    let Ok(unbalanced) = outcome2 else { return; };
+    assert_eq!(unbalanced.placements.iter().map(|placed| placed.page)
+        .collect::<Vec<_>>(), [17, 17, 17, 17, 3, 3]);
+}
+
+#[test]
+fn balanced_tail_keeps_two_starting_rows_and_honors_later_page_limits() {
+    let policy = FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible;
+    let samples = [
+        (page(2, 100, 100, 20), [1, 1, 1, 2]),
+        (page(2, 100, 10, 80), [1, 1, 1, 2]),
+    ];
+    for (last_page, expected) in samples {
+        let pages = [page(1, 0, 100, 60), last_page];
+        let units = [unit(policy, vec![
+            fragment(1, 40, 20), fragment(2, 40, 20),
+            fragment(3, 40, 20), fragment(4, 10, 20),
+        ])];
+        let outcome1 = paginate(&pages, &units);
+        assert!(outcome1.is_ok(), "expected pagination: {outcome1:?}");
+        let Ok(plan) = outcome1 else { return; };
+        assert_eq!(plan.placements.iter().map(|placed| placed.page)
+            .collect::<Vec<_>>(), expected);
+        assert_placement_source_bijection(&pages, &units, &plan.placements);
+    }
+
+    let pages = [page(1, 0, 100, 40), page(2, 100, 100, 60)];
+    let units = [unit(policy, vec![
+        fragment(1, 40, 20), fragment(2, 40, 20),
+        fragment(3, 40, 20),
+    ])];
+    let outcome2 = paginate(&pages, &units);
+    assert!(outcome2.is_ok(), "expected pagination: {outcome2:?}");
+    let Ok(plan) = outcome2 else { return; };
+    assert_eq!(plan.placements.iter().map(|placed| placed.page)
+        .collect::<Vec<_>>(), [2, 2, 2]);
+    assert_placement_source_bijection(&pages, &units, &plan.placements);
+}
+
+#[test]
+fn balanced_tail_tracks_skipped_narrow_page_and_unsorted_page_ids() {
+    let pages = [
+        page(91, 100, 40, 60),
+        page(5, 300, 10, 60),
+        page(42, 600, 40, 45),
+    ];
+    let units = [unit(
+        FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible,
+        vec![fragment(1, 25, 20), fragment(2, 25, 20),
+            fragment(3, 25, 20), fragment(4, 25, 20)],
+    )];
+    let outcome1 = paginate(&pages, &units);
+    assert!(outcome1.is_ok(), "expected pagination: {outcome1:?}");
+    let Ok(plan) = outcome1 else { return; };
+    assert_eq!(plan.covered_pages, pages);
+    assert_eq!(plan.placements.iter().map(|placed| placed.page)
+        .collect::<Vec<_>>(), [91, 91, 42, 42]);
+    assert_eq!(plan.placements.iter().map(|placed| placed.top.micrometres())
+        .collect::<Vec<_>>(), [100, 120, 600, 620]);
+    assert_placement_source_bijection(&pages, &units, &plan.placements);
+}
+
+#[test]
+fn balanced_tail_preserves_complete_groups_and_heading_reservations() {
+    let pages = [page(1, 100, 100, 90), page(2, 700, 100, 100)];
+    let units = [
+        unit(FlowUnitPolicy::Independent, vec![fragment(1, 40, 60)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
+            vec![fragment(2, 40, 10)]),
+        unit(FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible,
+            vec![fragment(3, 40, 20), fragment(4, 40, 20),
+                fragment(5, 40, 20), fragment(6, 40, 20)]),
+    ];
+    let outcome1 = paginate(&pages, &units);
+    assert!(outcome1.is_ok(), "expected pagination: {outcome1:?}");
+    let Ok(plan) = outcome1 else { return; };
+    assert_eq!(plan.placements.iter().map(|placed| placed.page)
+        .collect::<Vec<_>>(), [1, 2, 2, 2, 2, 2]);
+    assert_eq!(plan.placements.iter().map(|placed| placed.top.micrometres())
+        .collect::<Vec<_>>(), [100, 700, 710, 730, 750, 770]);
+    assert_placement_source_bijection(&pages, &units, &plan.placements);
+}
+
+#[test]
+fn balanced_tail_exhaustive_small_page_reference_and_real_moves() {
+    let mut total = 0usize;
+    let mut moved = 0usize;
+    for first_height in 1..=9 {
+        for second_height in 1..=9 {
+            let pages = [
+                page(11, 50, 20, first_height),
+                page(17, 150, 20, second_height),
+            ];
+            for first_row_height in 1..=3 {
+                for second_row_height in 1..=3 {
+                    for third_row_height in 1..=3 {
+                        for fourth_row_height in 1..=3 {
+                            let fragments = vec![
+                                fragment(1, 10, first_row_height),
+                                fragment(2, 10, second_row_height),
+                                fragment(3, 10, third_row_height),
+                                fragment(4, 10, fourth_row_height),
+                            ];
+                            let policy = FlowUnitPolicy::
+                                KeepTogetherAndBalanceTailWhenPossible;
+                            let units = [unit(policy, fragments.clone())];
+                            let actual = paginate(&pages, &units);
+                            let expected =
+                                reference_mixed_units(&pages, &units);
+                            if let (Ok(plan), Ok(expected_rows)) =
+                                (&actual, &expected) {
+                                assert_placement_source_bijection(
+                                    &pages, &units, &plan.placements);
+                                assert_eq!(plan.covered_pages,
+                                    reference_covered_pages(
+                                        &pages, expected_rows));
+                                let baseline_units = [unit(
+                                    FlowUnitPolicy::KeepTogetherWhenPossible,
+                                    fragments,
+                                )];
+                                if let Ok(baseline) =
+                                    paginate(&pages, &baseline_units)
+                                    && baseline.placements != plan.placements {
+                                    moved += 1;
+                                }
+                            }
+                            assert_eq!(actual.map(|plan| plan.placements),
+                                expected, "fixture {total}");
+                            total += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(total, 6_561);
+    assert!(moved > 50, "oracle must cover balancing outcomes");
 }

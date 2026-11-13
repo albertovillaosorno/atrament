@@ -42,6 +42,9 @@ use atrament_physical_page_profile::{Length, Rect};
 pub enum FlowUnitPolicy {
     /// Paginate each measured fragment independently in source order.
     Independent,
+    /// Keep a full unit together when possible; otherwise avoid a lone
+    /// final fragment on a fresh page when at least two rows remain behind.
+    KeepTogetherAndBalanceTailWhenPossible,
     /// Keep all fragments on one page when one remaining page can contain them.
     KeepTogetherWhenPossible,
     /// Prefer the complete unit with its next visible measured fragment.
@@ -179,6 +182,12 @@ struct GroupExtent {
 /// single remaining page can contain the whole unit, the unit falls back to
 /// fragment-boundary pagination without splitting any fragment.
 ///
+/// `KeepTogetherAndBalanceTailWhenPossible` also moves the penultimate
+/// measured row to the last page of a split group when exactly one final row
+/// starts that page, at least three rows from that unit ended on the prior
+/// page, and both final rows fit the last page's exact writable geometry.
+/// Otherwise the original fragment placement is preserved.
+///
 /// When every supplied unit has no measured fragments, pagination returns an
 /// empty plan without consulting page authority because no placement exists.
 ///
@@ -249,6 +258,16 @@ where
                     &mut cursor, &mut placements,
                 )?;
             },
+            FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible => {
+                let first_placement = placements.len();
+                place_keep_together_when_possible(
+                    pages, &unit.fragments, unit_index,
+                    &mut cursor, &mut placements,
+                )?;
+                balance_lone_trailing_fragment(
+                    pages, first_placement, &mut cursor, &mut placements,
+                );
+            },
         }
     }
     Ok(PaginationPlan {
@@ -310,7 +329,8 @@ fn keep_with_next_reservations<Identity>(
                             })
                     })
             },
-            FlowUnitPolicy::KeepTogetherWhenPossible => {
+            FlowUnitPolicy::KeepTogetherWhenPossible
+            | FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible => {
                 complete_group_extent(&unit.fragments)
             },
             FlowUnitPolicy::Independent => unit.fragments.first()
@@ -445,6 +465,71 @@ where
     }
 
     place_independent(pages, fragments, unit_index, cursor, placements)
+}
+
+/// When a too-long group leaves just its final row on a fresh page, move
+/// its penultimate row forward if the new sheet can hold both. Require at
+/// least three rows of this very unit on the preceding page: the move must
+/// never strand a single opening row or reach back into another block.
+/// The immutable row measurements and their source indices do not change.
+fn balance_lone_trailing_fragment<Identity, PageIdentity>(
+    pages: &[PageRegion<PageIdentity>],
+    first_placement: usize,
+    cursor: &mut Cursor,
+    placements: &mut [PlacedFragment<Identity, PageIdentity>],
+) where
+    Identity: Copy,
+    PageIdentity: Copy + Eq,
+{
+    let Some(placed) = placements.get(first_placement..) else {
+        return;
+    };
+    if placed.len() < 4 {
+        return;
+    }
+    let Some(tail_start) = placed.len().checked_sub(4) else {
+        return;
+    };
+    let Some([older, previous, penultimate, final_row]) =
+        placed.get(tail_start..) else {
+        return;
+    };
+    let Some(current) = pages.get(cursor.page_index) else {
+        return;
+    };
+    if older.page != penultimate.page
+        || previous.page != penultimate.page
+        || penultimate.page == final_row.page
+        || final_row.page != current.page
+        || final_row.top != current.writable.y
+        || cursor.used_height != final_row.height
+        || penultimate.width > current.writable.width
+    {
+        return;
+    }
+    let Some(pair_height) = penultimate.height.micrometres()
+        .checked_add(final_row.height.micrometres()) else {
+        return;
+    };
+    if pair_height > current.writable.height.micrometres() {
+        return;
+    }
+    let Some(last_top) = current.writable.y.micrometres()
+        .checked_add(penultimate.height.micrometres()) else {
+        return;
+    };
+    let Some(pair_start) = placements.len().checked_sub(2) else {
+        return;
+    };
+    let Some([moved_row, trailing_row]) =
+        placements.get_mut(pair_start..) else {
+        return;
+    };
+    moved_row.page = current.page;
+    moved_row.top = current.writable.y;
+    moved_row.writable = current.writable;
+    trailing_row.top = Length::from_micrometres(last_top);
+    cursor.used_height = Length::from_micrometres(pair_height);
 }
 
 fn place_on_current<Identity, PageIdentity>(

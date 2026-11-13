@@ -66,3 +66,43 @@ Neither test proves compiled Markdown headings automatically select this
 policy. That requires wiring a measured semantic notebook compiler to the
 new option. This does not complete ATR-P2-011's saved two-page Markdown
 journey or fixed-obstacle-aware layout requirements.
+
+### Measured paragraph-tail balancing (partial) — 2026-11-13
+
+`FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible` retains the existing
+complete-group preference. If the entire unit fits a current or later
+physical page, it moves there without splitting. If the unit is too tall,
+ordinary per-fragment pagination runs first, preserving each row's measured
+physical height, width, owner and source index.
+
+When a split leaves **exactly one final row** at the beginning of a fresh
+physical page, the paginator may move the penultimate row onto that sheet.
+It does so only if at least three rows of **this same unit** finished on the
+preceding physical page, and the two final rows both fit the actual last
+page's height and width. The original page then retains at least two rows.
+This also works across an intervening page too narrow to accept the row;
+skipped pages remain in `covered_pages` in original sheet order.
+
+A three-row split of two plus one is not rebalanced to one plus two. A later
+page unable to contain both rows or the penultimate row's width leaves the
+original one-row tail unchanged. The preference never creates a new page,
+rewrites source identities, or relaxes typed page exhaustion and geometry
+refusals.
+
+Subsequent measured units use the adjusted last-page cursor, not
+its pre-balance height. Keep-with-next headings reserve the successor's full
+extent under this policy, just as with ordinary keep-together units.
+
+Five focused domain regressions exercise full and fallback placement, mixed
+preceding/following units, narrow and skipped pages, non-sorted accepted
+page IDs and unbalanced refusal. A separate **6,561-case exhaustive
+small-integer oracle** requires actual balance outcomes; the existing
+10,000-case randomized mixed-policy oracle now includes the fourth policy
+and up to five measured fragments per unit. A revision-bound semantic
+application test proves accepted page identities, immutable row sources,
+exact writable geometry, and unchanged flow/revision ownership.
+
+This is an explicit policy for **already measured** semantic paragraphs,
+not automatic Markdown tagging. The native CLI's independently implemented
+wrapped-tail guard is not replaced; accepted notebook content measurement,
+fixed-object resolution and native notebook PDF/PNG remain incomplete.

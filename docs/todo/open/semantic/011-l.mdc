@@ -4568,3 +4568,23 @@ This is a reusable measured-layout primitive. The Rust CLI Markdown parser
 does not yet use it; source-text compilation, fixed image obstacles and a
 saved notebook body remain incomplete. The original ATR-P2-011 finite
 acceptance criterion is still open.
+
+## Measured paragraph-tail widow policy (partial) — 2026-11-13
+
+The pure Rust measured-flow paginator adds explicit
+`KeepTogetherAndBalanceTailWhenPossible` semantics for callers that supply
+already measured paragraph fragments. Whole units still stay together when
+one later writable sheet can contain them. Otherwise, a lone terminal row
+can share its fresh page with the preceding row, but only if at least two
+rows remain on the preceding page and both moved/final rows fit the exact
+later page. Impossible preferences leave valid individual placements and
+typed errors intact; source order, accepted owners and page-region evidence
+are never inferred or replaced.
+
+Five direct regressions plus 6,561 exhaustive two-page fixtures, the expanded
+10,000-case mixed-policy oracle and a current accepted semantic-revision
+integration test verify widths, exact coordinates, physical page skips,
+original row identities and subsequent cursor progression. This is a layout
+policy only: no persisted semantic Markdown, full text compiler, fixed
+obstacle solver, or native saved notebook PDF/PNG output was introduced.
+ATR-P2-011's full user journey remains open.

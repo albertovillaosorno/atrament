@@ -7509,3 +7509,66 @@ fn accepted_revision_keep_with_next_moves_heading_with_body() {
     assert_eq!(guarded.placements().iter().map(|row| row.source.unit)
         .collect::<Vec<_>>(), [0, 1, 2]);
 }
+
+#[test]
+fn accepted_revision_balances_long_measured_paragraph_tail() {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let outcome = session.accept(fixture.notebook);
+    assert!(matches!(&outcome, AcceptanceOutcome::Accepted { .. }));
+    let AcceptanceOutcome::Accepted { mapping, revision } = outcome
+    else { return; };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let first_page = accepted_for(&mapping, fixture.page_one);
+    let second_page = accepted_for(&mapping, fixture.page_two);
+    let mut measured = measurement(
+        revision, flow, owner,
+        &[(50_000, 80_000), (50_000, 80_000),
+            (50_000, 80_000), (50_000, 80_000)],
+    );
+    assert_eq!(measured.units.len(), 1);
+    if let Some(unit) = measured.units.first_mut() {
+        unit.policy = FlowUnitPolicy::KeepTogetherWhenPossible;
+    }
+    let accepted_option = session.current();
+    assert!(accepted_option.is_some());
+    let Some(accepted) = accepted_option else { return; };
+    let baseline_result = paginate_revision(accepted, &measured);
+    assert!(baseline_result.is_ok(), "baseline layout: {baseline_result:?}");
+    let Ok(baseline) = baseline_result else { return; };
+    assert_eq!(baseline.placements().iter().map(|row| row.page)
+        .collect::<Vec<_>>(),
+        [first_page, first_page, first_page, second_page]);
+
+    if let Some(unit) = measured.units.first_mut() {
+        unit.policy = FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible;
+    }
+    let balanced_result = paginate_revision(accepted, &measured);
+    assert!(balanced_result.is_ok(),
+        "tail-balanced layout: {balanced_result:?}");
+    let Ok(balanced) = balanced_result else { return; };
+    assert_eq!(balanced.revision(), revision);
+    assert_eq!(balanced.flow(), flow);
+    assert_eq!(balanced.covered_pages().iter().map(|page| page.page)
+        .collect::<Vec<_>>(), [first_page, second_page]);
+    assert_eq!(balanced.placements().iter().map(|row| row.page)
+        .collect::<Vec<_>>(),
+        [first_page, first_page, second_page, second_page]);
+    assert!(balanced.placements().iter().all(|row| row.owner == owner));
+    assert_eq!(balanced.placements().iter().map(|row| row.source.fragment)
+        .collect::<Vec<_>>(), [0, 1, 2, 3]);
+    let writable_option = balanced.covered_pages().get(1)
+        .map(|page| page.writable);
+    assert!(writable_option.is_some());
+    let Some(writable) = writable_option else { return; };
+    assert_eq!(balanced.placements().get(2).map(|row| row.writable),
+        Some(writable));
+    assert_eq!(balanced.placements().get(2).map(|row| row.top),
+        Some(writable.y));
+    assert_eq!(balanced.placements().get(3)
+        .map(|row| row.top.micrometres()),
+        writable.y.micrometres().checked_add(80_000));
+    assert_eq!(measured.revision, balanced.revision());
+}
