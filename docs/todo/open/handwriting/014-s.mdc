@@ -1143,3 +1143,8 @@ invalid-input refusal, exact exported TSV, undo, redo and session reset.
 This is manual sampled-line editing, not analytic curve persistence or a
 native CLI reflection option. Export still occurs through explicit v1 TSV;
 the broader joined-cursive and calibrated correlated ink task stays open.
+
+A separate real Firefox/localhost integration verifies the actual controls,
+preview, refused and accepted downloads, Unicode history ownership, and
+unchanged backend-request count. The downloaded exact TSV is reopened by
+the independently built native CLI and produces valid PDF and RGBA PNG.

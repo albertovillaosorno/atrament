@@ -2099,6 +2099,11 @@ holds its already-reflected integer segments for independent Rust PDF/PNG
 export. It does not add a persisted mirror parameter or infer a cursive
 path, and the native CLI has no matching reflection flag.
 
+A real headless Firefox/localhost regression verifies the mirror controls,
+read-only preview, clipping refusal, exact NFC/NFD TSV download, undo/redo,
+and lack of new backend requests. Rust independently reopens the downloaded
+TSV and renders real PDF and transparent PNG ink from the reflected strokes.
+
 New edits after undo discard the redo tail, and the oldest step is evicted
 after eight successful edits. Identity transforms and refused edits preserve
 history; a successful TSV import or session reset clears it. Download
