@@ -15,7 +15,7 @@ const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath,
     translateCandidatePath, styleCandidatePath, scaleCandidatePath,
-    reflectCandidatePath, removeCandidatePath } =
+    reflectCandidatePath, rotateCandidatePath, removeCandidatePath } =
     await import(new URL(
         "../../../../src/browser/workspace/adapter-inbound/generated/"
             + "glyph-strokes.js", import.meta.url,
@@ -609,6 +609,8 @@ function mountEditor() {
         "glyph-path-dx", "glyph-path-dy", "glyph-path-translate",
         "glyph-path-style", "glyph-path-remove", "glyph-path-scale",
         "glyph-path-reflect", "glyph-path-reflect-axis",
+        "glyph-path-rotate", "glyph-path-rotate-degrees",
+        "glyph-path-rotate-pivot-x", "glyph-path-rotate-pivot-y",
         "glyph-path-reflect-pivot",
         "glyph-path-scale-x", "glyph-path-scale-y",
         "glyph-path-copy", "glyph-path-copy-target",
@@ -651,6 +653,9 @@ function mountEditor() {
     get("path-dy").value = "0";
     get("path-scale-x").value = "100";
     get("path-scale-y").value = "100";
+    get("path-rotate-degrees").value = "10";
+    get("path-rotate-pivot-x").value = "1750";
+    get("path-rotate-pivot-y").value = "2250";
     get("path-reflect-axis").value = "x";
     get("path-reflect-pivot").value = "1750";
     get("variation-sample").value = "1";
@@ -12809,4 +12814,146 @@ test("selected path mirror preserves closed loops and 4096 connected ink",
         assert.equal(encodeGlyphLibrary(reflectCandidatePath(
             result, nfd, 2048, "x", 1750).strokes),
         encodeGlyphLibrary(full));
+    });
+
+test("selected path rotation keeps exact Unicode slots and directed joints",
+    () => {
+        const nfd = "n\u0303";
+        const a = { ...stroke(nfd), x1: 500, y1: 700,
+            x2: 900, y2: 1200, width: 251, color: "#112233" };
+        const b = { ...a, x1: 900, y1: 1200,
+            x2: 1400, y2: 1900 };
+        const accent = { ...a, x1: 2200, y1: 2500,
+            x2: 2700, y2: 3000, color: "#445566" };
+        const original = [a, stroke("ñ"), b, stroke("∞"), accent];
+        const before = encodeGlyphLibrary(original);
+        const result = rotateCandidatePath(original, nfd, 2, 20, 1750, 2250);
+        assert.deepEqual(result, { strokes: [
+            { ...a, x1: 1106, y1: 366, x2: 1310, y2: 973 },
+            original[1],
+            { ...b, x1: 1310, y1: 973, x2: 1541, y2: 1801 },
+            original[3], accent,
+        ], selectedIndex: 2 });
+        assert.deepEqual(candidatePenPaths(result.strokes, nfd).map((p) =>
+            [p.first, p.last]), [[1, 2], [3, 3]]);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(result.strokes)),
+            result.strokes);
+        assert.equal(encodeGlyphLibrary(original), before,
+            "proposal must never change source TSV");
+        assert.deepEqual(rotateCandidatePath(original, nfd, 0,
+            -10, 1750, 2250).strokes[0], {
+            ...a, x1: 250, y1: 941, x2: 731, y2: 1364,
+        });
+    });
+
+test("selected path rotation refuses invalid or unchanged physical ink",
+    () => {
+        const key = "n\u0303";
+        const base = { ...stroke(key), x1: 500, y1: 700,
+            x2: 900, y2: 1200, width: 251 };
+        const rows = [base, stroke("ñ")];
+        const before = encodeGlyphLibrary(rows);
+        for (const [index, angle, pivotX, pivotY] of [
+            [-1, 10, 1750, 2250], [1, 10, 1750, 2250],
+            [0, 0, 1750, 2250], [0, 21, 1750, 2250],
+            [0, -21, 1750, 2250], [0, 0.5, 1750, 2250],
+            [0, Infinity, 1750, 2250], [0, 10, -1, 2250],
+            [0, 10, 3501, 2250], [0, 10, 1750, 4501],
+            [0, 10, 1750, 1.5], [0, 20, 3500, 4500],
+        ]) {
+            assert.throws(() => rotateCandidatePath(rows, key,
+                index, angle, pivotX, pivotY), /path|rotation|clip|selected/i);
+        }
+        assert.throws(() => rotateCandidatePath(rows, "ñ", 0,
+            10, 1750, 2250), /selected/);
+        assert.throws(() => rotateCandidatePath([
+            { ...base, x1: 1750, y1: 2250,
+                x2: 1751, y2: 2250 },
+        ], key, 0, 1, 1750, 2250), /does not change/);
+        assert.equal(encodeGlyphLibrary(rows), before);
+    });
+
+test("selected path rotation preserves closed loops and full stroke budget",
+    () => {
+        const key = "n\u0303";
+        const first = { ...stroke(key), x1: 1000, y1: 1000,
+            x2: 1400, y2: 1000, width: 200 };
+        const loop = [first, stroke("ñ"),
+            { ...first, x1: 1400, y1: 1000, x2: 1400, y2: 1400 },
+            { ...first, x1: 1400, y1: 1400, x2: 1000, y2: 1400 },
+            { ...first, x1: 1000, y1: 1400, x2: 1000, y2: 1000 }];
+        const changed = rotateCandidatePath(loop, key, 3,
+            15, 1750, 2250);
+        const paths = candidatePenPaths(changed.strokes, key);
+        assert.deepEqual(paths.map((p) => [p.first, p.last]), [[1, 4]]);
+        assert.deepEqual(paths[0].start, paths[0].end);
+        assert.equal(changed.strokes[1], loop[1]);
+        const full = Array.from({ length: 4096 }, (_, index) => ({
+            ...first, x1: 1000 + 2 * (index % 2),
+            x2: 1000 + 2 * ((index + 1) % 2),
+        }));
+        const output = rotateCandidatePath(full, key, 2048,
+            20, 1750, 2250);
+        assert.equal(output.strokes.length, 4096);
+        assert.equal(output.selectedIndex, 2048);
+        assert.equal(candidatePenPaths(output.strokes, key).length, 1);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(output.strokes)),
+            output.strokes);
+    });
+
+test("selected path rotation UI saves only accepted and undoable TSV",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const key = "n\u0303";
+            const a = { ...stroke(key), x1: 500, y1: 700,
+                x2: 900, y2: 1200, width: 251 };
+            const b = { ...a, x1: 900, y1: 1200,
+                x2: 1400, y2: 1900 };
+            const original = [a, stroke("ñ"), b];
+            const bytes = new TextEncoder().encode(
+                encodeGlyphLibrary(original));
+            assert.equal(get("path-rotate").disabled, true);
+            editor.start();
+            get("load").files = [{ size: bytes.length,
+                arrayBuffer: async () => bytes.buffer }];
+            await get("load").dispatch("change");
+            get("character").value = key;
+            get("character").dispatch("input");
+            get("selected").value = "2";
+            get("selected").dispatch("change");
+            for (const field of ["rotate", "rotate-degrees",
+                "rotate-pivot-x", "rotate-pivot-y"]) {
+                assert.equal(get(`path-${field}`).disabled, false);
+            }
+            get("path-rotate-degrees").value = "20";
+            get("path-rotate").dispatch("click");
+            assert.match(get("status").textContent,
+                /Rotated selected continuous pen path; unsaved/);
+            assert.equal(downloads.length, 0);
+            const result = rotateCandidatePath(original, key, 2,
+                20, 1750, 2250).strokes;
+            get("save").dispatch("click");
+            assert.equal(await downloads[0].text(), encodeGlyphLibrary(result));
+            get("slant-undo").dispatch("click");
+            assert.match(get("status").textContent,
+                /Undid last pen path rotation/);
+            get("save").dispatch("click");
+            assert.equal(await downloads[1].text(),
+                encodeGlyphLibrary(original));
+            get("slant-redo").dispatch("click");
+            get("save").dispatch("click");
+            assert.equal(await downloads[2].text(), encodeGlyphLibrary(result));
+            get("path-rotate-degrees").value = "0";
+            get("path-rotate").dispatch("click");
+            assert.match(get("status").textContent, /nonzero/);
+            get("save").dispatch("click");
+            assert.equal(await downloads[3].text(), encodeGlyphLibrary(result));
+            editor.reset();
+            assert.equal(get("path-rotate").disabled, true);
+            assert.equal(get("slant-undo").disabled, true);
+        } finally {
+            ui.restore();
+        }
     });

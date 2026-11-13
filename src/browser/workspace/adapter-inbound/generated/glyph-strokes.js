@@ -566,6 +566,66 @@ export function reflectCandidatePath(strokes, grapheme, selectedIndex, axis, piv
     encodeGlyphLibrary(next);
     return { strokes: next, selectedIndex };
 }
+// Rotate one selected continuous path around a caller-selected physical pivot.
+// The same rounded joint coordinates keep its directed segments connected;
+// other paths (even of the same Unicode glyph) retain their original bytes.
+export function rotateCandidatePath(strokes, grapheme, selectedIndex, degrees, pivotX, pivotY) {
+    if (!exactGrapheme(grapheme)
+        || !Number.isSafeInteger(selectedIndex) || selectedIndex < 0
+        || strokes[selectedIndex]?.grapheme !== grapheme) {
+        throw new Error("Path rotation needs a selected exact glyph stroke");
+    }
+    if (!Number.isSafeInteger(degrees) || degrees === 0
+        || Math.abs(degrees) > 20
+        || !Number.isSafeInteger(pivotX) || pivotX < 0 || pivotX > 3500
+        || !Number.isSafeInteger(pivotY) || pivotY < 0 || pivotY > 4500) {
+        throw new Error("Path rotation needs nonzero -20..20°"
+            + " and bounded pivot");
+    }
+    encodeGlyphLibrary([...strokes]);
+    const positions = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const ordinal = positions.indexOf(selectedIndex) + 1;
+    const path = candidatePenPaths(strokes, grapheme).find((candidate) => ordinal >= candidate.first && ordinal <= candidate.last);
+    if (!path)
+        throw new Error("Selected glyph has no candidate pen path");
+    const slots = positions.slice(path.first - 1, path.last);
+    const radians = degrees * Math.PI / 180;
+    const sin = Math.sin(radians);
+    const cos = Math.cos(radians);
+    const next = strokes.slice();
+    let changed = false;
+    for (const index of slots) {
+        const original = strokes[index];
+        const rotate = (x, y) => {
+            const relativeX = x - pivotX;
+            const relativeY = y - pivotY;
+            const moved = {
+                x: Math.round(pivotX + cos * relativeX - sin * relativeY),
+                y: Math.round(pivotY + sin * relativeX + cos * relativeY),
+            };
+            if (2 * moved.x < original.width
+                || 2 * moved.x > 7000 - original.width
+                || 2 * moved.y < original.width
+                || 2 * moved.y > 9000 - original.width) {
+                throw new Error("Rotated path pen contour clips glyph cell");
+            }
+            return moved;
+        };
+        const start = rotate(original.x1, original.y1);
+        const end = rotate(original.x2, original.y2);
+        const rotated = validateStroke({ ...original,
+            x1: start.x, y1: start.y, x2: end.x, y2: end.y,
+        });
+        changed ||= rotated.x1 !== original.x1
+            || rotated.y1 !== original.y1
+            || rotated.x2 !== original.x2 || rotated.y2 !== original.y2;
+        next[index] = rotated;
+    }
+    if (!changed)
+        throw new Error("Path rotation does not change selected ink");
+    encodeGlyphLibrary(next);
+    return { strokes: next, selectedIndex };
+}
 // Resize a continuous path around its original first directed endpoint.
 // Both axes share the same rounded joint coordinates as the native CLI.
 export function scaleCandidatePath(strokes, grapheme, selectedIndex, xPercent, yPercent) {
@@ -4327,6 +4387,10 @@ export function createGlyphStrokeEditor() {
     const closePath = required("glyph-path-close");
     const translatePath = required("glyph-path-translate");
     const scalePath = required("glyph-path-scale");
+    const rotatePath = required("glyph-path-rotate");
+    const pathRotateDegrees = required("glyph-path-rotate-degrees");
+    const pathRotatePivotX = required("glyph-path-rotate-pivot-x");
+    const pathRotatePivotY = required("glyph-path-rotate-pivot-y");
     const reflectPath = required("glyph-path-reflect");
     const pathReflectAxis = required("glyph-path-reflect-axis");
     const pathReflectPivot = required("glyph-path-reflect-pivot");
@@ -4387,6 +4451,7 @@ export function createGlyphStrokeEditor() {
         reversePath,
         startPath, closePath,
         translatePath, scalePath, stylePath, removePath,
+        rotatePath, pathRotateDegrees, pathRotatePivotX, pathRotatePivotY,
         reflectPath, pathReflectAxis, pathReflectPivot,
         copyPath, copyShiftedPath, pathCopyTarget,
         pathDx, pathDy, pathScaleX, pathScaleY,
@@ -5555,6 +5620,7 @@ export function createGlyphStrokeEditor() {
             || closureGap > 1200 * 1200 || strokes.length >= MAX_STROKES;
         translatePath.disabled = !active || !chosenPath;
         scalePath.disabled = !active || drawing !== null || !chosenPath;
+        rotatePath.disabled = !active || drawing !== null || !chosenPath;
         reflectPath.disabled = !active || drawing !== null || !chosenPath;
         stylePath.disabled = !active || drawing !== null || !chosenPath;
         removePath.disabled = !active || drawing !== null || !chosenPath
@@ -6677,6 +6743,18 @@ export function createGlyphStrokeEditor() {
             const changed = translateCandidatePath(strokes, character.value, selectedIndex, signed(pathDx.value, 3500), signed(pathDy.value, 4500));
             commitInkEdit(changed.strokes, character.value, "pen path move", changed.selectedIndex);
             message("Translated selected continuous pen path; unsaved");
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    rotatePath.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null)
+            return;
+        try {
+            const changed = rotateCandidatePath(strokes, character.value, selectedIndex, decimalWhole(pathRotateDegrees.value, true), decimalWhole(pathRotatePivotX.value), decimalWhole(pathRotatePivotY.value));
+            commitInkEdit(changed.strokes, character.value, "pen path rotation", changed.selectedIndex);
+            message("Rotated selected continuous pen path; unsaved");
         }
         catch (error) {
             message(String(error));

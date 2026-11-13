@@ -1563,6 +1563,26 @@
               Shared joints remain connected; an unchanged scale, clipped pen
               contour or collapsed segment refuses. Undo before TSV download
               to restore the original geometry.</p>
+            <label>Selected path rotation (clockwise degrees)
+              <input id="glyph-path-rotate-degrees" type="number" min="-20"
+                max="20" step="1" value="10" disabled>
+            </label>
+            <label>Selected path rotation pivot X (µm)
+              <input id="glyph-path-rotate-pivot-x" type="number" min="0"
+                max="3500" step="1" value="1750" disabled>
+            </label>
+            <label>Selected path rotation pivot Y (µm)
+              <input id="glyph-path-rotate-pivot-y" type="number" min="0"
+                max="4500" step="1" value="2250" disabled>
+            </label>
+            <button id="glyph-path-rotate" type="button" disabled>
+              Rotate selected continuous pen path (undoable)
+            </button>
+            <p class="field-help">Only the selected continuous path rotates
+              around the chosen pivot, by a nonzero whole degree from -20 to
+              20. Shared directed joints remain intact; collapsed strokes,
+              clipping and unchanged rounding refuse before editing. Other
+              glyphs remain untouched. Download TSV explicitly to save.</p>
             <label>Reflect selected path across coordinate
               <select id="glyph-path-reflect-axis" disabled>
                 <option value="x">Vertical axis (X, left/right)</option>

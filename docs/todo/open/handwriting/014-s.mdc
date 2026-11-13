@@ -1393,3 +1393,33 @@ refused browser and real Rust native results byte-for-byte.
 The operation changes concrete v1 line geometry only, without creating
 persistent pen lifts, analytic curve primitives or learned cursive.
 The full two-line correlated penmanship acceptance remains open.
+
+## Explicit selected-path clockwise rotation (partial) — 2026-11-13
+
+The localhost glyph editor now rotates only the inferred continuous pen path
+containing the selected authored stroke, by a nonzero whole angle of -20..20
+degrees about explicit bounded X/Y micrometre pivots. The existing native
+`--rotate-path` changes a closed loop's starting segment; the distinct Rust
+`--rotate-path-ink GRAPHEME PATH_INDEX DEG PIVOT_X_UM PIVOT_Y_UM` changes
+actual pen geometry. Neither operation alters the source library without an
+explicit output. Invalid paths, clipping of any complete round pen cap,
+collapsed segments and rounded no-ops refuse atomically.
+
+Both implementations use matching directed endpoint rounding and preserve
+shared joints, interleaved exact NFC/NFD Unicode identities, all unselected
+paths and pen style. The browser records one bounded undoable in-memory edit
+and saves TSV only on deliberate download. The native command validates
+operands before reading an unclosed selected stdin and preserves existing
+output targets on refusal.
+
+Three native regressions verify saved/reopened exact TSV, real PDF/transparent
+PNG parity against independently entered ink, closed loops, the full 4,096
+stroke budget, and refusal without replacing an approved output. Four
+browser tests cover exact joints, identity isolation, geometry boundaries,
+closed paths, capacity, selection, deliberate TSV export and Undo/Redo. A
+separate 256-case production browser-versus-Rust subprocess oracle checks
+byte-identical accepted output and fail-closed invalid inputs.
+
+This is a manual edit of sampled TSV v1 lines. It does not create persistent
+pen-lift identities, Bézier contours, learned cursive connections or the
+full P1-014 correlated penmanship acceptance.

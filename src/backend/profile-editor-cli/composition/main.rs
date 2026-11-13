@@ -109,6 +109,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--translate-path GRAPHEME PATH_INDEX DX_UM DY_UM] \
     [--scale-path GRAPHEME PATH_INDEX X_PERCENT Y_PERCENT] \
     [--reflect-path GRAPHEME PATH_INDEX x|y PIVOT_UM] \
+    [--rotate-path-ink GRAPHEME PATH_INDEX DEG PIVOT_X_UM PIVOT_Y_UM] \
     [--style-path GRAPHEME PATH_INDEX WIDTH_UM #RRGGBB] \
     [--remove-path GRAPHEME PATH_INDEX] \
     [--shear-glyph GRAPHEME ANGLE_DEG BASELINE_Y_UM] \
@@ -149,6 +150,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     --translate-path moves one path using bounded signed micrometres.\n\
     --scale-path resizes around the selected path's first endpoint.\n\
     --reflect-path mirrors a selected path, preserving directed joints.\n\
+    --rotate-path-ink turns one path clockwise around X/Y coordinates.\n\
     --shear-glyph slants all exact-glyph pen segments 0..20 degrees.\n\
     --scale-glyph-height rescales exact-glyph Y about the baseline.\n\
     --scale-glyph-width rescales exact-glyph X about the anchor.\n\
@@ -1466,6 +1468,7 @@ fn preflight_glyph_typed_option(
 ) -> Result<bool, String> {
     let count = match option {
         "--glyph-stroke" => 7,
+        "--rotate-path-ink" => 5,
         "--set-stroke" => 8,
         "--translate-path" | "--style-path" | "--scale-path"
         | "--reflect-path" | "--rotate-glyph" => 4,
@@ -1490,7 +1493,8 @@ fn preflight_glyph_typed_option(
         | "--remove-stroke" | "--reverse-path"
         | "--close-path" | "--rotate-path" | "--move-path"
         | "--translate-path" | "--style-path" | "--scale-path"
-        | "--reflect-path" | "--remove-path" =>
+        | "--reflect-path" | "--remove-path"
+        | "--rotate-path-ink" =>
             GlyphOverlay::preflight_stroke_or_path_edit(option, iter)?,
         _ => GlyphOverlay::preflight_transform_option(option, iter)?,
     }
@@ -1645,7 +1649,8 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                 glyphs.edit_stroke(option, &mut iter)?,
             "--reverse-path" | "--rotate-path" | "--close-path" | "--move-path"
             | "--translate-path" | "--style-path" | "--scale-path"
-            | "--reflect-path" | "--remove-path" =>
+            | "--reflect-path" | "--remove-path"
+            | "--rotate-path-ink" =>
                 glyphs.edit_path(option, &mut iter)?,
             "--remove-glyph" => {
                 let grapheme = iter.next()

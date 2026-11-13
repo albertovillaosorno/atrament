@@ -18272,3 +18272,208 @@ fn native_path_reflection_keeps_closed_loops_and_full_stroke_budget() {
         "ñ\t1500\t1500\t2000\t2000\t251\t#445566\n"));
     fs::remove_file(source).expect("remove test fixture");
 }
+
+#[test]
+fn native_selected_path_clockwise_rotation_keeps_exact_ink_and_exports() {
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source path");
+    let output_name = output.to_str().expect("output path");
+    let nfd = "n\u{303}";
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "500", "700", "900", "1200",
+        "251", "#112233",
+        "--glyph-stroke", "ñ", "2200", "600", "2200", "3300",
+        "300", "#778899",
+        "--glyph-stroke", nfd, "900", "1200", "1400", "1900",
+        "251", "#112233",
+        "--glyph-stroke", "∞", "800", "800", "1700", "1500",
+        "200", "#445566",
+        "--glyph-stroke", nfd, "2200", "2500", "2700", "3000",
+        "200", "#445566",
+    ])).expect("authored source").expect("TSV bytes");
+    fs::write(&source, &original).expect("save source");
+    let command = args(&[
+        "--profile", source_name,
+        "--rotate-path-ink", nfd, "1", "20", "1750", "2250",
+    ]);
+    let rotated = execute_glyph_library(&command)
+        .expect("rotated path").expect("TSV");
+    let expected = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "n\u{303}\t1106\t366\t1310\t973\t251\t#112233\n",
+        "ñ\t2200\t600\t2200\t3300\t300\t#778899\n",
+        "n\u{303}\t1310\t973\t1541\t1801\t251\t#112233\n",
+        "∞\t800\t800\t1700\t1500\t200\t#445566\n",
+        "n\u{303}\t2200\t2500\t2700\t3000\t200\t#445566\n",
+    );
+    assert_eq!(rotated, expected.as_bytes());
+    let inspector = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--rotate-path-ink", nfd, "1", "20", "1750", "2250",
+        "--inspect-paths", nfd,
+    ])).expect("inspect rotated path").expect("report");
+    assert!(String::from_utf8_lossy(&inspector)
+        .contains("Strokes: 3\nPaths: 2\nPen lifts: 1"));
+    let mut save = command;
+    save.extend(args(&["--output", output_name]));
+    assert!(execute_glyph_library(&save).expect("write TSV").is_none());
+    assert_eq!(fs::read(&source).expect("source unchanged"), original);
+    assert_eq!(fs::read(&output).expect("saved TSV"), rotated);
+    for format in ["pdf", "png"] {
+        let mut saved = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", output_name,
+            "--place-text", "1", "30000", "45000", "ñn\u{303}",
+        ]);
+        let mut direct = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", "ñ", "2200", "600", "2200", "3300",
+            "300", "#778899",
+            "--glyph-stroke", nfd, "1106", "366", "1310", "973",
+            "251", "#112233",
+            "--glyph-stroke", nfd, "1310", "973", "1541", "1801",
+            "251", "#112233",
+            "--glyph-stroke", nfd, "2200", "2500", "2700", "3000",
+            "200", "#445566",
+            "--place-text", "1", "30000", "45000", "ñn\u{303}",
+        ]);
+        if format == "png" {
+            saved.extend(args(&["--dpi", "72"]));
+            direct.extend(args(&["--dpi", "72"]));
+        }
+        assert_eq!(execute_notebook(&saved)
+            .expect("saved native output").expect("bytes"),
+            execute_notebook(&direct)
+                .expect("independent native ink").expect("bytes"),
+            "selected path clockwise rotation {format} parity");
+    }
+    fs::remove_file(source).expect("remove owned source");
+    fs::remove_file(output).expect("remove owned output");
+}
+
+#[test]
+fn native_selected_path_rotation_refuses_without_overwriting() {
+    for flags in [
+        args(&["--profile", "-", "--rotate-path-ink"]),
+        args(&["--profile", "-", "--rotate-path-ink", "ñ"]),
+        args(&["--profile", "-", "--rotate-path-ink", "ñ", "1"]),
+        args(&["--profile", "-", "--rotate-path-ink", "ñ", "1", "10"]),
+        args(&["--profile", "-", "--rotate-path-ink", "ñ", "1", "10",
+            "1750"]),
+    ] {
+        let error = preflight_glyph_profile_sources(&flags)
+            .expect_err("incomplete path rotation before stdin");
+        assert!(error.contains("--rotate-path-ink requires 5 operands"),
+            "{error}");
+    }
+    for (glyph, index, angle, x, y) in [
+        ("ñ", "0", "10", "1750", "2250"),
+        ("ñ", "4097", "10", "1750", "2250"),
+        ("ab", "1", "10", "1750", "2250"),
+        ("ñ", "1", "0", "1750", "2250"),
+        ("ñ", "1", "21", "1750", "2250"),
+        ("ñ", "1", "-21", "1750", "2250"),
+        ("ñ", "1", "+10", "1750", "2250"),
+        ("ñ", "1", "1.5", "1750", "2250"),
+        ("ñ", "1", "10", "-1", "2250"),
+        ("ñ", "1", "10", "3501", "2250"),
+        ("ñ", "1", "10", "1750", "4501"),
+        ("ñ", "1", "10", "1750", "1.5"),
+    ] {
+        assert!(preflight_glyph_profile_sources(&args(&[
+            "--profile", "-", "--rotate-path-ink", glyph,
+            index, angle, x, y,
+        ])).is_err(), "{glyph} {index} {angle} {x} {y}");
+    }
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source");
+    let output_name = output.to_str().expect("target");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "500", "700", "900", "1200",
+        "251", "#112233",
+        "--glyph-stroke", "∞", "800", "800", "1700", "1500",
+        "200", "#445566",
+    ])).expect("source").expect("ink");
+    fs::write(&source, &original).expect("save source");
+    fs::write(&output, b"approved TSV sentinel").expect("save sentinel");
+    for (key, index, angle, x, y, reason) in [
+        ("ñ", "1", "20", "3500", "4500", "clips"),
+        ("ñ", "2", "10", "1750", "2250", "path index"),
+        ("á", "1", "10", "1750", "2250", "no authored strokes"),
+    ] {
+        let error = execute_glyph_library(&args(&[
+            "--profile", source_name, "--rotate-path-ink",
+            key, index, angle, x, y,
+            "--output", output_name, "--replace",
+        ])).expect_err("bad rotation must refuse without file changes");
+        assert!(error.contains(reason), "{error}");
+        assert_eq!(fs::read(&source).expect("unchanged source"), original);
+        assert_eq!(fs::read(&output).expect("unchanged output"),
+            b"approved TSV sentinel");
+    }
+    let unchanged = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "1750", "2250", "1751", "2250",
+        "80", "#112233",
+        "--rotate-path-ink", "ñ", "1", "1", "1750", "2250",
+    ])).expect_err("rounded no-op refuses");
+    assert!(unchanged.contains("does not change"), "{unchanged}");
+    assert_eq!(fs::read(&source).expect("source still unchanged"), original);
+    assert_eq!(fs::read(&output).expect("sentinel still unchanged"),
+        b"approved TSV sentinel");
+    fs::remove_file(source).expect("remove owned source");
+    fs::remove_file(output).expect("remove owned output");
+}
+
+#[test]
+fn native_selected_path_rotation_keeps_closed_and_full_budget_ink() {
+    let nfd = "n\u{303}";
+    let loop_rows = args(&[
+        "--glyph-stroke", nfd, "1000", "1000", "1400", "1000",
+        "200", "#112233",
+        "--glyph-stroke", "ñ", "1000", "1000", "1100", "1200",
+        "200", "#445566",
+        "--glyph-stroke", nfd, "1400", "1000", "1400", "1400",
+        "200", "#112233",
+        "--glyph-stroke", nfd, "1400", "1400", "1000", "1400",
+        "200", "#112233",
+        "--glyph-stroke", nfd, "1000", "1400", "1000", "1000",
+        "200", "#112233",
+        "--rotate-path-ink", nfd, "1", "15", "1750", "2250",
+        "--inspect-paths", nfd,
+    ]);
+    let inspected = execute_glyph_library(&loop_rows)
+        .expect("rotated closed path").expect("inspector");
+    let report = String::from_utf8(inspected).expect("UTF-8");
+    assert!(report.contains("Strokes: 4\nPaths: 1\nPen lifts: 0"),
+        "{report}");
+    assert!(report.contains("(1349, 848) -> (1349, 848)"),
+        "closed path remains closed: {report}");
+    let source = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source name");
+    let mut authored = String::from("atrament.glyph-strokes.v1\n");
+    for index in 0..4096 {
+        let from = 1000 + 2 * (index % 2);
+        let to = 1000 + 2 * ((index + 1) % 2);
+        authored.push_str(&format!(
+            "n\u{303}\t{from}\t1000\t{to}\t1000\t200\t#112233\n",
+        ));
+    }
+    fs::write(&source, authored.as_bytes()).expect("save full library");
+    let edited = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--rotate-path-ink", nfd, "1", "20", "1750", "2250",
+    ])).expect("rotate full path").expect("TSV");
+    assert_eq!(edited.iter().filter(|byte| **byte == b'\n').count(), 4097);
+    let inspected_full = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--rotate-path-ink", nfd, "1", "20", "1750", "2250",
+        "--inspect-paths", nfd,
+    ])).expect("inspector").expect("report");
+    assert!(String::from_utf8_lossy(&inspected_full)
+        .contains("Strokes: 4096\nPaths: 1\nPen lifts: 0"));
+    assert_eq!(fs::read(&source).expect("unmodified source"),
+        authored.as_bytes());
+    fs::remove_file(source).expect("remove owned source");
+}

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
     encodeGlyphLibrary, styleCandidatePath, removeCandidatePath,
-    scaleCandidatePath, reflectCandidatePath }
+    scaleCandidatePath, reflectCandidatePath, rotateCandidatePath }
 // jig-ignore-next-line: static ESM import needs a literal path.
     from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -614,4 +614,104 @@ test('256 real Rust and browser selected-path reflections agree on TSV',
         }
         assert.ok(accepted > 65, `accepted mirrors: ${accepted}`);
         assert.ok(refused > 65, `refused mirrors: ${refused}`);
+    });
+
+// Compare one selected path's clockwise whole-micrometre rotation with the
+// native CLI, rather than trusting only browser and Rust unit-test fixtures.
+// Keep interleaved NFC/NFD and same-glyph unselected paths in every sample.
+test('256 real Rust and browser selected-path rotations agree on TSV',
+    { timeout: 90_000 }, () => {
+        const built = spawnSync(cargo, [
+            'build', '--locked', '--offline', '--quiet',
+            '-p', 'atrament_profile_editor_cli', '--bin', 'atrament-profiles',
+        ], { cwd: root, encoding: 'utf8', timeout: 90_000,
+            env: { ...process.env, TMPDIR: join(root, '.temp') } });
+        assert.equal(built.error, undefined, built.error?.message);
+        assert.equal(built.status, 0, built.stderr);
+        const pick = random(0xC0F1_AE17);
+        let accepted = 0;
+        let refused = 0;
+        for (let sample = 0; sample < 256; sample += 1) {
+            const key = sample % 2 === 0 ? 'ñ' : 'n\u0303';
+            const other = key === 'ñ' ? 'n\u0303' : 'ñ';
+            const mode = sample % 16;
+            const first = stroke(pick, key, '#123456');
+            const second = { ...first, x1: first.x2, y1: first.y2,
+                x2: first.x2 + pick(1, 200),
+                y2: first.y2 + pick(1, 200) };
+            const detached = stroke(pick, key, '#667788');
+            let selected = mode === 15 ? 4 : 2;
+            let degrees = [10, -10, 20, -20][mode % 4];
+            let pivotX = 1750;
+            let pivotY = 2250;
+            let nativeIndex = mode === 15 ? 2 : 1;
+            if (mode === 4) {
+                degrees = 0;
+            } else if (mode === 5) {
+                degrees = 21;
+            } else if (mode === 6) {
+                degrees = -21;
+            } else if (mode === 7) {
+                pivotX = 0;
+            } else if (mode === 8) {
+                pivotY = 4500;
+            } else if (mode === 9) {
+                selected = -1;
+                nativeIndex = 0;
+            } else if (mode === 10) {
+                selected = 9999;
+                nativeIndex = 4097;
+            } else if (mode === 11) {
+                degrees = 0.5;
+            } else if (mode === 12) {
+                pivotX = 3501;
+            } else if (mode === 13) {
+                pivotY = 4501;
+            } else if (mode === 14) {
+                // A minimal stroke around its pivot must refuse a rounded
+                // no-op, rather than claim an accepted transform.
+                first.x1 = 1750;
+                first.y1 = 2250;
+                first.x2 = 1751;
+                first.y2 = 2250;
+                second.x1 = 1751;
+                second.y1 = 2250;
+                second.x2 = 1752;
+                second.y2 = 2250;
+                degrees = 1;
+                selected = 0;
+                nativeIndex = 1;
+            }
+            const source = [first, stroke(pick, other, '#AABBCC'),
+                second, stroke(pick, '∞', '#CCDDEE'), detached];
+            const original = encodeGlyphLibrary(source);
+            let expected;
+            try {
+                expected = encodeGlyphLibrary(rotateCandidatePath(
+                    source, key, selected, degrees, pivotX, pivotY).strokes);
+            } catch (error) {
+                expected = error;
+            }
+            const actual = spawnSync(binary, [
+                'glyphs', ...source.flatMap(strokeFlags),
+                '--rotate-path-ink', key, String(nativeIndex),
+                String(degrees), String(pivotX), String(pivotY),
+            ], { cwd: root, encoding: 'utf8', timeout: 2_000,
+                maxBuffer: 512 * 1024 });
+            const context = `rotated path sample=${sample} mode=${mode}`;
+            assert.equal(actual.error, undefined, context);
+            if (expected instanceof Error) {
+                refused += 1;
+                assert.notEqual(actual.status, 0, context);
+                assert.equal(actual.stdout, '', context);
+                assert.match(actual.stderr, /^Error: /, context);
+            } else {
+                accepted += 1;
+                assert.equal(actual.status, 0, context + actual.stderr);
+                assert.equal(actual.stdout, expected, context);
+            }
+            assert.equal(encodeGlyphLibrary(source), original, context);
+        }
+        assert.ok(accepted > 55, `accepted rotations: ${accepted}`);
+        assert.ok(refused > 90, `refused rotations: ${refused}`);
     });

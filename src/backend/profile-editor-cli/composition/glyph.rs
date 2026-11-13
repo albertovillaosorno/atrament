@@ -91,6 +91,61 @@ pub(super) struct GlyphVariation {
     width: u32,
 }
 
+/// Bounded clockwise glyph-cell rotation shared by whole-glyph and
+/// selected-path transforms. Keeps JS-compatible integer micrometre rounding.
+#[derive(Clone, Copy)]
+struct GlyphRotation {
+    cos: f64,
+    pivot_x: u32,
+    pivot_y: u32,
+    sin: f64,
+}
+
+impl GlyphRotation {
+    #[expect(clippy::suboptimal_flops, reason =
+        "match browser angle-to-radians arithmetic before trig")]
+    fn new(degrees: i32, pivot_x: u32, pivot_y: u32)
+        -> Result<Self, String> {
+        if degrees.unsigned_abs() > 20 || pivot_x > 3500
+            || pivot_y > 4500 {
+            return Err("glyph rotation or pivot outside native bounds".into());
+        }
+        let radians = f64::from(degrees) * PI / 180.0f64;
+        let (sin, cos) = radians.sin_cos();
+        Ok(Self { cos, pivot_x, pivot_y, sin })
+    }
+
+    #[expect(clippy::suboptimal_flops, reason =
+        "preserve JavaScript endpoint arithmetic without fused rounding")]
+    fn point(self, (x, y): (u32, u32), pen_width: u32)
+        -> Result<(u32, u32), String> {
+        let relative_x = f64::from(x) - f64::from(self.pivot_x);
+        let relative_y = f64::from(y) - f64::from(self.pivot_y);
+        let next_x = GlyphVariation::round_js(
+            f64::from(self.pivot_x) + self.cos * relative_x
+                - self.sin * relative_y,
+        )?;
+        let next_y = GlyphVariation::round_js(
+            f64::from(self.pivot_y) + self.sin * relative_x
+                + self.cos * relative_y,
+        )?;
+        let pen = i64::from(pen_width);
+        let check = |value: i32, max: i64| -> Result<u32, String> {
+            let twice = i64::from(value).checked_mul(2)
+                .ok_or("rotated pen edge overflow")?;
+            let upper = max.checked_mul(2)
+                .and_then(|limit| limit.checked_sub(pen))
+                .ok_or("rotated pen limit overflow")?;
+            if twice < pen || twice > upper {
+                return Err("rotated pen contour clips glyph cell".into());
+            }
+            u32::try_from(value)
+                .map_err(|_error| "rotated coordinate out of bounds".into())
+        };
+        Ok((check(next_x, 3500)?, check(next_y, 4500)?))
+    }
+}
+
 struct XorShift32(u32);
 
 impl GlyphVariation {
@@ -888,6 +943,18 @@ impl GlyphOverlay {
                 let dx = next_signed_path_offset(iter, "path dx", 3500)?;
                 let dy = next_signed_path_offset(iter, "path dy", 4500)?;
                 self.translate_path(grapheme, from, dx, dy)
+            }
+            "--rotate-path-ink" => {
+                let degrees = next_signed_path_offset(
+                    iter, "path rotation angle", 20,
+                )?;
+                let pivot_x = next_integer(
+                    iter, "path rotation X pivot", 0, 3500,
+                )?;
+                let pivot_y = next_integer(
+                    iter, "path rotation Y pivot", 0, 4500,
+                )?;
+                self.rotate_path_ink(grapheme, from, degrees, pivot_x, pivot_y)
             }
             "--scale-path" => {
                 let x = next_integer(iter, "path X percent", 50, 150)?;
@@ -1844,7 +1911,8 @@ impl GlyphOverlay {
         let path = matches!(flag,
             "--reverse-path" | "--close-path" | "--rotate-path"
             | "--move-path" | "--translate-path" | "--style-path"
-            | "--scale-path" | "--reflect-path" | "--remove-path",
+            | "--scale-path" | "--reflect-path" | "--remove-path"
+            | "--rotate-path-ink",
         );
         let grapheme = iter.next().ok_or(if path {
             "path edit requires an exact grapheme"
@@ -1870,6 +1938,19 @@ impl GlyphOverlay {
                             "path shift needs nonzero bounded whole um".into()
                         );
                     }
+                }
+                "--rotate-path-ink" => {
+                    let angle = next_signed_path_offset(
+                        iter, "path rotation angle", 20,
+                    )?;
+                    let x = next_integer(iter, "path rotation X pivot",
+                        0, 3500)?;
+                    let y = next_integer(iter, "path rotation Y pivot",
+                        0, 4500)?;
+                    if angle == 0i32 {
+                        return Err("path rotation needs nonzero angle".into());
+                    }
+                    let _rotation = GlyphRotation::new(angle, x, y)?;
                 }
                 "--scale-path" => {
                     let x = next_integer(iter, "path X percent", 50, 150)?;
@@ -2141,57 +2222,19 @@ impl GlyphOverlay {
     /// Rotate all ordered segments of an exact glyph clockwise in physical
     /// page coordinates, using browser-compatible integer rounding.
     /// Refuse the entire transformation before modifying any canonical ink.
-    #[expect(clippy::suboptimal_flops, reason =
-        "match browser angle-to-radians arithmetic before trig")]
     pub(super) fn rotate_glyph(
         &mut self, grapheme: &str, degrees: i32,
         pivot_x: u32, pivot_y: u32,
     ) -> Result<(), String> {
-        if degrees.unsigned_abs() > 20 || pivot_x > 3500
-            || pivot_y > 4500 {
-            return Err("glyph rotation or pivot outside native bounds".into());
-        }
+        let rotation = GlyphRotation::new(degrees, pivot_x, pivot_y)?;
         let positions = self.matching_stroke_positions(grapheme)?;
         if degrees == 0i32 { return Ok(()); }
-        let radians = f64::from(degrees) * PI / 180.0f64;
-        let (sin, cos) = radians.sin_cos();
         let mut revised = self.strokes.clone();
         for position in positions {
             let stroke = revised.get_mut(position)
                 .ok_or("glyph stroke outside library")?;
-            let rotate = |(x, y): (u32, u32)|
-                -> Result<(u32, u32), String> {
-                let relative_x = f64::from(x) - f64::from(pivot_x);
-                let relative_y = f64::from(y) - f64::from(pivot_y);
-                let next_x = GlyphVariation::round_js(
-                    f64::from(pivot_x) + cos * relative_x
-                        - sin * relative_y,
-                )?;
-                let next_y = GlyphVariation::round_js(
-                    f64::from(pivot_y) + sin * relative_x
-                        + cos * relative_y,
-                )?;
-                let pen = i64::from(stroke.width_um);
-                let check = |value: i32, max: i64| -> Result<u32, String> {
-                    let twice = i64::from(value).checked_mul(2)
-                        .ok_or("rotated pen edge overflow")?;
-                    let upper = max.checked_mul(2)
-                        .and_then(|limit| limit.checked_sub(pen))
-                        .ok_or("rotated pen limit overflow")?;
-                    if twice < pen || twice > upper {
-                        return Err(
-                            "rotated pen contour clips glyph cell".into()
-                        );
-                    }
-                    u32::try_from(value)
-                        .map_err(|_error| {
-                            "rotated coordinate out of bounds".into()
-                        })
-                };
-                Ok((check(next_x, 3500)?, check(next_y, 4500)?))
-            };
-            let start = rotate(stroke.start_um)?;
-            let end = rotate(stroke.end_um)?;
+            let start = rotation.point(stroke.start_um, stroke.width_um)?;
+            let end = rotation.point(stroke.end_um, stroke.width_um)?;
             if start == end {
                 return Err("glyph rotation collapses a pen segment".into());
             }
@@ -2329,6 +2372,47 @@ impl GlyphOverlay {
         for (position, stroke) in slots.iter().zip(rotated) {
             *self.strokes.get_mut(*position)
                 .ok_or("path segment outside library")? = stroke;
+        }
+        Ok(())
+    }
+
+    /// Rotate one inferred directed pen path clockwise in the same bounded
+    /// physical cell as whole-glyph rotation. All joints use identical rounded
+    /// coordinates while other paths keep their exact authored strokes.
+    pub(super) fn rotate_path_ink(
+        &mut self, grapheme: &str, ordinal: u32, degrees: i32,
+        pivot_x: u32, pivot_y: u32,
+    ) -> Result<(), String> {
+        let rotation = GlyphRotation::new(degrees, pivot_x, pivot_y)?;
+        if degrees == 0i32 {
+            return Err("path rotation needs nonzero angle".into());
+        }
+        let (positions, paths) = self.selected_candidate_paths(grapheme)?;
+        let index = checked_path_position(&paths, ordinal)?;
+        let path = paths.get(index).ok_or("path index outside bounds")?;
+        let slots = positions.get(path.clone())
+            .ok_or("path range outside glyph")?;
+        let mut revised = self.strokes.clone();
+        let mut changed = false;
+        for selected in slots {
+            let stroke = revised.get_mut(*selected)
+                .ok_or("path segment outside library")?;
+            let start = rotation.point(stroke.start_um, stroke.width_um)?;
+            let end = rotation.point(stroke.end_um, stroke.width_um)?;
+            if start == end {
+                return Err("path rotation collapses a pen segment".into());
+            }
+            changed |= start != stroke.start_um || end != stroke.end_um;
+            stroke.start_um = start;
+            stroke.end_um = end;
+        }
+        if !changed {
+            return Err("path rotation does not change selected ink".into());
+        }
+        let original = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = original;
+            return Err(error);
         }
         Ok(())
     }

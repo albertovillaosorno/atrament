@@ -651,6 +651,70 @@ export function reflectCandidatePath(
     return { strokes: next, selectedIndex };
 }
 
+// Rotate one selected continuous path around a caller-selected physical pivot.
+// The same rounded joint coordinates keep its directed segments connected;
+// other paths (even of the same Unicode glyph) retain their original bytes.
+export function rotateCandidatePath(
+    strokes: readonly Stroke[], grapheme: string, selectedIndex: number,
+    degrees: number, pivotX: number, pivotY: number,
+): { strokes: Stroke[]; selectedIndex: number } {
+    if (!exactGrapheme(grapheme)
+        || !Number.isSafeInteger(selectedIndex) || selectedIndex < 0
+        || strokes[selectedIndex]?.grapheme !== grapheme) {
+        throw new Error("Path rotation needs a selected exact glyph stroke");
+    }
+    if (!Number.isSafeInteger(degrees) || degrees === 0
+        || Math.abs(degrees) > 20
+        || !Number.isSafeInteger(pivotX) || pivotX < 0 || pivotX > 3500
+        || !Number.isSafeInteger(pivotY) || pivotY < 0 || pivotY > 4500) {
+        throw new Error("Path rotation needs nonzero -20..20°"
+            + " and bounded pivot");
+    }
+    encodeGlyphLibrary([...strokes]);
+    const positions = strokes.flatMap((stroke, index) =>
+        stroke.grapheme === grapheme ? [index] : []);
+    const ordinal = positions.indexOf(selectedIndex) + 1;
+    const path = candidatePenPaths(strokes, grapheme).find((candidate) =>
+        ordinal >= candidate.first && ordinal <= candidate.last);
+    if (!path) throw new Error("Selected glyph has no candidate pen path");
+    const slots = positions.slice(path.first - 1, path.last);
+    const radians = degrees * Math.PI / 180;
+    const sin = Math.sin(radians);
+    const cos = Math.cos(radians);
+    const next = strokes.slice();
+    let changed = false;
+    for (const index of slots) {
+        const original = strokes[index]!;
+        const rotate = (x: number, y: number): Point => {
+            const relativeX = x - pivotX;
+            const relativeY = y - pivotY;
+            const moved = {
+                x: Math.round(pivotX + cos * relativeX - sin * relativeY),
+                y: Math.round(pivotY + sin * relativeX + cos * relativeY),
+            };
+            if (2 * moved.x < original.width
+                || 2 * moved.x > 7000 - original.width
+                || 2 * moved.y < original.width
+                || 2 * moved.y > 9000 - original.width) {
+                throw new Error("Rotated path pen contour clips glyph cell");
+            }
+            return moved;
+        };
+        const start = rotate(original.x1, original.y1);
+        const end = rotate(original.x2, original.y2);
+        const rotated = validateStroke({ ...original,
+            x1: start.x, y1: start.y, x2: end.x, y2: end.y,
+        });
+        changed ||= rotated.x1 !== original.x1
+            || rotated.y1 !== original.y1
+            || rotated.x2 !== original.x2 || rotated.y2 !== original.y2;
+        next[index] = rotated;
+    }
+    if (!changed) throw new Error("Path rotation does not change selected ink");
+    encodeGlyphLibrary(next);
+    return { strokes: next, selectedIndex };
+}
+
 // Resize a continuous path around its original first directed endpoint.
 // Both axes share the same rounded joint coordinates as the native CLI.
 export function scaleCandidatePath(
@@ -4541,6 +4605,13 @@ export function createGlyphStrokeEditor(): {
     const closePath = required<HTMLButtonElement>("glyph-path-close");
     const translatePath = required<HTMLButtonElement>("glyph-path-translate");
     const scalePath = required<HTMLButtonElement>("glyph-path-scale");
+    const rotatePath = required<HTMLButtonElement>("glyph-path-rotate");
+    const pathRotateDegrees =
+        required<HTMLInputElement>("glyph-path-rotate-degrees");
+    const pathRotatePivotX =
+        required<HTMLInputElement>("glyph-path-rotate-pivot-x");
+    const pathRotatePivotY =
+        required<HTMLInputElement>("glyph-path-rotate-pivot-y");
     const reflectPath = required<HTMLButtonElement>("glyph-path-reflect");
     const pathReflectAxis =
         required<HTMLSelectElement>("glyph-path-reflect-axis");
@@ -4612,6 +4683,7 @@ export function createGlyphStrokeEditor(): {
         reversePath,
         startPath, closePath,
         translatePath, scalePath, stylePath, removePath,
+        rotatePath, pathRotateDegrees, pathRotatePivotX, pathRotatePivotY,
         reflectPath, pathReflectAxis, pathReflectPivot,
         copyPath, copyShiftedPath, pathCopyTarget,
         pathDx, pathDy, pathScaleX, pathScaleY,
@@ -4644,6 +4716,7 @@ export function createGlyphStrokeEditor(): {
         | "pen path direction" | "pen path start"
         | "pen path closure" | "pen path copy" | "pen path move"
         | "pen path shifted copy" | "pen path pen style"
+        | "pen path rotation"
         | "pen path removal" | "pen path scale" | "pen path reflection"
         | "pen path order" | "pen connection"
         | "stroke removal" | "glyph clear" | "starter replacement"
@@ -5846,6 +5919,7 @@ export function createGlyphStrokeEditor(): {
             || closureGap > 1200 * 1200 || strokes.length >= MAX_STROKES;
         translatePath.disabled = !active || !chosenPath;
         scalePath.disabled = !active || drawing !== null || !chosenPath;
+        rotatePath.disabled = !active || drawing !== null || !chosenPath;
         reflectPath.disabled = !active || drawing !== null || !chosenPath;
         stylePath.disabled = !active || drawing !== null || !chosenPath;
         removePath.disabled = !active || drawing !== null || !chosenPath
@@ -6932,6 +7006,22 @@ export function createGlyphStrokeEditor(): {
             commitInkEdit(changed.strokes, character.value,
                 "pen path move", changed.selectedIndex);
             message("Translated selected continuous pen path; unsaved");
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    rotatePath.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null) return;
+        try {
+            const changed = rotateCandidatePath(
+                strokes, character.value, selectedIndex,
+                decimalWhole(pathRotateDegrees.value, true),
+                decimalWhole(pathRotatePivotX.value),
+                decimalWhole(pathRotatePivotY.value),
+            );
+            commitInkEdit(changed.strokes, character.value,
+                "pen path rotation", changed.selectedIndex);
+            message("Rotated selected continuous pen path; unsaved");
         } catch (error) {
             message(String(error));
         }

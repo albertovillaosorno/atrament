@@ -2518,6 +2518,28 @@ existing output.
 Reflecting again about the same axis restores the exact v1 TSV bytes;
 there is still no saved pen-lift identity or analytic curve.
 
+**Rotate selected continuous pen path** turns only the connected path
+containing the selected stroke around explicit integer X/Y micrometre pivots,
+clockwise in physical page coordinates. The localhost editor accepts a nonzero
+whole angle from -20 to 20 degrees, preserves shared rounded joints and all
+other paths, and records one unsaved Undo/Redo step. The native equivalent is:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile ink.tsv --rotate-path-ink 'ñ' 1 20 1750 2250 \
+  --output rotated.tsv
+```
+
+Choose the current one-based connected path number from `--inspect-paths`.
+Unlike the pre-existing `--rotate-path` (which changes the first stroke of a
+closed loop), `--rotate-path-ink` changes actual pen geometry. Pivots must be
+within X 0–3500 and Y 0–4500 µm. Full round pen caps must remain inside the
+cell; collapsed segments, rounded no-ops, invalid selections and clipping
+refuse without changing the source or existing output. Unicode NFC/NFD keys
+and other same-glyph paths remain distinct. The CLI and browser agree across
+256 deterministic accepted/refused exact TSV cases. No path metadata or
+synthetic handwriting is persisted by this editing action.
+
 **Apply pen width and color to selected continuous path** updates only the
 selected exact Unicode grapheme's inferred, connected pen path. The browser
 uses the existing **Pen width** and **Ink color** fields, records one bounded
