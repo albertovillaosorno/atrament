@@ -471,3 +471,49 @@ fn printable_rectangle_tracks_selected_native_paper_margins() {
     assert!(profile.printable_rect_um().is_err(),
         "invalid native paper must refuse rather than return stale bounds");
 }
+
+#[test]
+fn notebook_ruler_selection_is_export_only_and_profile_stays_canonical() {
+    let mut profile = NotebookProfile::default();
+    profile.page_numbers = true;
+    let original = profile.canonical_json().expect("canonical metadata");
+    let ruler = RulerVariation::from_decimal_mm("17", "0.075")
+        .expect("bounded decimal selection");
+    let legacy = profile.paper_layer_pdf_with_ink(2, &[])
+        .expect("legacy rendered paper and page numbers");
+    assert_eq!(legacy, profile.paper_layer_pdf_with_ink_ruler(2, &[], None)
+        .expect("unselected ruler preserves legacy bytes"));
+    let varied = profile.paper_layer_pdf_with_ink_ruler(2, &[], Some(ruler))
+        .expect("seeded page-specific paper");
+    assert_ne!(varied, legacy);
+    assert!(String::from_utf8_lossy(&varied).contains("/Count 2"));
+    let png = profile.paper_layer_png_page_with_ink_ruler(
+        72, 2, &[], Some(ruler),
+    ).expect("seeded second-page raster");
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_ne!(png, profile.paper_layer_png_page_with_ink(72, 2, &[])
+        .expect("legacy selected page"));
+    assert_eq!(original, profile.canonical_json().expect("v1 unchanged"));
+    let mut decorated = profile.clone();
+    decorated.date_style = DateStyle::Line;
+    decorated.date_placement = DatePlacement::TopLeft;
+    decorated.date_text = "2026-11-13".into();
+    decorated.border_radius_um = 2_000;
+    let decorated_pdf = decorated.paper_layer_pdf_with_ink_ruler(
+        2, &[], Some(ruler),
+    ).expect("date and rounded border coexist with varied paper");
+    assert_ne!(decorated_pdf, varied);
+    let decorated_png = decorated.paper_layer_png_page_with_ink_ruler(
+        72, 2, &[], Some(ruler),
+    ).expect("date and border remain valid in selected PNG");
+    assert_ne!(decorated_png, png);
+    assert_eq!(decorated.canonical_json().expect("decorated saved metadata"),
+        NotebookProfile::from_json(decorated.canonical_json()
+            .expect("canonical decorated").as_bytes())
+            .expect("reopened decorated profile").canonical_json()
+            .expect("same decorated profile"));
+    profile.printed_sheet = true;
+    assert!(profile.paper_layer_pdf_with_ink_ruler(2, &[], Some(ruler))
+        .expect_err("preprinted sheet has no ruling to vary")
+        .contains("ruler variation requires printed paper marks"));
+}

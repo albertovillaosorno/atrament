@@ -336,6 +336,28 @@ and existing loaded-profile PDF/PNG parity tests preserve profile-relative
 orientation and physical dimensions. This is bounded CLI admission, not the
 requested persisted full notebook body or image overlay rendering.
 
+## Seeded ruler sampling under native notebook ink (partial) — 2026-11-13
+
+The native `atrament-profiles notebook` PDF/PNG export now supports the same
+paired export-only `--ruler-seed UINT32 --ruler-error-mm 0.001..0.250`
+selection as the paper CLI. Both formats sample the same bounded physical
+rule geometry on ruled or grid stationery, before rendering the selected
+notebook date, rounded border, page numbers and caller-authored ink.
+Each PDF sheet uses its own page-indexed hash; `--png-page N` renders the
+same variation for that individual sheet. Nothing is inserted into the
+versioned notebook/paper JSON or changed on an unselected export.
+
+Native Rust tests verify unchanged legacy PDF/PNG bytes for no selection,
+different seeded outputs, deterministic replay, distinct two-page ruling,
+real handwritten flow and manually authored page-2 ink, and no overwrite
+when variation is refused for preprinted sheets. Preflight rejects malformed,
+missing or duplicate options before opening caller-selected input files.
+The existing physical page, mark and ink budgets remain authoritative.
+
+This is synthetic bounded paper imperfection beneath *explicit* authored ink,
+not measured ruler sampling, full saved notebook content, image embedding,
+shape inference, or completion of P5-011.
+
 ## Refuse physical paper edge clipping in PNG — 2026-11-11
 
 The native paper compositor now uses the PDF serializer's page-bound check

@@ -70,6 +70,7 @@ use atrament_handwriting_statistics_json::{
 };
 use atrament_notebook_paper_cli::{
     MAX_NOTEBOOK_INK_LINES, MAX_PAPER_OUTPUT_BYTES, NotebookInkLine,
+    RulerVariation,
     canonical_paper_profile_json, validate_printed_date_text,
 };
 use atrament_notebook_profile::{
@@ -184,6 +185,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--border-radius-um INTEGER] [--page-numbers true|false] \
     [--printed-sheet true|false] [--inspect] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
+    [--ruler-seed UINT32 --ruler-error-mm 0.001..0.250] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
     [--quality preview|final (PNG only, exclusive with --dpi)] \
     [--ink-line PAGE X1_UM Y1_UM X2_UM Y2_UM WIDTH_UM '#RRGGBB'] \
@@ -421,6 +423,7 @@ struct NotebookRequest {
     png_page: usize,
     profile: NotebookProfile,
     replace: bool,
+    ruler_variation: Option<RulerVariation>,
     statistics: Option<HandwritingStatisticsProfile>,
 }
 
@@ -438,6 +441,8 @@ struct NotebookExportOptions {
     pages: Option<usize>,
     png_page: Option<usize>,
     quality_dpi: Option<u32>,
+    ruler_seed: Option<String>,
+    ruler_error_mm: Option<String>,
 }
 
 #[derive(Default)]
@@ -448,6 +453,23 @@ struct NotebookFlagPreflight {
     imported_ink_count: usize,
     imported_overlay_selected: bool,
     selected: BTreeSet<String>,
+    ruler_seed: Option<String>,
+    ruler_error_mm: Option<String>,
+}
+
+// Pair export-only ruler options before any selected file or stdin is read.
+fn resolve_notebook_ruler(
+    seed: Option<&str>, error: Option<&str>,
+) -> Result<Option<RulerVariation>, String> {
+    match (seed, error) {
+        (None, None) => Ok(None),
+        (Some(seed), Some(error)) => {
+            RulerVariation::from_decimal_mm(seed, error).map(Some)
+        }
+        _ => Err(concat!(
+            "--ruler-seed and --ruler-error-mm must be supplied together",
+        ).into()),
+    }
 }
 
 // Output and heading selections do not depend on source bytes. Consume their
@@ -610,6 +632,18 @@ impl NotebookFlagPreflight {
                 }
                 0
             }
+            "--ruler-seed" | "--ruler-error-mm" => {
+                self.unique(option, &format!("{option} may appear only once"))?;
+                let value = iter.next().ok_or_else(|| {
+                    format!("{option} requires a decimal value")
+                })?;
+                if option == "--ruler-seed" {
+                    self.ruler_seed = Some(value.to_owned());
+                } else {
+                    self.ruler_error_mm = Some(value.to_owned());
+                }
+                0
+            }
             "--quality" => {
                 self.unique(option, "--quality may appear only once")?;
                 let _validated =
@@ -689,6 +723,16 @@ impl NotebookFlagPreflight {
         }
         if has("--dpi") && has("--quality") {
             return Err("--quality and --dpi are mutually exclusive".into());
+        }
+        let ruler = resolve_notebook_ruler(
+            self.ruler_seed.as_deref(), self.ruler_error_mm.as_deref(),
+        )?;
+        if ruler.is_some() && !matches!(
+            self.export_format,
+            Some(NotebookExportFormat::Pdf | NotebookExportFormat::Png)
+        ) {
+            return Err("ruler variation requires --export-paper pdf or png"
+                .into());
         }
         validate_explicit_manual_page_budget(
             self.explicit_pages, inline_last_page, flow_format.is_some(),
@@ -2062,6 +2106,19 @@ fn parse_notebook_export_option(
                 _ => return Err("--export-paper requires pdf or png".into()),
             });
         }
+        "--ruler-seed" | "--ruler-error-mm" => {
+            let field = if option == "--ruler-seed" {
+                &mut export.ruler_seed
+            } else {
+                &mut export.ruler_error_mm
+            };
+            if field.is_some() {
+                return Err(format!("{option} may appear only once"));
+            }
+            *field = Some(iter.next().ok_or_else(|| {
+                format!("{option} requires a decimal value")
+            })?.to_owned());
+        }
         "--pages" => {
             if export.pages.is_some() {
                 return Err("--pages may appear only once".into());
@@ -2170,6 +2227,15 @@ fn validate_notebook_export_flags(
     }
     if export.dpi.is_some() && export.quality_dpi.is_some() {
         return Err("--quality and --dpi are mutually exclusive".into());
+    }
+    if resolve_notebook_ruler(
+        export.ruler_seed.as_deref(), export.ruler_error_mm.as_deref(),
+    )?.is_some() && !matches!(
+        export.format,
+        Some(NotebookExportFormat::Pdf | NotebookExportFormat::Png)
+    ) {
+        return Err("ruler variation requires --export-paper pdf or png"
+            .into());
     }
     if (glyphs.has_any() || !ink.is_empty()) && export.format.is_none() {
         return Err(concat!(
@@ -3078,6 +3144,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 parse_notebook_flow(&mut iter, option, &mut flow,
                     &mut stdin_used)?,
             "--emit-ink-file" | "--export-paper" | "--pages" | "--dpi"
+            | "--ruler-seed" | "--ruler-error-mm"
             | "--png-page" | "--ink-line" | "--ink-file" | "--join-text-anchors"
             | "--glyph-stroke" | "--glyph-file" | "--place-text" | "--quality"
             | "--fallback-glyph" | "--glyph-variation" | "--glyph-word-rise"
@@ -3105,6 +3172,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         &glyphs, statistics.as_ref(),
     )?;
     profile.validate()?;
+    let ruler_variation = resolve_notebook_ruler(
+        export.ruler_seed.as_deref(), export.ruler_error_mm.as_deref(),
+    )?;
     Ok(NotebookRequest {
         flow,
         flow_typography,
@@ -3121,6 +3191,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         png_page: export.png_page.unwrap_or(1),
         profile,
         replace,
+        ruler_variation,
         statistics,
     })
 }
@@ -3268,20 +3339,21 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
             // Reuse physical PDF admission on every page, including ink that
             // is not visible on the currently selected PNG page. These PDF
             // bytes are not returned or persisted.
-            drop(request.profile.paper_layer_pdf_with_ink(
-                request.pages, &ink,
+            drop(request.profile.paper_layer_pdf_with_ink_ruler(
+                request.pages, &ink, request.ruler_variation,
             )?);
             (encode_page_ink_file(&ink)?, MAX_PAGE_INK_FILE_BYTES)
         }
         Some(NotebookExportFormat::Pdf) => (
-            request.profile.paper_layer_pdf_with_ink(
-                request.pages, &ink,
+            request.profile.paper_layer_pdf_with_ink_ruler(
+                request.pages, &ink, request.ruler_variation,
             )?,
             MAX_PAPER_OUTPUT_BYTES,
         ),
         Some(NotebookExportFormat::Png) => (
-            request.profile.paper_layer_png_page_with_ink(
+            request.profile.paper_layer_png_page_with_ink_ruler(
                 request.dpi, request.png_page, &ink,
+                request.ruler_variation,
             )?,
             MAX_PAPER_OUTPUT_BYTES,
         ),

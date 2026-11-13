@@ -459,6 +459,28 @@ cargo run -q -p atrament_profile_editor_cli -- \
   --flow-markdown-file notes.md --output notes-page-1.png
 ```
 
+To add reproducible, bounded pen-like variation to the **printed paper
+ruling** under the authored text, select both export-only options:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --printed-sheet false --export-paper pdf --pages 2 \
+  --ruler-seed 2026 --ruler-error-mm 0.150 \
+  --glyph-file ink.tsv --flow-markdown-file notes.md \
+  --output notes-varied.pdf
+```
+
+Use the same pair with `--export-paper png --dpi 72 --png-page 2` for a
+transparent, separately varied selected sheet. The seeded normal offsets
+are capped at 0.250 mm and preserve each rule's nominal endpoints and the
+printable paper region. The actual glyph ink, date, border and page numbers
+stay unchanged.
+
+Unspecified ruler options retain the old PDF/PNG bytes; blank/dotted
+patterns and preprinted sheets refuse variation. This does not change
+saved paper/notebook v1 profile bytes or represent calibrated physical
+pen samples.
+
 To export pasted or piped Markdown without saving a temporary source file,
 select `-` for `--flow-markdown-file` (or `--flow-text-file` for plain
 text):

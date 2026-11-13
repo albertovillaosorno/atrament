@@ -33,9 +33,10 @@
 //! Rust-owned notebook metadata and the canonical nested paper profile.
 
 use atrament_notebook_paper_cli::{
-    NotebookInkLine, PaperDatePlaceholder, canonical_paper_profile_json,
-    default_paper_profile_json, paper_profile_pdf_pages_with_ink,
-    paper_profile_png_page_with_ink, validate_paper_border_clearance,
+    NotebookInkLine, PaperDatePlaceholder, RulerVariation,
+    canonical_paper_profile_json,
+    default_paper_profile_json, paper_profile_pdf_pages_with_ink_ruler,
+    paper_profile_png_page_with_ink_ruler, validate_paper_border_clearance,
     validate_paper_date_clearance, validate_paper_page_number_clearance,
     validate_printed_date_text,
 };
@@ -265,11 +266,22 @@ impl NotebookProfile {
     pub fn paper_layer_pdf_with_ink(
         &self, pages: usize, ink: &[NotebookInkLine],
     ) -> Result<Vec<u8>, String> {
+        self.paper_layer_pdf_with_ink_ruler(pages, ink, None)
+    }
+
+    /// Compose authored ink over seeded, bounded ruled or squared paper.
+    ///
+    /// # Errors
+    /// Refuses invalid notebook geometry, unsupported marks or ink bounds.
+    pub fn paper_layer_pdf_with_ink_ruler(
+        &self, pages: usize, ink: &[NotebookInkLine],
+        variation: Option<RulerVariation>,
+    ) -> Result<Vec<u8>, String> {
         self.validate()?;
-        paper_profile_pdf_pages_with_ink(
+        paper_profile_pdf_pages_with_ink_ruler(
             self.paper_json.as_bytes(), pages, !self.printed_sheet,
             self.date_placeholder(), self.page_numbers, self.border_radius_um,
-            Some(&self.date_text), ink,
+            Some(&self.date_text), ink, variation,
         )
     }
 
@@ -302,11 +314,22 @@ impl NotebookProfile {
     pub fn paper_layer_png_page_with_ink(
         &self, dpi: u32, page: usize, ink: &[NotebookInkLine],
     ) -> Result<Vec<u8>, String> {
+        self.paper_layer_png_page_with_ink_ruler(dpi, page, ink, None)
+    }
+
+    /// Compose selected-page authored ink over optional seeded paper marks.
+    ///
+    /// # Errors
+    /// Refuses invalid notebook, ruler, stroke or raster parameters.
+    pub fn paper_layer_png_page_with_ink_ruler(
+        &self, dpi: u32, page: usize, ink: &[NotebookInkLine],
+        variation: Option<RulerVariation>,
+    ) -> Result<Vec<u8>, String> {
         self.validate()?;
-        paper_profile_png_page_with_ink(
+        paper_profile_png_page_with_ink_ruler(
             self.paper_json.as_bytes(), dpi, !self.printed_sheet,
             self.date_placeholder(), self.page_numbers, page,
-            self.border_radius_um, Some(&self.date_text), ink,
+            self.border_radius_um, Some(&self.date_text), ink, variation,
         )
     }
 

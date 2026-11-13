@@ -2978,3 +2978,100 @@ fn ruler_variation_uses_saved_ruled_profile_without_mutating_source() {
     );
     fs::remove_file(&selected).expect("test-owned profile removed");
 }
+
+#[test]
+fn notebook_ink_and_seeded_ruling_preserve_page_identity_and_legacy_bytes() {
+    let opts = Options::default();
+    let profile = encode_profile(opts);
+    let ink = [NotebookInkLine {
+        page: 2,
+        start_um: (30_000, 40_000),
+        end_um: (36_000, 46_000),
+        width_um: 250,
+        rgb: [18, 52, 86],
+    }];
+    let variation = RulerVariation::from_decimal_mm("2026", "0.150")
+        .expect("admitted decimal error and seed");
+    let other = RulerVariation::from_decimal_mm("2027", "0.150")
+        .expect("distinct physical error pattern");
+    let legacy = paper_profile_pdf_pages_with_ink(
+        profile.as_bytes(), 2, true, None, true, 0, None, &ink,
+    ).expect("historical two-page notebook PDF");
+    assert_eq!(legacy, paper_profile_pdf_pages_with_ink_ruler(
+        profile.as_bytes(), 2, true, None, true, 0, None, &ink,
+        None,
+    ).expect("unselected ruler preserves prior PDF"));
+    let pdf = paper_profile_pdf_pages_with_ink_ruler(
+        profile.as_bytes(), 2, true, None, true, 0, None, &ink,
+        Some(variation),
+    ).expect("varied notebook PDF with page-two authored ink");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    assert!(String::from_utf8_lossy(&pdf).contains("/Count 2"));
+    assert_ne!(pdf, legacy);
+    assert_eq!(pdf, paper_profile_pdf_pages_with_ink_ruler(
+        profile.as_bytes(), 2, true, None, true, 0, None, &ink,
+        Some(variation),
+    ).expect("deterministic physical PDF replay"));
+    assert_ne!(pdf, paper_profile_pdf_pages_with_ink_ruler(
+        profile.as_bytes(), 2, true, None, true, 0, None, &ink,
+        Some(other),
+    ).expect("different seed changes physical PDF"));
+    for page in 1..=2 {
+        let legacy_png = paper_profile_png_page_with_ink(
+            profile.as_bytes(), 72, true, None, true, page, 0, None, &ink,
+        ).expect("historical notebook raster");
+        assert_eq!(legacy_png, paper_profile_png_page_with_ink_ruler(
+            profile.as_bytes(), 72, true, None, true, page, 0, None,
+            &ink, None,
+        ).expect("unselected ruler preserves PNG bytes"));
+        let png = paper_profile_png_page_with_ink_ruler(
+            profile.as_bytes(), 72, true, None, true, page, 0, None,
+            &ink, Some(variation),
+        ).expect("varied physical notebook raster");
+        assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert_ne!(png, legacy_png);
+        assert_eq!(png, paper_profile_png_page_with_ink_ruler(
+            profile.as_bytes(), 72, true, None, true, page, 0, None,
+            &ink, Some(variation),
+        ).expect("deterministic page-specific PNG"));
+    }
+    let page_one = paper_profile_png_page_with_ink_ruler(
+        profile.as_bytes(), 72, true, None, false, 1, 0, None, &[],
+        Some(variation),
+    ).expect("page one varied mark raster");
+    let page_two = paper_profile_png_page_with_ink_ruler(
+        profile.as_bytes(), 72, true, None, false, 2, 0, None, &[],
+        Some(variation),
+    ).expect("page two varied mark raster");
+    assert_ne!(page_one, page_two, "ruler hash includes page ordinal");
+    for result in [
+        paper_profile_pdf_pages_with_ink_ruler(
+            profile.as_bytes(), 2, false, None, true, 0,
+            None, &ink, Some(variation),
+        ),
+        paper_profile_png_page_with_ink_ruler(
+            profile.as_bytes(), 72, false, None, true, 2,
+            0, None, &ink, Some(variation),
+        ),
+    ] {
+        assert!(result.expect_err("preprinted paper cannot wobble")
+            .contains("ruler variation requires printed paper marks"));
+    }
+    for style in [Style::Blank, Style::Dot] {
+        let other_paper = encode_profile(Options { style, ..opts });
+        for result in [
+            paper_profile_pdf_pages_with_ink_ruler(
+                other_paper.as_bytes(), 2, true, None, false, 0,
+                None, &[], Some(variation),
+            ),
+            paper_profile_png_page_with_ink_ruler(
+                other_paper.as_bytes(), 72, true, None, false, 2,
+                0, None, &[], Some(variation),
+            ),
+        ] {
+            assert!(result.expect_err("only ruled/grid accepts ruler")
+                .contains("ruler variation needs ruled/grid"));
+        }
+    }
+    assert_eq!(profile, encode_profile(opts), "paper v1 unchanged");
+}

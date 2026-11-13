@@ -187,9 +187,22 @@ struct RoundedPaperBorder {
 
 /// Export-only deterministic ruler settings; never persisted in paper v1.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct RulerVariation {
+pub struct RulerVariation {
     pub(super) maximum_error_um: u32,
     pub(super) seed: u32,
+}
+
+impl RulerVariation {
+    /// Admit the same strict decimal seed/error pair as the paper CLI.
+    ///
+    /// # Errors
+    /// Refuses negative, nondecimal or out-of-bounds input.
+    pub fn from_decimal_mm(seed: &str, error: &str) -> Result<Self, String> {
+        Ok(Self {
+            maximum_error_um: parse_ruler_error(error)?,
+            seed: parse_ruler_seed(seed)?,
+        })
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -1615,6 +1628,32 @@ pub fn paper_profile_pdf_pages_with_ink(
     date_text: Option<&str>,
     ink: &[NotebookInkLine],
 ) -> Result<Vec<u8>, String> {
+    paper_profile_pdf_pages_with_ink_ruler(
+        profile, pages, include_marks, date, page_numbers,
+        border_radius_um, date_text, ink, None,
+    )
+}
+
+/// Compose notebook paper and selected real pen ink with optional ruler error.
+/// Existing unvaried exports remain byte-identical.
+///
+/// # Errors
+/// Refuses invalid page/stroke/ruler geometry before serialization.
+#[expect(clippy::too_many_arguments, reason = "extends ink export with ruler")]
+pub fn paper_profile_pdf_pages_with_ink_ruler(
+    profile: &[u8],
+    pages: usize,
+    include_marks: bool,
+    date: Option<PaperDatePlaceholder>,
+    page_numbers: bool,
+    border_radius_um: u32,
+    date_text: Option<&str>,
+    ink: &[NotebookInkLine],
+    variation: Option<RulerVariation>,
+) -> Result<Vec<u8>, String> {
+    if variation.is_some() && !include_marks {
+        return Err("ruler variation requires printed paper marks".into());
+    }
     let options = decode_profile(profile)?;
     if !(1..=MAX_PAGES).contains(&pages) {
         return Err("paper PDF needs 1 to 32 pages".into());
@@ -1627,7 +1666,7 @@ pub fn paper_profile_pdf_pages_with_ink(
     {
         return Err("ink exceeds 4096 segments or declared PDF pages".into());
     }
-    let mut base = if include_marks {
+    let mut base = if include_marks && variation.is_none() {
         paper_paths(options)?
     } else {
         Vec::new()
@@ -1641,7 +1680,7 @@ pub fn paper_profile_pdf_pages_with_ink(
     if let Some(border) = rounded_border(options, border_radius_um)? {
         base.push(border_path(border)?);
     }
-    if !page_numbers && ink.is_empty() {
+    if !page_numbers && ink.is_empty() && variation.is_none() {
         return serialize_paths(options, base, pages);
     }
     let mut numbered = Vec::new();
@@ -1649,7 +1688,13 @@ pub fn paper_profile_pdf_pages_with_ink(
         .try_reserve_exact(pages)
         .map_err(|error| format!("page allocation refused: {error}"))?;
     for page in 1..=pages {
-        let mut paths = base.clone();
+        let mut paths = if variation.is_some() {
+            let mut ruling = paper_paths_with_ruler(options, variation, page)?;
+            ruling.extend(base.iter().cloned());
+            ruling
+        } else {
+            base.clone()
+        };
         if page_numbers {
             append_page_number(&mut paths, options, page)?;
         }
@@ -1811,6 +1856,32 @@ pub fn paper_profile_png_page_with_ink(
     date_text: Option<&str>,
     ink: &[NotebookInkLine],
 ) -> Result<Vec<u8>, String> {
+    paper_profile_png_page_with_ink_ruler(
+        profile, dpi, include_marks, date, page_numbers, page,
+        border_radius_um, date_text, ink, None,
+    )
+}
+
+/// Render authored ink over optionally varied notebook marks on one PNG page.
+///
+/// # Errors
+/// Refuses invalid selected page, printed-paper/ruler intent or ink geometry.
+#[expect(clippy::too_many_arguments, reason = "extends ink export with ruler")]
+pub fn paper_profile_png_page_with_ink_ruler(
+    profile: &[u8],
+    dpi: u32,
+    include_marks: bool,
+    date: Option<PaperDatePlaceholder>,
+    page_numbers: bool,
+    page: usize,
+    border_radius_um: u32,
+    date_text: Option<&str>,
+    ink: &[NotebookInkLine],
+    variation: Option<RulerVariation>,
+) -> Result<Vec<u8>, String> {
+    if variation.is_some() && !include_marks {
+        return Err("ruler variation requires printed paper marks".into());
+    }
     if !(1..=MAX_PAGES).contains(&page) {
         return Err("PNG notebook page must be within 1..32".into());
     }
@@ -1824,7 +1895,7 @@ pub fn paper_profile_png_page_with_ink(
     }
     let options = decode_profile(profile)?;
     let mut paths = if include_marks {
-        paper_paths(options)?
+        paper_paths_with_ruler(options, variation, page)?
     } else {
         Vec::new()
     };

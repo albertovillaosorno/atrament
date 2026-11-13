@@ -241,6 +241,19 @@ This improves bounded visual line breaks, not automatic fonts, dictionary
 hyphenation, mixed-direction text, semantic notebook persistence or full
 Unicode line-breaking rules. The P2-013 end-to-end task remains open.
 
+## Notebook PDF/PNG integration with synthetic ruler variation (partial)
+
+The native profile-editor notebook CLI now composes deterministic paper-only
+ruler perturbations beneath the explicitly authored semantic flow and manual
+pen overlay. Seed and decimal error must be supplied together for PDF/PNG;
+preprinted or unsupported paper patterns refuse. The selected PNG page and
+multi-page vector PDF share page-indexed physical ruling paths without
+mutating notebook/paper v1 or replacing output on refusal. Unselected output
+keeps exact historical byte parity.
+
+This is output composition only. Persisted semantic block identities,
+image overlays, font shape inference and complete P2-013 remain open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

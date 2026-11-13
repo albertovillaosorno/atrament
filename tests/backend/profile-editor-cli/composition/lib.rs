@@ -19231,3 +19231,114 @@ fn native_curved_closure_caps_four_segments_without_partial_edit() {
         }
     }
 }
+
+#[test]
+fn notebook_ruler_cli_composes_real_authored_flow_over_varied_pdf_png() {
+    let common = args(&[
+        "--printed-sheet", "false", "--page-numbers", "true",
+        "--glyph-stroke", "a", "500", "500", "2600", "2800",
+        "250", "#345678",
+        "--flow-text", "aaa\naaa",
+        "--ink-line", "2", "31000", "46000", "34000", "47000",
+        "250", "#EE1200",
+    ]);
+    let variation = args(&[
+        "--ruler-seed", "2026", "--ruler-error-mm", "0.150",
+    ]);
+    let other = args(&[
+        "--ruler-seed", "2027", "--ruler-error-mm", "0.150",
+    ]);
+    for format in ["pdf", "png"] {
+        let mut base = common.clone();
+        base.extend(args(&["--export-paper", format]));
+        if format == "pdf" {
+            base.extend(args(&["--pages", "2"]));
+        } else {
+            base.extend(args(&["--dpi", "72", "--png-page", "2"]));
+        }
+        let original = execute_notebook(&base)
+            .expect("default native flow export").expect("bytes");
+        let mut chosen = base.clone();
+        chosen.extend(variation.clone());
+        let rendered = execute_notebook(&chosen)
+            .expect("varied native flow export").expect("bytes");
+        let expected_prefix = if format == "pdf" {
+            b"%PDF-1.4".as_slice()
+        } else {
+            b"\x89PNG\r\n\x1a\n".as_slice()
+        };
+        assert!(rendered.starts_with(expected_prefix));
+        assert_ne!(rendered, original, "{format} varied physical ruling");
+        assert_eq!(rendered, execute_notebook(&chosen)
+            .expect("repeat same seed").expect("identical output"));
+        let mut changed = base;
+        changed.extend(other.clone());
+        assert_ne!(rendered, execute_notebook(&changed)
+            .expect("distinct seed accepted").expect("bytes"));
+        if format == "pdf" {
+            assert!(String::from_utf8_lossy(&rendered)
+                .contains("/Count 2"));
+        }
+    }
+}
+
+#[test]
+fn notebook_ruler_flags_preflight_before_external_sources() {
+    for (flags, diagnostic) in [
+        (vec!["--ruler-seed", "1"], "must be supplied together"),
+        (vec!["--ruler-error-mm", "0.100"],
+            "must be supplied together"),
+        (vec!["--ruler-seed", "-1", "--ruler-error-mm", "0.1"],
+            "ruler seed needs an unsigned"),
+        (vec!["--ruler-seed", "4294967296", "--ruler-error-mm",
+            "0.1"], "ruler seed exceeds"),
+        (vec!["--ruler-seed", "1", "--ruler-error-mm", "0.251"],
+            "ruler error needs"),
+        (vec!["--ruler-seed", "1", "--ruler-error-mm", "0.0001"],
+            "millimeters require"),
+        (vec!["--ruler-seed", "1", "--ruler-seed", "2",
+            "--ruler-error-mm", "0.1"], "--ruler-seed may appear"),
+        (vec!["--ruler-error-mm", "0.1", "--ruler-error-mm",
+            "0.2", "--ruler-seed", "1"],
+            "--ruler-error-mm may appear"),
+        (vec!["--ruler-seed", "1", "--ruler-error-mm", "0.1",
+            "--emit-ink-file"], "requires --export-paper"),
+    ] {
+        let mut arguments = args(&[
+            "--profile", "missing-selected-notebook-ruler.json",
+        ]);
+        arguments.extend(flags.into_iter().map(str::to_owned));
+        let error = execute_notebook(&arguments)
+            .expect_err("invalid ruler flags before selected input read");
+        assert!(error.contains(diagnostic), "{error:?}");
+    }
+    let missing = execute_notebook(&args(&[
+        "--export-paper", "png", "--ruler-seed",
+    ])).expect_err("missing flag value refuses");
+    assert!(missing.contains("--ruler-seed requires a decimal value"));
+}
+
+#[test]
+fn notebook_ruler_refusal_preserves_selected_pdf_and_png() {
+    for format in ["pdf", "png"] {
+        let output = test_path().with_extension(format);
+        let name = output.to_str().expect("test-owned target path");
+        fs::write(&output, b"preserve previously accepted page")
+            .expect("selected output sentinel");
+        let mut command = args(&[
+            "--printed-sheet", "true", "--export-paper", format,
+            "--ruler-seed", "2026", "--ruler-error-mm", "0.150",
+            "--output", name, "--replace",
+        ]);
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        let error = execute_notebook(&command)
+            .expect_err("preprinted paper cannot have sampled ruling");
+        assert!(error.contains("ruler variation requires printed paper"),
+            "{error}");
+        assert_eq!(fs::read(&output).expect("unchanged bytes"),
+            b"preserve previously accepted page");
+        fs::remove_file(output).expect("remove test-owned target");
+    }
+}
