@@ -2628,3 +2628,353 @@ fn actual_vector_pdf_and_transparent_png_refuse_same_rounded_edge_ink() {
         }
     }
 }
+
+fn sampled_rule_points(path: &PdfVectorPath) -> Vec<PdfPoint> {
+    path.commands
+        .iter()
+        .map(|command| match command {
+            PdfPathCommand::MoveTo(point) | PdfPathCommand::LineTo(point) => {
+                *point
+            },
+            _ => panic!("paper ruling only uses drawn line segments"),
+        })
+        .collect()
+}
+
+#[test]
+fn seeded_ruler_marks_preserve_nominal_endpoints_and_writable_bounds() {
+    let selected = RulerVariation {
+        maximum_error_um: 250,
+        seed: 0x8eba_2026,
+    };
+    for style in [Style::Ruled, Style::Grid] {
+        let opts = Options {
+            style,
+            ..Options::default()
+        };
+        let nominal = paper_paths(opts).expect("exact nominal paper");
+        let varied = paper_paths_with_ruler(opts, Some(selected), 1)
+            .expect("selected physical ruler geometry");
+        assert_eq!(varied.len(), nominal.len() * 4);
+        let mut changed = 0usize;
+        for (base, bent) in nominal.iter().zip(varied.chunks_exact(4)) {
+            let anchor = sampled_rule_points(base);
+            let mut samples = Vec::with_capacity(5);
+            for (index, segment) in bent.iter().enumerate() {
+                let points = sampled_rule_points(segment);
+                assert_eq!(points.len(), 2);
+                if index == 0 {
+                    samples.extend(points);
+                } else {
+                    assert_eq!(samples.last(), points.first());
+                    samples.extend(points.into_iter().skip(1));
+                }
+            }
+            assert_eq!(anchor.len(), 2);
+            assert_eq!(samples.len(), 5);
+            assert_eq!(samples.first(), anchor.first());
+            assert_eq!(samples.last(), anchor.last());
+            let (Some(start), Some(end)) = (anchor.first(), anchor.last())
+            else {
+                panic!("a nominal rule needs both endpoints");
+            };
+            let horizontal = start.y_um == end.y_um;
+            let first = if horizontal {
+                start.x_um
+            } else {
+                start.y_um
+            };
+            let last = if horizontal {
+                end.x_um
+            } else {
+                end.y_um
+            };
+            for point in &samples {
+                let along = if horizontal {
+                    point.x_um
+                } else {
+                    point.y_um
+                };
+                let normal = if horizontal {
+                    point.y_um
+                } else {
+                    point.x_um
+                };
+                let nominal_normal = if horizontal {
+                    start.y_um
+                } else {
+                    start.x_um
+                };
+                assert!((first..=last).contains(&along));
+                assert!(normal.abs_diff(nominal_normal) <= 250);
+                assert!((20_000..=196_000).contains(&point.x_um));
+                assert!((22_000..=281_000).contains(&point.y_um));
+                changed += usize::from(normal != nominal_normal);
+            }
+        }
+        assert!(changed > 20, "{style:?} varied physical samples");
+    }
+}
+
+#[test]
+fn seeded_ruler_exports_replay_in_pdf_and_png_without_changing_defaults() {
+    let selected = RulerVariation {
+        maximum_error_um: 250,
+        seed: 2026,
+    };
+    let other = RulerVariation {
+        maximum_error_um: 250,
+        seed: 2027,
+    };
+    for style in [Style::Ruled, Style::Grid] {
+        let opts = Options {
+            style,
+            ..Options::default()
+        };
+        let default_pdf = render_pages(opts, 2).expect("unchanged default PDF");
+        assert_eq!(
+            default_pdf,
+            render_pages_with_ruler(opts, 2, None).expect("legacy PDF path")
+        );
+        let default_png = render_png(opts, 72).expect("unchanged default PNG");
+        assert_eq!(
+            default_png,
+            render_png_with_ruler(opts, 72, None).expect("legacy PNG path")
+        );
+        let pdf = render_pages_with_ruler(opts, 2, Some(selected))
+            .expect("varied two-page PDF");
+        assert_eq!(
+            pdf,
+            render_pages_with_ruler(opts, 2, Some(selected))
+                .expect("identical seed and geometry")
+        );
+        assert_ne!(pdf, default_pdf);
+        assert_ne!(
+            pdf,
+            render_pages_with_ruler(opts, 2, Some(other))
+                .expect("distinct seed produces distinct PDF")
+        );
+        let pdf_text = String::from_utf8_lossy(&pdf);
+        assert!(pdf.starts_with(b"%PDF-1.4"));
+        assert!(pdf_text.contains("/Count 2"));
+        assert_ne!(
+            paper_paths_with_ruler(opts, Some(selected), 1).expect("page one"),
+            paper_paths_with_ruler(opts, Some(selected), 2).expect("page two"),
+        );
+        let png = render_png_with_ruler(opts, 72, Some(selected))
+            .expect("varied transparent PNG");
+        assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert_eq!(
+            png,
+            render_png_with_ruler(opts, 72, Some(selected))
+                .expect("identical rasterized seed")
+        );
+        assert_ne!(png, default_png);
+        assert_ne!(
+            png,
+            render_png_with_ruler(opts, 72, Some(other))
+                .expect("distinct rasterized seed")
+        );
+        assert_eq!(
+            encode_profile(opts),
+            encode_profile(Options {
+                style,
+                ..Options::default()
+            }),
+            "ruler output must not mutate serialized profile"
+        );
+    }
+}
+
+#[test]
+fn ruler_cli_admits_only_explicit_bounded_pair_and_supported_paper() {
+    let opts = [
+        "--ruler-seed",
+        "4294967295",
+        "--ruler-error-mm",
+        "0.250",
+        "--style",
+        "ruled",
+        "--pages",
+        "2",
+    ]
+    .map(str::to_owned);
+    let admitted = parse_options(&opts)
+        .expect("bounded ruler options")
+        .expect("not help");
+    assert_eq!(
+        admitted.ruler_variation,
+        Some(RulerVariation {
+            maximum_error_um: 250,
+            seed: u32::MAX,
+        })
+    );
+    assert!(
+        execute(admitted)
+            .expect("real PDF export")
+            .expect("stdout bytes")
+            .starts_with(b"%PDF-1.4")
+    );
+    for bad in [
+        vec!["--ruler-seed", "0"],
+        vec!["--ruler-error-mm", "0.1"],
+        vec!["--ruler-seed", "-1", "--ruler-error-mm", "0.1"],
+        vec!["--ruler-seed", "+1", "--ruler-error-mm", "0.1"],
+        vec!["--ruler-seed", "4294967296", "--ruler-error-mm", "0.1"],
+        vec!["--ruler-seed", "x", "--ruler-error-mm", "0.1"],
+        vec!["--ruler-seed", "1", "--ruler-error-mm", "0"],
+        vec!["--ruler-seed", "1", "--ruler-error-mm", "0.251"],
+        vec!["--ruler-seed", "1", "--ruler-error-mm", "0.0001"],
+        vec!["--ruler-seed", "1", "--ruler-error-mm", "1"],
+        vec!["--ruler-seed", "1", "--ruler-error-mm", "-0.1"],
+        vec![
+            "--ruler-seed",
+            "1",
+            "--ruler-error-mm",
+            "0.1",
+            "--ruler-seed",
+            "2",
+        ],
+        vec![
+            "--ruler-seed",
+            "1",
+            "--ruler-error-mm",
+            "0.1",
+            "--ruler-error-mm",
+            "0.2",
+        ],
+        vec![
+            "--ruler-seed",
+            "1",
+            "--ruler-error-mm",
+            "0.1",
+            "--emit-profile",
+        ],
+    ] {
+        assert!(
+            parse_options(
+                &bad.into_iter().map(str::to_owned).collect::<Vec<_>>()
+            )
+            .is_err(),
+            "ruler flag refusal"
+        );
+    }
+    for style in ["blank", "dot"] {
+        let args = [
+            "--style",
+            style,
+            "--ruler-seed",
+            "1",
+            "--ruler-error-mm",
+            "0.2",
+        ]
+        .map(str::to_owned);
+        let request = parse_options(&args)
+            .expect("parse paper style")
+            .expect("not help");
+        assert!(execute(request).is_err(), "unsupported {style} paper");
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn refused_ruler_export_preserves_selected_pdf_and_png() {
+    use std::fs;
+    let directory = env::temp_dir().join(format!(
+        "atrament-paper-ruler-refusal-{}",
+        std::process::id(),
+    ));
+    fs::create_dir_all(&directory).expect("test-owned directory");
+    for (format, file) in [("pdf", "selected.pdf"), ("png", "selected.png")] {
+        let target = directory.join(file);
+        fs::write(&target, b"previously admitted export")
+            .expect("test-owned original file");
+        let args = [
+            "--style",
+            "blank",
+            "--ruler-seed",
+            "7",
+            "--ruler-error-mm",
+            "0.15",
+            "--format",
+            format,
+            "--replace",
+            "--output",
+            target.to_str().expect("UTF-8 path"),
+        ]
+        .map(str::to_owned);
+        let request = parse_options(&args)
+            .expect("valid syntax")
+            .expect("not help");
+        assert!(execute(request).is_err());
+        assert_eq!(
+            fs::read(&target).expect("original remains"),
+            b"previously admitted export"
+        );
+    }
+    fs::remove_dir_all(directory).expect("remove test-owned directory");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn ruler_variation_uses_saved_ruled_profile_without_mutating_source() {
+    use std::fs;
+
+    let selected = env::temp_dir().join(format!(
+        "atrament-ruler-saved-source-{}.json",
+        std::process::id(),
+    ));
+    let path = selected.to_str().expect("test-owned UTF-8 profile path");
+    let ruled = encode_profile(Options {
+        style: Style::Ruled,
+        ..Options::default()
+    });
+    fs::write(&selected, ruled.as_bytes()).expect("saved ruled source");
+    // The export-only flags may precede the selected profile; the source
+    // still supplies exact physical paper defaults on the final admission.
+    let args = [
+        "--ruler-seed",
+        "12",
+        "--ruler-error-mm",
+        "0.150",
+        "--profile",
+        path,
+        "--format",
+        "png",
+        "--dpi",
+        "72",
+    ]
+    .map(str::to_owned);
+    let png = execute(
+        parse_options(&args)
+            .expect("saved profile with export-only variation")
+            .expect("not help"),
+    )
+    .expect("PNG export succeeds")
+    .expect("stdout PNG bytes");
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_eq!(
+        fs::read(&selected).expect("source remains"),
+        ruled.as_bytes()
+    );
+
+    let blank = encode_profile(Options {
+        style: Style::Blank,
+        ..Options::default()
+    });
+    fs::write(&selected, blank.as_bytes()).expect("saved blank source");
+    assert!(
+        execute(
+            parse_options(&args)
+                .expect("profile grammar")
+                .expect("not help")
+        )
+        .is_err(),
+        "saved blank profile must refuse variation"
+    );
+    assert_eq!(
+        fs::read(&selected).expect("source remains"),
+        blank.as_bytes()
+    );
+    fs::remove_file(&selected).expect("test-owned profile removed");
+}

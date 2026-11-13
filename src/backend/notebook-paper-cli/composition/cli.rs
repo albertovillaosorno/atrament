@@ -45,9 +45,11 @@ use atrament_profile_selected_file_open::open_selected_profile_file;
 
 use super::application::{
     CliRequest, DEFAULT_PNG_DPI, MAX_PAPER_OUTPUT_BYTES, MAX_PROFILE_BYTES,
-    Options, OutputFormat, USAGE, apply_paper_edit, decode_profile,
-    encode_profile, orient_page, parse_image_export_option, parse_page_count,
-    render_pages, render_png, resolve_png_quality, validate_export_flags,
+    Options, OutputFormat, RulerVariation, USAGE, apply_paper_edit,
+    decode_profile, encode_profile, orient_page, parse_image_export_option,
+    parse_page_count, parse_ruler_error, parse_ruler_seed, render_pages,
+    render_pages_with_ruler, render_png, render_png_with_ruler,
+    resolve_png_quality, validate_export_flags,
 };
 
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI regression tests")]
@@ -115,6 +117,76 @@ fn source_profile_options(
     }
 }
 
+fn parse_ruler_option(
+    flag: &str,
+    value: &str,
+    seed: &mut Option<u32>,
+    error: &mut Option<u32>,
+) -> Result<bool, String> {
+    match flag {
+        "--ruler-seed" => {
+            if seed.is_some() {
+                return Err("--ruler-seed may appear only once".into());
+            }
+            *seed = Some(parse_ruler_seed(value)?);
+            Ok(true)
+        },
+        "--ruler-error-mm" => {
+            if error.is_some() {
+                return Err("--ruler-error-mm may appear only once".into());
+            }
+            *error = Some(parse_ruler_error(value)?);
+            Ok(true)
+        },
+        _ => Ok(false),
+    }
+}
+
+fn final_ruler_variation(
+    seed: Option<u32>,
+    error: Option<u32>,
+    emit_profile: bool,
+) -> Result<Option<RulerVariation>, String> {
+    let selected = match (seed, error) {
+        (Some(selected_seed), Some(maximum_error_um)) => Some(RulerVariation {
+            maximum_error_um,
+            seed: selected_seed,
+        }),
+        (None, None) => None,
+        _ => {
+            return Err(
+                "--ruler-seed and --ruler-error-mm must be supplied together"
+                    .into(),
+            );
+        },
+    };
+    if selected.is_some() && emit_profile {
+        return Err(
+            "ruler variation is export-only, not a paper profile".into()
+        );
+    }
+    Ok(selected)
+}
+
+// Page count controls this export rather than its saved profile, so it
+// may be selected even before loading a source paper profile.
+fn parse_pages_option(
+    flag: &str,
+    value: &str,
+    pages: &mut usize,
+    seen: &mut bool,
+) -> Result<bool, String> {
+    if flag != "--pages" {
+        return Ok(false);
+    }
+    if *seen {
+        return Err("--pages may appear only once".into());
+    }
+    *pages = parse_page_count(value)?;
+    *seen = true;
+    Ok(true)
+}
+
 fn parse_options_with_profile(
     args: &[String],
     read_source: bool,
@@ -133,6 +205,8 @@ fn parse_options_with_profile(
     let mut seen_orientation = false;
     let mut pages = 1;
     let mut seen_pages = false;
+    let mut ruler_seed = None;
+    let mut ruler_error = None;
     let mut output = None;
     let mut replace = false;
     let mut items = args.iter();
@@ -185,30 +259,28 @@ fn parse_options_with_profile(
         )? {
             continue;
         }
-        if name == "--pages" {
-            // Page count controls this export, not the saved profile.
-            // It may be selected before loading the source profile.
-            if seen_pages {
-                return Err("--pages may appear only once".into());
-            }
-            pages = parse_page_count(value)?;
-            seen_pages = true;
-        } else {
-            seen_edit = true;
-            apply_paper_edit(
-                &mut opts,
-                name,
-                value,
-                &mut seen_size_override,
-                &mut seen_preset,
-            )?;
+        if parse_ruler_option(name, value, &mut ruler_seed, &mut ruler_error)? {
+            continue;
         }
+        if parse_pages_option(name, value, &mut pages, &mut seen_pages)? {
+            continue;
+        }
+        seen_edit = true;
+        apply_paper_edit(
+            &mut opts,
+            name,
+            value,
+            &mut seen_size_override,
+            &mut seen_preset,
+        )?;
     }
     validate_export_flags(format, seen_pages, seen_dpi, emit_profile)?;
     dpi = resolve_png_quality(dpi, quality_dpi, format, seen_dpi)?;
     if replace && output.is_none() {
         return Err("--replace requires --output".into());
     }
+    let ruler_variation =
+        final_ruler_variation(ruler_seed, ruler_error, emit_profile)?;
     Ok(Some(CliRequest {
         dpi,
         emit_profile,
@@ -217,6 +289,7 @@ fn parse_options_with_profile(
         output,
         pages,
         replace,
+        ruler_variation,
     }))
 }
 
@@ -228,8 +301,15 @@ pub(super) fn execute(request: CliRequest) -> Result<Option<Vec<u8>>, String> {
         encode_profile(request.options).into_bytes()
     } else {
         match request.format {
-            OutputFormat::Pdf => render_pages(request.options, request.pages)?,
-            OutputFormat::Png => render_png(request.options, request.dpi)?,
+            OutputFormat::Pdf => render_pages_with_ruler(
+                request.options, request.pages, request.ruler_variation,
+            )?,
+            OutputFormat::Png if request.ruler_variation.is_none() => {
+                render_png(request.options, request.dpi)?
+            },
+            OutputFormat::Png => render_png_with_ruler(
+                request.options, request.dpi, request.ruler_variation,
+            )?,
         }
     };
     let Some(output) = request.output else {

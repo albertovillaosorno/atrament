@@ -155,6 +155,39 @@ Saved glyph TSV regression coverage also loads both refused separators
 through the native library parser and PDF export path. Refusal preserves
 the selected input TSV and previously accepted PDF bytes.
 
+## Seeded physical ruler variation for paper-only exports (partial) — 2026-11-13
+
+The native `atrament-paper` CLI now accepts a paired export-only
+`--ruler-seed UINT32 --ruler-error-mm 0.001..0.250` selection for `ruled`
+and `grid` paper. It draws four joined physical ink segments per nominal
+rule, with three deterministic interior normal offsets. The exact profile
+spacing, rule anchors, end coordinates and writable-area clearance remain
+authoritative. The existing typed ruler-sample validator admits every
+chosen displacement against the selected bounded appearance envelope.
+
+The seed, page ordinal, direction, nominal line index and sample ordinal
+produce a replayable bounded pattern. A two-page PDF varies its individual
+page rules, while a selected PNG uses the exact same page-one vector path
+construction. The 10,000-path output budget applies after each rule is
+split into four rasterizer-compatible segments. Density or output-budget
+excess refuses before a chosen output is replaced.
+
+Five real Rust tests exercise ruled and grid physical bounds, unchanged
+nominal endpoints, distinct seeds and pages, byte-identical replay of
+PDF/PNG, strict paired flag and physical-error validation, rejection of
+unsupported blank/dotted styles, saved-profile input, and selected PDF/PNG
+preservation on refused exports. Existing paper-profile v1 bytes and legacy
+PDF/PNG outputs are unchanged. Variation cannot be saved into a paper v1
+profile or combined with `--emit-profile`.
+
+Example: `atrament-paper --style ruled --ruler-seed 2026
+--ruler-error-mm 0.150 --pages 2 --output varied.pdf`.
+
+This is reproducible *synthetic* ruler variation, not a physically measured
+or calibrated pen-path model. It does not add a browser ruler editor, change
+the shared page-profile schema, implement bilingual line breaking or supply
+missing-glyph fallbacks. The P2-013 end-to-end criterion remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

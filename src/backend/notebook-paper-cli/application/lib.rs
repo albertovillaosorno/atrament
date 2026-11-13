@@ -38,13 +38,12 @@
 mod date;
 mod png;
 
-pub use date::validate_printed_date_text;
-
 use std::mem::swap;
 use std::str::from_utf8;
 
 use atrament_paper_mark_geometry::{
-    PaperMarkGeometry, Span, compile_profile_marks,
+    PaperMarkGeometry, RulerOffset, RulerSample, Span, compile_profile_marks,
+    validate_ruler_sample,
 };
 use atrament_pdf_composition_plan::{
     PdfCompositionPlan, PdfPagePlan, SearchableSemanticText,
@@ -65,6 +64,7 @@ use atrament_profile_json_syntax::{
     ProfileJsonSyntaxLimits, ValidatedProfileJsonObject,
     validate_profile_json_object,
 };
+pub use date::validate_printed_date_text;
 
 /// Maximum caller-authored pen segments per document export.
 pub const MAX_NOTEBOOK_INK_LINES: usize = 4_096;
@@ -110,6 +110,7 @@ pub(super) const USAGE: &str = "Usage: atrament-paper [--profile paper.json] \
     [--margin-top-mm N] [--margin-bottom-mm N] \
     [--margin-left-mm N] [--margin-right-mm N] \
     [--line-color '#RRGGBB'] [--pages 1..32] \
+    [--ruler-seed UINT32 --ruler-error-mm 0.001..0.250] \
     [--format pdf|png] [--dpi 72..300 (PNG only)] \
     [--quality preview|final (PNG only, exclusive with --dpi)] \
     [--emit-profile] [--output FILE [--replace]] > output-file";
@@ -184,6 +185,20 @@ struct RoundedPaperBorder {
     top_um: u32,
 }
 
+/// Export-only deterministic ruler settings; never persisted in paper v1.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct RulerVariation {
+    pub(super) maximum_error_um: u32,
+    pub(super) seed: u32,
+}
+
+#[derive(Clone, Copy)]
+struct RulerContext {
+    opts: Options,
+    page: usize,
+    variation: RulerVariation,
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct CliRequest {
     pub(super) dpi: u32,
@@ -193,6 +208,7 @@ pub(super) struct CliRequest {
     pub(super) output: Option<String>,
     pub(super) pages: usize,
     pub(super) replace: bool,
+    pub(super) ruler_variation: Option<RulerVariation>,
 }
 
 impl Default for Options {
@@ -390,6 +406,23 @@ pub(super) fn encode_profile(options: Options) -> String {
         green = options.color.green,
         blue = options.color.blue,
     )
+}
+
+pub(super) fn parse_ruler_seed(value: &str) -> Result<u32, String> {
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err("ruler seed needs an unsigned 32-bit decimal".into());
+    }
+    value
+        .parse::<u32>()
+        .map_err(|_error| "ruler seed exceeds unsigned 32-bit range".into())
+}
+
+pub(super) fn parse_ruler_error(value: &str) -> Result<u32, String> {
+    let error = millimetres(value)?;
+    if !(1..=250).contains(&error) {
+        return Err("ruler error needs 0.001..0.250 mm".into());
+    }
+    Ok(error)
 }
 
 pub(super) fn parse_page_count(value: &str) -> Result<usize, String> {
@@ -751,6 +784,7 @@ fn append_lines(
     span: Span,
     horizontal: bool,
     color: PdfRgb,
+    context: Option<RulerContext>,
 ) -> Result<(), String> {
     for index in 0..series.count {
         let coord = series
@@ -759,13 +793,144 @@ fn append_lines(
             .micrometres();
         let start = span.start.micrometres();
         let end = span.end.micrometres();
-        paths.push(if horizontal {
-            stroke(start, coord, end, coord, color)?
+        if let Some(ruler) = context {
+            paths.extend(ruler_path(
+                start, end, coord, index, horizontal, color, ruler,
+            )?);
+        } else if horizontal {
+            paths.push(stroke(start, coord, end, coord, color)?);
         } else {
-            stroke(coord, start, coord, end, color)?
-        });
+            paths.push(stroke(coord, start, coord, end, color)?);
+        }
     }
     Ok(())
+}
+
+// Seed, page, rule orientation and nominal index determine each bounded
+// displacement. The nominal anchor and both endpoints never move.
+fn ruler_hash(
+    context: RulerContext,
+    horizontal: bool,
+    line: u64,
+    sample: u64,
+) -> u64 {
+    let mut value = u64::from(context.variation.seed)
+        ^ u64::try_from(context.page)
+            .unwrap_or_default()
+            .wrapping_mul(0x9e37_79b9_7f4a_7c15)
+        ^ line.wrapping_mul(0xbf58_476d_1ce4_e5b9)
+        ^ sample.wrapping_mul(0x94d0_49bb_1331_11eb)
+        ^ if horizontal {
+            0x8234_fdef_74ac_3921
+        } else {
+            0x4b23_991e_28e0_4f5a
+        };
+    value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    value ^ (value >> 31)
+}
+
+fn ruler_path(
+    start: u64,
+    end: u64,
+    nominal: u64,
+    line: u64,
+    horizontal: bool,
+    color: PdfRgb,
+    context: RulerContext,
+) -> Result<Vec<PdfVectorPath>, String> {
+    let opts = context.opts;
+    let (lower, upper) = if horizontal {
+        (
+            u64::from(opts.margin_top_um),
+            u64::from(
+                opts.height_um
+                    .checked_sub(opts.margin_bottom_um)
+                    .ok_or("ruler bottom margin overflow")?,
+            ),
+        )
+    } else {
+        (
+            u64::from(opts.margin_left_um),
+            u64::from(
+                opts.width_um
+                    .checked_sub(opts.margin_right_um)
+                    .ok_or("ruler right margin overflow")?,
+            ),
+        )
+    };
+    // A rule on the writable boundary has no outward clearance; offset
+    // only its interior samples and never escape the accepted rectangle.
+    let clearance = nominal
+        .checked_sub(lower)
+        .and_then(|space| {
+            upper.checked_sub(nominal).map(|other| space.min(other))
+        })
+        .ok_or("ruler nominal mark outside writable region")?;
+    let allowance =
+        clearance.min(u64::from(context.variation.maximum_error_um));
+    let length = end.checked_sub(start).ok_or("ruler line span invalid")?;
+    let appearance = PaperMarkAppearance {
+        join: PaperMarkJoin::Sharp,
+        maximum_ruler_error: Length::from_micrometres(u64::from(
+            context.variation.maximum_error_um,
+        )),
+    };
+    // The transparent rasterizer accepts one physical ink segment per
+    // path, so emit four joined two-point strokes in both output formats.
+    let mut paths = Vec::with_capacity(4);
+    let mut previous = None;
+    for sample in 0..=4u64 {
+        let along = length
+            .checked_mul(sample)
+            .and_then(|scaled| scaled.checked_div(4))
+            .ok_or("ruler sample arithmetic overflow")?;
+        let displacement = if sample == 0 || sample == 4 {
+            0i64
+        } else {
+            let spread = allowance
+                .checked_mul(2)
+                .and_then(|twice| twice.checked_add(1))
+                .ok_or("ruler sample spread overflow")?;
+            let value = ruler_hash(context, horizontal, line, sample)
+                .checked_rem(spread)
+                .ok_or("ruler spread is zero")?;
+            i64::try_from(value)
+                .map_err(|error| error.to_string())?
+                .checked_sub(
+                    i64::try_from(allowance)
+                        .map_err(|error| error.to_string())?,
+                )
+                .ok_or("ruler signed displacement overflow")?
+        };
+        let _admitted = validate_ruler_sample(
+            RulerSample {
+                along: Length::from_micrometres(along),
+                normal_offset: RulerOffset::from_micrometres(displacement),
+            },
+            Length::from_micrometres(length),
+            appearance,
+        )
+        .map_err(|error| format!("ruler sample refused: {error:?}"))?;
+        let offset_coord = i64::try_from(nominal)
+            .map_err(|error| error.to_string())?
+            .checked_add(displacement)
+            .and_then(|value| u64::try_from(value).ok())
+            .ok_or("ruler sample outside physical sheet")?;
+        let along_coord = start
+            .checked_add(along)
+            .ok_or("ruler along coordinate overflow")?;
+        let point = if horizontal {
+            (along_coord, offset_coord)
+        } else {
+            (offset_coord, along_coord)
+        };
+        if let Some((x, y)) = previous {
+            paths.push(stroke(x, y, point.0, point.1, color)?);
+        }
+        previous = Some(point);
+    }
+    Ok(paths)
 }
 
 fn mark_geometry(opts: Options) -> Result<PaperMarkGeometry, String> {
@@ -847,17 +1012,60 @@ fn render(opts: Options) -> Result<Vec<u8>, String> {
 }
 
 pub(super) fn render_pages(
-    opts: Options, page_count: usize,
+    opts: Options,
+    page_count: usize,
+) -> Result<Vec<u8>, String> {
+    render_pages_with_ruler(opts, page_count, None)
+}
+
+pub(super) fn render_pages_with_ruler(
+    opts: Options,
+    page_count: usize,
+    variation: Option<RulerVariation>,
 ) -> Result<Vec<u8>, String> {
     if !(1..=MAX_PAGES).contains(&page_count) {
         return Err("paper PDF needs 1 to 32 pages".into());
     }
-    let paths = paper_paths(opts)?;
-    serialize_paths(opts, paths, page_count)
+    if variation.is_none() {
+        return serialize_paths(opts, paper_paths(opts)?, page_count);
+    }
+    let mut pages = Vec::with_capacity(page_count);
+    for page in 1..=page_count {
+        pages.push(paper_paths_with_ruler(opts, variation, page)?);
+    }
+    serialize_page_paths(opts, pages)
 }
 
 fn paper_paths(opts: Options) -> Result<Vec<PdfVectorPath>, String> {
+    paper_paths_with_ruler(opts, None, 1)
+}
+
+fn checked_ruler_context(
+    opts: Options,
+    variation: Option<RulerVariation>,
+    page: usize,
+) -> Result<Option<RulerContext>, String> {
+    if variation.is_some_and(|ruler| {
+        ruler.maximum_error_um == 0
+            || ruler.maximum_error_um > 250
+            || !matches!(opts.style, Style::Ruled | Style::Grid)
+    }) {
+        return Err("ruler variation needs ruled/grid and 1..250 um".into());
+    }
+    Ok(variation.map(|ruler| RulerContext {
+        opts,
+        page,
+        variation: ruler,
+    }))
+}
+
+fn paper_paths_with_ruler(
+    opts: Options,
+    variation: Option<RulerVariation>,
+    page: usize,
+) -> Result<Vec<PdfVectorPath>, String> {
     let geometry = mark_geometry(opts)?;
+    let context = checked_ruler_context(opts, variation, page)?;
     let count = match geometry {
         PaperMarkGeometry::Blank => 0,
         PaperMarkGeometry::Ruled { horizontal, .. } => horizontal.count,
@@ -877,19 +1085,28 @@ fn paper_paths(opts: Options) -> Result<Vec<PdfVectorPath>, String> {
             .checked_mul(vertical.count)
             .ok_or("paper mark budget exceeded")?,
     };
-    if count > MAX_MARKS {
+    let segments = if variation.is_some() {
+        4u64
+    } else {
+        1u64
+    };
+    let output_count = count
+        .checked_mul(segments)
+        .ok_or("paper mark segment count overflow")?;
+    if output_count > MAX_MARKS {
         return Err("paper mark budget exceeded; increase spacing".into());
     }
     let mut paths = Vec::new();
     paths
         .try_reserve_exact(
-            usize::try_from(count).map_err(|error| error.to_string())?,
+            usize::try_from(output_count).map_err(|error| error.to_string())?,
         )
         .map_err(|error| format!("paper mark allocation failed: {error}"))?;
     match geometry {
         PaperMarkGeometry::Blank => {}
         PaperMarkGeometry::Ruled { horizontal, span } => {
-            append_lines(&mut paths, horizontal, span, true, opts.color)?;
+            append_lines(&mut paths, horizontal, span, true, opts.color,
+                context)?;
         }
         PaperMarkGeometry::Squared {
             horizontal,
@@ -903,6 +1120,7 @@ fn paper_paths(opts: Options) -> Result<Vec<PdfVectorPath>, String> {
                 horizontal_span,
                 true,
                 opts.color,
+                context,
             )?;
             append_lines(
                 &mut paths,
@@ -910,6 +1128,7 @@ fn paper_paths(opts: Options) -> Result<Vec<PdfVectorPath>, String> {
                 vertical_span,
                 false,
                 opts.color,
+                context,
             )?;
         }
         PaperMarkGeometry::Dotted {
@@ -1098,7 +1317,15 @@ pub fn validate_paper_border_clearance(
 }
 
 pub(super) fn render_png(opts: Options, dpi: u32) -> Result<Vec<u8>, String> {
-    let paths = paper_paths(opts)?;
+    render_png_with_ruler(opts, dpi, None)
+}
+
+pub(super) fn render_png_with_ruler(
+    opts: Options,
+    dpi: u32,
+    variation: Option<RulerVariation>,
+) -> Result<Vec<u8>, String> {
+    let paths = paper_paths_with_ruler(opts, variation, 1)?;
     png::render_paper_png(
         opts.width_um, opts.height_um, dpi, &paths, paths.len(), None,
     )
