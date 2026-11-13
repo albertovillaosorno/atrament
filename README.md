@@ -2625,6 +2625,37 @@ rendered to native PDF or transparent PNG. This is a manually requested
 straight connector, not mathematical closure of an analytic circle,
 a new curve primitive, or an inferred pen-up/cursive model.
 
+**Close selected open pen path with four curved segments** is an explicit
+alternative to the straight closing bridge. Select a continuous path with
+at least two strokes and use the same signed horizontal/vertical bend
+controls as the adjacent curved join. The four sampled quadratic segments
+run from the last directed endpoint to the selected path's own starting
+point; no following path is needed.
+
+Their rounded whole-µm joints preserve
+the selected pen's width and color while unrelated NFC/NFD rows stay in
+place. One browser Undo/Redo step records the draft change without saving.
+
+The native Rust equivalent is:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile ink.tsv --close-path-curved 'ñ' 1 0 -200 \
+  --output closed-curved.tsv
+```
+
+The bend is an explicit midpoint offset (-600..600 µm per axis) and must
+be nonzero, transverse to the closure gap and visibly survive integer
+rounding. An already closed path, a single segment, a gap over 1200 µm,
+clipped pen caps, collapsed samples, invalid typed operands or fewer than
+four spare library slots refuse before replacing an output.
+
+The CLI also
+preflights malformed choices before reading an open stdin source. Saved
+TSV remains four ordinary directed line segments, not a native Bézier
+or persistent path identifier. Rust PDF and transparent PNG use exactly
+the same closed physical ink as the browser's exported TSV.
+
 **Join selected path to following same-pen path** adds one deliberate
 straight bridge between adjacent candidate paths of the same exact glyph.
 The selected path's final endpoint leads to the next path's first endpoint,

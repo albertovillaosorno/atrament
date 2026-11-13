@@ -1515,3 +1515,36 @@ Rust/browser subprocess comparison checks full TSV equality and refusals.
 This is bounded manual geometry editing, not automatic cursive letterform
 synthesis, attached accents, calibrated pen pressure or persistent analytic
 curves. The complete two-line correlated P1-014 acceptance stays open.
+
+## Explicit curved closure of selected pen paths (partial) — 2026-11-13
+
+The Rust `glyphs --close-path-curved GRAPHEME PATH_INDEX BEND_X_UM
+BEND_Y_UM` edit and localhost **Close selected open pen path with four
+curved segments** control deliberately finish one continuous, same-pen
+path at its own authored starting endpoint. Its four rounded quadratic
+samples share the numeric helper with adjacent curved path joins, rather
+than introducing an alternative browser-only curve renderer. The signed
+bend offsets from the endpoint midpoint are limited to +/-600 µm each.
+
+At least two touching strokes, a nonzero closing gap up to 1200 µm, a
+transverse bend that remains visible after rounding, full round-pen cell
+clearance and four free slots under the 4096-stroke limit are required.
+The original directed strokes, pen style, exact NFC/NFD identity and
+interleaved other glyph rows are never edited. No partial output is
+written for a refusal; the browser records a single session-only undoable
+change and requires deliberate TSV download. The full source library
+is validated before a native edit, and malformed operands refuse ahead
+of reading an unclosed selected stdin stream.
+
+Two native Rust regressions cover exact full TSV and selected closed-loop
+inspection, save/reopen, independent native vector PDF and transparent
+PNG byte parity, output-sentinel preservation, typed refusals and the
+4092/4093 source-stroke capacity boundary. Two browser regressions cover
+exact sampled joints, Unicode isolation, geometry refusals and undoable
+manual export. A further 256-seed subprocess oracle checks that the actual
+Rust CLI and browser agree on every accepted TSV and invalid operation;
+Linux subprocess tests keep stdin open for twelve typed preflight cases.
+
+This is author-directed closure of sampled line segments, not a stored
+Bézier, automatic connected handwriting, physical pressure variation or
+completion of the two-line correlated P1-014 acceptance.

@@ -14,7 +14,7 @@ const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
     reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath, joinNextCandidatePath,
-    joinNextCandidatePathCurved,
+    joinNextCandidatePathCurved, closeCandidatePathCurved,
     translateCandidatePath, styleCandidatePath, scaleCandidatePath,
     reflectCandidatePath, rotateCandidatePath, shearCandidatePath,
     removeCandidatePath } =
@@ -607,6 +607,7 @@ function mountEditor() {
         "glyph-merge", "glyph-split-exact",
         "glyph-clear", "glyph-reverse",
         "glyph-reverse-path", "glyph-path-start", "glyph-path-close",
+        "glyph-path-close-curved",
         "glyph-path-join-next", "glyph-path-join-curved",
         "glyph-path-bend-x", "glyph-path-bend-y",
         "glyph-path-earlier", "glyph-path-later",
@@ -13313,6 +13314,115 @@ test("selected path slant UI is undoable and only deliberately exported",
             }
             editor.reset();
             assert.equal(get("path-shear").disabled, true);
+        } finally {
+            ui.restore();
+        }
+    });
+
+test("curved path closure matches native samples and refuses cliffs", () => {
+    const key = "n\u0303";
+    const ink = (grapheme, x1, y1, x2, y2) => ({
+        grapheme, x1, y1, x2, y2, width: 250, color: "#243647",
+    });
+    const a = ink(key, 500, 700, 850, 750);
+    const b = ink(key, 850, 750, 1100, 850);
+    const other = ink("ñ", 1200, 1200, 1250, 1350);
+    const original = [a, other, b];
+    const originalBytes = encodeGlyphLibrary(original);
+    const closed = closeCandidatePathCurved(original, key, 2, 0, -200);
+    assert.deepEqual(closed.strokes, [a, other, b,
+        ink(key, 1100, 850, 950, 738),
+        ink(key, 950, 738, 800, 675),
+        ink(key, 800, 675, 650, 663),
+        ink(key, 650, 663, 500, 700)]);
+    assert.equal(closed.selectedIndex, 3);
+    assert.equal(candidatePenPaths(closed.strokes, key).length, 1);
+    assert.deepEqual(candidatePenPaths(closed.strokes, key)[0].start,
+        candidatePenPaths(closed.strokes, key)[0].end,
+        "quadratic ending exactly at first authored endpoint closes loop");
+    assert.equal(encodeGlyphLibrary(original), originalBytes,
+        "failed or successful edits cannot mutate the source");
+    assert.equal(encodeGlyphLibrary(parseGlyphLibrary(
+        encodeGlyphLibrary(closed.strokes))),
+    encodeGlyphLibrary(closed.strokes));
+    for (const [selected, bx, by] of [
+        [2, 0, 0], [2, -601, 0], [2, 0, 601], [2, 0.5, 100],
+        [2, NaN, 100], [2, -400, -100], [-1, 0, -200],
+        [1, 0, -200], [999, 0, -200],
+    ]) {
+        assert.throws(() => closeCandidatePathCurved(
+            original, key, selected, bx, by));
+        assert.equal(encodeGlyphLibrary(original), originalBytes);
+    }
+    assert.throws(() => closeCandidatePathCurved([
+        a, b, ink(key, 1100, 850, 500, 700),
+    ], key, 0, 0, -200), /already closed/);
+    assert.throws(() => closeCandidatePathCurved([
+        a, { ...b, x2: 2500 },
+    ], key, 0, 0, -200), /1200/);
+    const near = [...original,
+        ...Array.from({ length: 4089 }, () => other)];
+    assert.equal(near.length, 4092);
+    assert.equal(closeCandidatePathCurved(
+        near, key, 0, 0, -200).strokes.length, 4096);
+    assert.throws(() => closeCandidatePathCurved(
+        [...near, other], key, 0, 0, -200), /4096/);
+    const nearEdge = [ink(key, 250, 700, 125, 850),
+        ink(key, 125, 850, 150, 900)];
+    assert.throws(() => closeCandidatePathCurved(
+        nearEdge, key, 0, -600, -100), /clips glyph cell/);
+});
+
+test("curved closure UI commits one explicit undoable Unicode TSV edit",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const key = "o\u0301";
+            const ink = (grapheme, x1, y1, x2, y2) => ({
+                grapheme, x1, y1, x2, y2, width: 250,
+                color: "#243647",
+            });
+            const original = [ink(key, 500, 700, 850, 750),
+                ink("ó", 1200, 1200, 1250, 1350),
+                ink(key, 850, 750, 1100, 850)];
+            const bytes = new TextEncoder().encode(
+                encodeGlyphLibrary(original));
+            assert.equal(get("path-close-curved").disabled, true);
+            editor.start();
+            get("load").files = [{ size: bytes.length,
+                arrayBuffer: async () => bytes.buffer }];
+            await get("load").dispatch("change");
+            get("character").value = key;
+            get("character").dispatch("input");
+            get("selected").value = "2";
+            get("selected").dispatch("change");
+            assert.equal(get("path-close-curved").disabled, false);
+            get("path-bend-x").value = "700";
+            get("path-close-curved").dispatch("click");
+            assert.match(get("status").textContent, /outside native bounds/);
+            assert.equal(get("slant-undo").disabled, true);
+            get("path-bend-x").value = "0";
+            get("path-bend-y").value = "-200";
+            get("path-close-curved").dispatch("click");
+            assert.match(get("status").textContent, /four curved segments/);
+            assert.match(get("paths").textContent, /closed loop/);
+            assert.equal(get("selected").value, "3");
+            assert.equal(get("path-close-curved").disabled, true);
+            const saved = encodeGlyphLibrary(closeCandidatePathCurved(
+                original, key, 2, 0, -200).strokes);
+            assert.equal(downloads.length, 0);
+            get("save").dispatch("click");
+            assert.equal(await downloads[0].text(), saved);
+            get("slant-undo").dispatch("click");
+            get("save").dispatch("click");
+            assert.equal(await downloads[1].text(),
+                encodeGlyphLibrary(original));
+            get("slant-redo").dispatch("click");
+            get("save").dispatch("click");
+            assert.equal(await downloads[2].text(), saved);
+            editor.reset();
+            assert.equal(get("path-close-curved").disabled, true);
         } finally {
             ui.restore();
         }

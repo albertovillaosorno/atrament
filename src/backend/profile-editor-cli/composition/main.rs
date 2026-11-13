@@ -106,6 +106,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--close-path GRAPHEME PATH_INDEX] \
     [--join-next-path GRAPHEME PATH_INDEX] \
     [--join-next-path-curved GRAPHEME PATH_INDEX BEND_X_UM BEND_Y_UM] \
+    [--close-path-curved GRAPHEME PATH_INDEX BEND_X_UM BEND_Y_UM] \
     [--rotate-path GRAPHEME PATH_INDEX START_STROKE] \
     [--move-path GRAPHEME FROM_PATH TO_PATH] \
     [--translate-path GRAPHEME PATH_INDEX DX_UM DY_UM] \
@@ -152,6 +153,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     --close-path inserts a short closing segment on a selected open path.\n\
     --join-next-path bridges adjacent same-pen glyph paths (up to 1200 um).\n\
     --join-next-path-curved adds four quadratic segments (bend +/-600 um).\n\
+    --close-path-curved closes an open path with four curved segments.\n\
     --translate-path moves one path using bounded signed micrometres.\n\
     --scale-path resizes around the selected path's first endpoint.\n\
     --shear-path slants one selected pen path -20..20 degrees.\n\
@@ -1476,7 +1478,7 @@ fn preflight_glyph_typed_option(
         "--glyph-stroke" => 7,
         "--rotate-path-ink" => 5,
         "--set-stroke" => 8,
-        "--join-next-path-curved" | "--translate-path"
+        "--join-next-path-curved" | "--close-path-curved" | "--translate-path"
         | "--style-path" | "--scale-path" | "--shear-path"
         | "--reflect-path" | "--rotate-glyph" => 4,
         "--move-stroke" | "--move-path" | "--rotate-path"
@@ -1500,7 +1502,7 @@ fn preflight_glyph_typed_option(
         | "--merge-strokes" | "--join-strokes"
         | "--remove-stroke" | "--reverse-path"
         | "--close-path" | "--join-next-path"
-        | "--join-next-path-curved" | "--rotate-path"
+        | "--join-next-path-curved" | "--close-path-curved" | "--rotate-path"
         | "--move-path"
         | "--translate-path" | "--style-path" | "--scale-path"
         | "--reflect-path" | "--shear-path" | "--remove-path"
@@ -1659,6 +1661,7 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                 glyphs.edit_stroke(option, &mut iter)?,
             "--reverse-path" | "--rotate-path" | "--close-path"
             | "--join-next-path" | "--join-next-path-curved"
+            | "--close-path-curved"
             | "--move-path"
             | "--translate-path" | "--style-path" | "--scale-path"
             | "--reflect-path" | "--shear-path" | "--remove-path"

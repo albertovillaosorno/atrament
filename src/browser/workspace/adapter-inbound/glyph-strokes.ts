@@ -517,6 +517,57 @@ export function closeCandidatePath(
     return { strokes: next, selectedIndex: endSlot + 1 };
 }
 
+// Close one open, same-pen candidate path with the identical four-piece
+// integer quadratic sampling used for adjacent curved joins. The selected
+// path remains a continuous loop and the entire draft stays undoable.
+export function closeCandidatePathCurved(
+    strokes: readonly Stroke[], grapheme: string, selectedIndex: number,
+    bendX: number, bendY: number,
+): { strokes: Stroke[]; selectedIndex: number } {
+    if (!exactGrapheme(grapheme) || !Number.isSafeInteger(selectedIndex)
+        || selectedIndex < 0 || strokes[selectedIndex]?.grapheme !== grapheme) {
+        throw new Error("Curved closure needs a selected exact glyph stroke");
+    }
+    if (![bendX, bendY].every((value) =>
+        Number.isSafeInteger(value) && Math.abs(value) <= 600)
+        || (bendX === 0 && bendY === 0)) {
+        throw new Error("Curved closure needs nonzero -600..600 µm bend");
+    }
+    encodeGlyphLibrary([...strokes]);
+    const positions = strokes.flatMap((stroke, index) =>
+        stroke.grapheme === grapheme ? [index] : []);
+    const ordinal = positions.indexOf(selectedIndex) + 1;
+    const path = candidatePenPaths(strokes, grapheme).find((item) =>
+        ordinal >= item.first && ordinal <= item.last);
+    if (!path || path.first === path.last) {
+        throw new Error("Curved closure requires two continuous strokes");
+    }
+    const start = path.end;
+    const end = path.start;
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    if (dx === 0 && dy === 0) {
+        throw new Error("Path is already closed");
+    }
+    if (dx * dx + dy * dy > 1200 * 1200) {
+        throw new Error("Curved closure exceeds 1200 µm gap limit");
+    }
+    if (bendX * dy === bendY * dx) {
+        throw new Error("Curved closure requires a transverse bend");
+    }
+    if (strokes.length > MAX_STROKES - 4) {
+        throw new Error("Curved closure exceeds 4096 authored strokes");
+    }
+    const bridges = sampleCurvedBridge(
+        grapheme, start, end, path.width, path.color, bendX, bendY,
+    );
+    const lastSlot = positions[path.last - 1]!;
+    const next = strokes.slice();
+    next.splice(lastSlot + 1, 0, ...bridges);
+    encodeGlyphLibrary(next);
+    return { strokes: next, selectedIndex: lastSlot + 1 };
+}
+
 // Join two neighboring candidate paths of one exact Unicode glyph with one
 // new directed same-pen bridge. Neither path is re-ordered or inferred from
 // nearby geometry; full round-pen clearance and the entire TSV are checked.
@@ -567,6 +618,47 @@ export function joinNextCandidatePath(
     next.splice(lastSlot + 1, 0, bridge);
     encodeGlyphLibrary(next);
     return { strokes: next, selectedIndex: lastSlot + 1 };
+}
+
+// Shared integer quadratic samples for both adjacent path joining and
+// closure of one open path. Both callers admit bend, gap and stroke count.
+function sampleCurvedBridge(
+    grapheme: string, start: Point, end: Point, width: number,
+    color: string, bendX: number, bendY: number,
+): Stroke[] {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const sample = (i: number): Point => {
+        const axis = (a: number, b: number, bend: number): number => {
+            const complement = 4 - i;
+            return Math.round((complement * complement * a
+                + i * complement * (a + b + 2 * bend)
+                + i * i * b) / 16);
+        };
+        return { x: axis(start.x, end.x, bendX),
+            y: axis(start.y, end.y, bendY) };
+    };
+    const bridges: Stroke[] = [];
+    let prior = start;
+    for (let i = 1; i <= 4; i += 1) {
+        const next = sample(i);
+        if (next.x === prior.x && next.y === prior.y) {
+            throw new Error("Curved join collapses a pen segment");
+        }
+        const bridge: Stroke = {
+            grapheme, x1: prior.x, y1: prior.y,
+            x2: next.x, y2: next.y,
+            width, color,
+        };
+        validateInsertedBridge(bridge);
+        bridges.push(bridge);
+        prior = next;
+    }
+    if (bridges.every((piece) =>
+        (piece.x2 - start.x) * dy === (piece.y2 - start.y) * dx)) {
+        throw new Error("Curved join does not bend selected ink");
+    }
+    return bridges;
 }
 
 // Add a four-piece quadratic connector controlled by a bounded bend from
@@ -620,36 +712,9 @@ export function joinNextCandidatePathCurved(
     if (strokes.length > MAX_STROKES - 4) {
         throw new Error("Curved join exceeds 4096 authored strokes");
     }
-    const sample = (i: number): Point => {
-        const axis = (a: number, b: number, bend: number): number => {
-            const complement = 4 - i;
-            return Math.round((complement * complement * a
-                + i * complement * (a + b + 2 * bend)
-                + i * i * b) / 16);
-        };
-        return { x: axis(start.x, end.x, bendX),
-            y: axis(start.y, end.y, bendY) };
-    };
-    const bridges: Stroke[] = [];
-    let prior = start;
-    for (let i = 1; i <= 4; i += 1) {
-        const next = sample(i);
-        if (next.x === prior.x && next.y === prior.y) {
-            throw new Error("Curved join collapses a pen segment");
-        }
-        const bridge: Stroke = {
-            grapheme, x1: prior.x, y1: prior.y,
-            x2: next.x, y2: next.y,
-            width: before.width, color: before.color,
-        };
-        validateInsertedBridge(bridge);
-        bridges.push(bridge);
-        prior = next;
-    }
-    if (bridges.every((piece) =>
-        (piece.x2 - start.x) * dy === (piece.y2 - start.y) * dx)) {
-        throw new Error("Curved join does not bend selected ink");
-    }
+    const bridges = sampleCurvedBridge(
+        grapheme, start, end, before.width, before.color, bendX, bendY,
+    );
     const next = strokes.slice();
     next.splice(lastSlot + 1, 0, ...bridges);
     encodeGlyphLibrary(next);
@@ -4793,6 +4858,8 @@ export function createGlyphStrokeEditor(): {
     const reversePath = required<HTMLButtonElement>("glyph-reverse-path");
     const startPath = required<HTMLButtonElement>("glyph-path-start");
     const closePath = required<HTMLButtonElement>("glyph-path-close");
+    const closePathCurved =
+        required<HTMLButtonElement>("glyph-path-close-curved");
     const joinNextPath =
         required<HTMLButtonElement>("glyph-path-join-next");
     const joinNextPathCurved =
@@ -4882,7 +4949,8 @@ export function createGlyphStrokeEditor(): {
         selected, update,
         remove, subdivide, splitExact, merge, clearGlyph, reverse,
         reversePath,
-        startPath, closePath, joinNextPath, joinNextPathCurved,
+        startPath, closePath, closePathCurved,
+        joinNextPath, joinNextPathCurved,
         curvedBendX, curvedBendY,
         translatePath, scalePath, stylePath, removePath,
         rotatePath, pathRotateDegrees, pathRotatePivotX, pathRotatePivotY,
@@ -4917,7 +4985,8 @@ export function createGlyphStrokeEditor(): {
         | "stroke merge"
         | "stroke direction" | "stroke order"
         | "pen path direction" | "pen path start"
-        | "pen path closure" | "pen path join" | "curved pen path join"
+        | "pen path closure" | "curved pen path closure"
+        | "pen path join" | "curved pen path join"
         | "pen path copy" | "pen path move"
         | "pen path shifted copy" | "pen path pen style"
         | "pen path rotation" | "pen path slant"
@@ -6121,6 +6190,10 @@ export function createGlyphStrokeEditor(): {
         closePath.disabled = !active || !chosenPath
             || chosenPath.first === chosenPath.last || closureGap === 0
             || closureGap > 1200 * 1200 || strokes.length >= MAX_STROKES;
+        closePathCurved.disabled = !active || drawing !== null
+            || !chosenPath || chosenPath.first === chosenPath.last
+            || closureGap === 0 || closureGap > 1200 * 1200
+            || strokes.length > MAX_STROKES - 4;
         const followingPath = paths[paths.indexOf(chosenPath!) + 1];
         const bridgeGap = chosenPath && followingPath ?
             (chosenPath.end.x - followingPath.start.x) ** 2
@@ -7131,6 +7204,32 @@ export function createGlyphStrokeEditor(): {
             commitInkEdit(changed.strokes, glyph, "pen path closure",
                 changed.selectedIndex);
             message("Closed selected pen path with a short bridge; unsaved");
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    closePathCurved.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null) return;
+        try {
+            const glyph = character.value;
+            const bend = (raw: string): number => {
+                if (!/^-?[0-9]+$/.test(raw)) {
+                    throw new Error("Curved bend requires whole micrometres");
+                }
+                const value = Number(raw);
+                if (!Number.isSafeInteger(value) || Math.abs(value) > 600) {
+                    throw new Error("Curved bend outside native bounds");
+                }
+                return value;
+            };
+            const changed = closeCandidatePathCurved(
+                strokes, glyph, selectedIndex,
+                bend(curvedBendX.value), bend(curvedBendY.value),
+            );
+            commitInkEdit(changed.strokes, glyph,
+                "curved pen path closure", changed.selectedIndex);
+            message("Closed selected pen path with four curved segments;"
+                + " unsaved");
         } catch (error) {
             message(String(error));
         }

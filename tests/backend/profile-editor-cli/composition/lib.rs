@@ -18987,3 +18987,133 @@ fn native_selected_path_shear_preserves_closed_and_full_budget_paths() {
         authored.as_bytes());
     fs::remove_file(source).expect("owned source");
 }
+
+#[test]
+fn native_curved_closure_replays_saved_unicode_ink_and_pdf_png() {
+    let nfd = "n\u{303}";
+    let source = test_path().with_extension("tsv");
+    let saved = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source path");
+    let saved_name = saved.to_str().expect("saved path");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "500", "700", "850", "750",
+        "250", "#243647",
+        "--glyph-stroke", "ñ", "1200", "1200", "1250", "1350",
+        "250", "#243647",
+        "--glyph-stroke", nfd, "850", "750", "1100", "850",
+        "250", "#243647",
+    ])).expect("original library").expect("TSV bytes");
+    fs::write(&source, &original).expect("persist original");
+    let result = execute_glyph_library(&args(&[
+        "--profile", source_name, "--close-path-curved",
+        nfd, "1", "0", "-200", "--output", saved_name,
+    ])).expect("save curved closure");
+    assert!(result.is_none(), "explicit --output writes no stdout");
+    let edited = fs::read(&saved).expect("edited TSV");
+    let expected = [
+        "atrament.glyph-strokes.v1".to_owned(),
+        format!("{nfd}\t500\t700\t850\t750\t250\t#243647"),
+        "ñ\t1200\t1200\t1250\t1350\t250\t#243647".to_owned(),
+        format!("{nfd}\t850\t750\t1100\t850\t250\t#243647"),
+        format!("{nfd}\t1100\t850\t950\t738\t250\t#243647"),
+        format!("{nfd}\t950\t738\t800\t675\t250\t#243647"),
+        format!("{nfd}\t800\t675\t650\t663\t250\t#243647"),
+        format!("{nfd}\t650\t663\t500\t700\t250\t#243647"),
+        String::new(),
+    ].join("\n");
+    assert_eq!(edited, expected.as_bytes());
+    assert_eq!(fs::read(&source).expect("source unchanged"), original);
+    let inspected = String::from_utf8(execute_glyph_library(&args(&[
+        "--profile", saved_name, "--inspect-paths", nfd,
+    ])).expect("inspect saved library").expect("report"))
+        .expect("UTF-8 report");
+    assert!(inspected.contains("Strokes: 6\nPaths: 1\nPen lifts: 0"),
+        "{inspected}");
+    assert!(inspected.contains("[closed loop]"), "{inspected}");
+    for format in ["pdf", "png"] {
+        let mut imported = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", saved_name,
+            "--place-text", "1", "30000", "45000", nfd,
+        ]);
+        let mut inline = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", nfd, "500", "700", "850", "750",
+            "250", "#243647",
+            "--glyph-stroke", nfd, "850", "750", "1100", "850",
+            "250", "#243647",
+            "--glyph-stroke", nfd, "1100", "850", "950", "738",
+            "250", "#243647",
+            "--glyph-stroke", nfd, "950", "738", "800", "675",
+            "250", "#243647",
+            "--glyph-stroke", nfd, "800", "675", "650", "663",
+            "250", "#243647",
+            "--glyph-stroke", nfd, "650", "663", "500", "700",
+            "250", "#243647",
+            "--place-text", "1", "30000", "45000", nfd,
+        ]);
+        if format == "png" {
+            imported.extend(args(&["--dpi", "72"]));
+            inline.extend(args(&["--dpi", "72"]));
+        }
+        assert_eq!(execute_notebook(&imported).expect("imported export"),
+            execute_notebook(&inline).expect("inline export"),
+            "curved closed glyph must render identical native {format}");
+    }
+    let failures = [
+        args(&["--close-path-curved", nfd, "1", "0", "0"]),
+        args(&["--close-path-curved", nfd, "1", "0", "601"]),
+        args(&["--close-path-curved", nfd, "1", "-601", "0"]),
+        args(&["--close-path-curved", nfd, "1", "-400", "-100"]),
+        args(&["--close-path-curved", nfd, "0", "0", "-200"]),
+        args(&["--close-path-curved", "ñ", "1", "0", "-200"]),
+        args(&["--close-path-curved", "nn", "1", "0", "-200"]),
+        args(&["--close-path-curved", nfd, "1", "0", "-200",
+            "--close-path-curved", nfd, "1", "0", "-200"]),
+    ];
+    for failure in failures {
+        let mut command = args(&["--profile", source_name]);
+        command.extend(failure);
+        command.extend(args(&["--output", saved_name, "--replace"]));
+        assert!(execute_glyph_library(&command).is_err(),
+            "invalid curved closure must refuse without changing saved ink");
+        assert_eq!(fs::read(&saved).expect("saved stays intact"), edited);
+    }
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(saved).expect("remove edited file");
+}
+
+#[test]
+fn native_curved_closure_caps_four_segments_without_partial_edit() {
+    let nfd = "n\u{303}";
+    let base = args(&[
+        "--glyph-stroke", nfd, "500", "700", "850", "750",
+        "250", "#243647",
+        "--glyph-stroke", nfd, "850", "750", "1100", "850",
+        "250", "#243647",
+    ]);
+    for (count, admitted) in [(4090usize, true), (4091usize, false)] {
+        let mut source = base.clone();
+        for _ in 0..count {
+            source.extend(args(&[
+                "--glyph-stroke", "ñ", "1200", "1200", "1250", "1350",
+                "250", "#243647",
+            ]));
+        }
+        source.extend(args(&[
+            "--close-path-curved", nfd, "1", "0", "-200",
+        ]));
+        match execute_glyph_library(&source) {
+            Ok(Some(bytes)) if admitted => {
+                let lines = String::from_utf8(bytes).expect("UTF-8 library");
+                assert_eq!(lines.lines().count(), 4097,
+                    "header plus full 4096 authored stroke budget");
+            }
+            Err(error) if !admitted => {
+                assert!(error.contains("4096 authored strokes"), "{error}");
+            }
+            actual => panic!("unexpected capacity result: {}",
+                if actual.is_ok() { "accepted" } else { "rejected" }),
+        }
+    }
+}

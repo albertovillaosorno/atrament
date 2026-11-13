@@ -8,7 +8,8 @@ import test from 'node:test';
 import { candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
     encodeGlyphLibrary, styleCandidatePath, removeCandidatePath,
     scaleCandidatePath, reflectCandidatePath, rotateCandidatePath,
-    joinNextCandidatePath, joinNextCandidatePathCurved, shearCandidatePath }
+    joinNextCandidatePath, joinNextCandidatePathCurved,
+    closeCandidatePathCurved, shearCandidatePath }
 // jig-ignore-next-line: static ESM import needs a literal path.
     from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -1101,5 +1102,143 @@ test("native selected-path slant preflights before open glyph stdin",
             assert.equal(result.stdout, "", command.join(" "));
             assert.match(result.stderr, /^Error: /,
                 `preflight must reject ${command.join(" ")}`);
+        }
+    });
+
+// The selected path closes back to its own starting point, not a following
+// path's origin. Compare all exact TSV rows including unrelated NFC/NFD ink.
+test("256 native/browser curved closures agree on samples and refusals",
+    { timeout: 90_000 }, () => {
+        const built = spawnSync(cargo, [
+            "build", "--locked", "--offline", "--quiet",
+            "-p", "atrament_profile_editor_cli", "--bin", "atrament-profiles",
+        ], { cwd: root, encoding: "utf8", timeout: 90_000,
+            env: { ...process.env, TMPDIR: join(root, ".temp") } });
+        assert.equal(built.error, undefined, built.error?.message);
+        assert.equal(built.status, 0, built.stderr);
+        const pick = random(0xC105_2026);
+        let accepted = 0;
+        let refused = 0;
+        for (let sample = 0; sample < 256; sample += 1) {
+            const key = sample % 2 === 0 ? "ñ" : "n\u0303";
+            const other = key === "ñ" ? "n\u0303" : "ñ";
+            const first = stroke(pick, key, "#123456");
+            const second = {
+                ...first, x1: first.x2, y1: first.y2,
+                x2: first.x1 + pick(-300, 300),
+                y2: first.y1 + pick(-300, 300),
+            };
+            const extra = stroke(pick, other, "#667788");
+            let rows = [first, extra, second];
+            const mode = sample % 16;
+            let bx = pick(-400, 400);
+            let by = pick(-400, 400);
+            let selected = 2;
+            let path = 1;
+            let glyph = key;
+            if (mode === 0) { bx = 0; by = 0; }
+            if (mode === 1) bx = 601;
+            if (mode === 2) by = -601;
+            if (mode === 3) glyph = "nn";
+            if (mode === 4) { selected = -1; path = 0; }
+            if (mode === 5) rows = [first, extra];
+            if (mode === 6) rows[2] = { ...second, x1: first.x2 + 1 };
+            if (mode === 7) rows[2] = { ...second,
+                x2: first.x1, y2: first.y1 };
+            if (mode === 8) rows[2] = { ...second,
+                x2: first.x1 + 1201, y2: first.y1 };
+            if (mode === 9) { bx = first.x1 - second.x2;
+                by = first.y1 - second.y2; }
+            const original = encodeGlyphLibrary(rows);
+            let expected;
+            try {
+                expected = encodeGlyphLibrary(closeCandidatePathCurved(
+                    rows, glyph, selected, bx, by).strokes);
+            } catch (error) {
+                expected = error;
+            }
+            const result = spawnSync(binary, [
+                "glyphs", ...rows.flatMap(strokeFlags),
+                "--close-path-curved", glyph, String(path),
+                String(bx), String(by),
+            ], { cwd: root, encoding: "utf8", timeout: 2_000,
+                maxBuffer: 512 * 1024 });
+            const context = `curved close ${sample} mode=${mode}`;
+            assert.equal(result.error, undefined, context);
+            if (expected instanceof Error) {
+                refused += 1;
+                assert.notEqual(result.status, 0,
+                    context + ": browser " + expected.message
+                    + "; native " + result.stderr.slice(0, 120));
+                assert.equal(result.stdout, "", context);
+                assert.match(result.stderr, /^Error: /, context);
+            } else {
+                accepted += 1;
+                assert.equal(result.status, 0,
+                    context + ": " + result.stderr);
+                assert.equal(result.stdout, expected, context);
+                assert.equal(expected.split("\n").length,
+                    original.split("\n").length + 4, context);
+            }
+            assert.equal(encodeGlyphLibrary(rows), original,
+                context + " must preserve original Unicode source rows");
+        }
+        assert.ok(accepted > 60, `accepted closures: ${accepted}`);
+        assert.ok(refused > 90, `refused closures: ${refused}`);
+    });
+
+test("native curved closure preflights before open glyph stdin",
+    { timeout: 25_000, skip: process.platform !== "linux" }, async () => {
+        const built = spawnSync(cargo, [
+            "build", "--locked", "--offline", "--quiet",
+            "-p", "atrament_profile_editor_cli", "--bin", "atrament-profiles",
+        ], { cwd: root, encoding: "utf8", timeout: 90_000,
+            env: { ...process.env, TMPDIR: join(root, ".temp") } });
+        assert.equal(built.error, undefined, built.error?.message);
+        assert.equal(built.status, 0, built.stderr);
+        const malformed = [
+            ["--close-path-curved"],
+            ["--close-path-curved", "n\u0303"],
+            ["--close-path-curved", "n\u0303", "1"],
+            ["--close-path-curved", "n\u0303", "1", "0"],
+            ["--close-path-curved", "n\u0303", "0", "0", "-200"],
+            ["--close-path-curved", "n\u0303", "4097", "0", "-200"],
+            ["--close-path-curved", "n\u0303", "1", "0", "0"],
+            ["--close-path-curved", "n\u0303", "1", "601", "0"],
+            ["--close-path-curved", "n\u0303", "1", "0", "-601"],
+            ["--close-path-curved", "n\u0303", "1", "+10", "0"],
+            ["--close-path-curved", "n\u0303", "1", "1.5", "0"],
+            ["--close-path-curved", "ab", "1", "0", "-200"],
+        ];
+        for (const tail of malformed) {
+            const command = ["glyphs", "--profile", "-", ...tail];
+            const result = await new Promise((resolve, reject) => {
+                const child = spawn(binary, command, {
+                    cwd: root, stdio: ["pipe", "pipe", "pipe"],
+                });
+                child.stderr.setEncoding("utf8");
+                child.stdout.setEncoding("utf8");
+                let stderr = "";
+                let stdout = "";
+                child.stderr.on("data", (chunk) => { stderr += chunk; });
+                child.stdout.on("data", (chunk) => { stdout += chunk; });
+                const timeout = setTimeout(() => {
+                    child.kill();
+                    reject(new Error("curved closure blocked on open stdin"));
+                }, 2_000);
+                child.on("error", (error) => {
+                    clearTimeout(timeout);
+                    reject(error);
+                });
+                child.on("close", (status) => {
+                    clearTimeout(timeout);
+                    resolve({ status, stderr, stdout });
+                });
+                // Intentionally leave stdin unclosed until process exits.
+            });
+            assert.notEqual(result.status, 0, command.join(" "));
+            assert.equal(result.stdout, "", command.join(" "));
+            assert.match(result.stderr, /^Error: /,
+                `typed preflight rejects ${command.join(" ")}`);
         }
     });

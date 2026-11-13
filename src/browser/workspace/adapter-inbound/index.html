@@ -1555,10 +1555,14 @@
             <button id="glyph-path-join-curved" type="button" disabled>
               Join following pen path with four curved segments
             </button>
+            <button id="glyph-path-close-curved" type="button" disabled>
+              Close selected open pen path with four curved segments
+            </button>
             <p class="field-help">The explicit bend changes a quadratic
               pen gesture; four rounded strokes join the same directed
-              endpoints. Full pen clearance and a nonzero visible bend are
-              required. No new curve type is saved in TSV v1.</p>
+              endpoints, or close one selected open path back to its start.
+              Full pen clearance and a nonzero visible bend are required.
+              No new curve type is saved in TSV v1.</p>
             <label>Selected path horizontal shift (µm)
               <input id="glyph-path-dx" type="number" min="-3500"
                 max="3500" step="10" value="0" disabled>
