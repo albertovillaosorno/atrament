@@ -12376,3 +12376,50 @@ fn word_baseline_step_refuses_bottom_margin_overshoot_in_pdf_and_png()
     fs::remove_file(target).map_err(|error| error.to_string())?;
     Ok(())
 }
+
+#[test]
+fn word_baseline_step_rejects_overlong_directed_bridges_atomically()
+-> Result<(), String> {
+    // The initial same-height gap is 1195 um, just inside the 1200-um
+    // physical join limit. The second glyph's seeded +122 um baseline
+    // step increases the exact squared distance to 1_442_909 > 1_440_000.
+    let prefix = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "á", "150", "1200", "2955", "1200",
+        "250", "#123456",
+        "--place-text", "1", "25000", "30000", "áá",
+        "--join-text-pair", "á", "á",
+        "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+    ]);
+    let target = test_path();
+    let name = target.to_str().ok_or("non-UTF8 output path")?;
+    for format in ["pdf", "png"] {
+        let mut original = prefix.clone();
+        original.extend(args(&["--export-paper", format]));
+        if format == "png" {
+            original.extend(args(&["--dpi", "72"]));
+        }
+        let accepted = execute_notebook(&original)?
+            .ok_or("valid straight short join missing export")?;
+        if accepted.is_empty() {
+            return Err("accepted join export must not be empty".into());
+        }
+        fs::write(&target, b"preserved output")
+            .map_err(|error| error.to_string())?;
+        original.extend(args(&[
+            "--glyph-word-baseline-step", "150",
+            "--output", name, "--replace",
+        ]));
+        let refusal = execute_notebook(&original)
+            .expect_err("inclined bridge exceeds inclusive join limit");
+        if !refusal.contains("gap")
+            || fs::read(&target).map_err(|error| error.to_string())?
+                != b"preserved output" {
+            return Err(format!(
+                "invalid inclined join changed {format}: {refusal}"
+            ));
+        }
+    }
+    fs::remove_file(target).map_err(|error| error.to_string())?;
+    Ok(())
+}

@@ -995,12 +995,13 @@ from the real directed endpoints; out-of-range connections or off-page
 pen edges refuse atomically instead of silently clipping the export.
 Zero spread is byte-identical to an omitted option.
 
-Four native regressions check independent hard-coded seed samples across
+Five native regressions check independent hard-coded seed samples across
 two runs of exact NFD Unicode words; replay and independent composition
 with all existing word/line treatments; selected directed joins and
 saved mean baseline offsets; genuine PDF, transparent PNG and page-ink
-TSV reproducibility and reimport; and malformed/duplicate/unpaired flags
-plus A4 bottom-margin overshoot refusing without replacing output.
+TSV reproducibility and reimport; malformed/duplicate/unpaired flags,
+A4 bottom-margin overshoot, and an overlong directed cursive bridge
+refusing without replacing an earlier accepted PDF or PNG.
 
 This does not model a real writer's baseline statistics or infer cursive
 motion, and the CLI does not persist the option in a notebook document.
