@@ -17992,3 +17992,57 @@ fn native_selected_path_scaling_refuses_invalid_edits_without_writes() {
     fs::remove_file(source).expect("remove owned source");
     fs::remove_file(output).expect("remove owned destination");
 }
+
+#[test]
+fn native_selected_path_scaling_preserves_closed_loops_and_full_budget() {
+    let loop_bytes = execute_glyph_library(&args(&[
+        "--glyph-stroke", "n\u{303}", "500", "700", "900", "700",
+        "251", "#112233",
+        "--glyph-stroke", "ñ", "1500", "1500", "2000", "2000",
+        "251", "#445566",
+        "--glyph-stroke", "n\u{303}", "900", "700", "900", "1000",
+        "251", "#112233",
+        "--glyph-stroke", "n\u{303}", "900", "1000", "500", "1000",
+        "251", "#112233",
+        "--glyph-stroke", "n\u{303}", "500", "1000", "500", "700",
+        "251", "#112233",
+        "--scale-path", "n\u{303}", "1", "125", "75",
+    ])).expect("closed native path resize").expect("TSV");
+    assert_eq!(loop_bytes, concat!(
+        "atrament.glyph-strokes.v1\n",
+        "n\u{303}\t500\t700\t1000\t700\t251\t#112233\n",
+        "ñ\t1500\t1500\t2000\t2000\t251\t#445566\n",
+        "n\u{303}\t1000\t700\t1000\t925\t251\t#112233\n",
+        "n\u{303}\t1000\t925\t500\t925\t251\t#112233\n",
+        "n\u{303}\t500\t925\t500\t700\t251\t#112233\n",
+    ).as_bytes());
+    let source = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("test library");
+    let mut authored = String::from("atrament.glyph-strokes.v1\n");
+    for index in 0..4096 {
+        let from = 500 + 2 * (index % 2);
+        let to = 500 + 2 * ((index + 1) % 2);
+        authored.push_str(&format!(
+            "n\u{303}\t{from}\t700\t{to}\t700\t251\t#112233\n",
+        ));
+    }
+    fs::write(&source, authored.as_bytes()).expect("own 4096-row file");
+    let scaled = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--scale-path", "n\u{303}", "1", "150", "100",
+    ])).expect("4096-segment edit").expect("TSV");
+    assert_eq!(scaled.split(|byte| *byte == b'\n').count(), 4098);
+    assert!(scaled.starts_with(
+        b"atrament.glyph-strokes.v1\nn\xcc\x83\t500\t700\t503\t700\t251\t#112233\n"
+    ));
+    assert_eq!(fs::read(&source).expect("source unchanged"),
+        authored.into_bytes());
+    let report = String::from_utf8(execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--inspect-paths", "n\u{303}",
+    ])).expect("full budget inspected").expect("report"))
+        .expect("UTF-8");
+    assert!(report.contains("Strokes: 4096\nPaths: 1\nPen lifts: 0"),
+        "{report}");
+    fs::remove_file(source).expect("remove owned full-budget source");
+}

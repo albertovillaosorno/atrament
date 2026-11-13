@@ -12615,3 +12615,45 @@ test("selected path scale UI is undoable and exports only accepted ink",
             ui.restore();
         }
     });
+
+test("path scaling preserves closed contour joints and full 4096-stroke budget",
+    () => {
+        const glyph = "n\u0303";
+        const base = { ...stroke(glyph), x1: 500, y1: 700,
+            x2: 900, y2: 700, width: 251, color: "#112233" };
+        const top = { ...base, x1: 900, y1: 700, x2: 900, y2: 1000 };
+        const bottom = { ...base, x1: 900, y1: 1000,
+            x2: 500, y2: 1000 };
+        const left = { ...base, x1: 500, y1: 1000,
+            x2: 500, y2: 700 };
+        const other = stroke("ñ");
+        const original = [base, other, top, bottom, left];
+        const result = scaleCandidatePath(original, glyph, 3, 125, 75);
+        assert.deepEqual(result.strokes, [
+            { ...base, x2: 1000 }, other,
+            { ...top, x1: 1000, x2: 1000, y2: 925 },
+            { ...bottom, x1: 1000, y1: 925, y2: 925 },
+            { ...left, y1: 925 },
+        ]);
+        assert.deepEqual(candidatePenPaths(result.strokes, glyph).map(
+            ({ first, last, start, end }) => [first, last, start, end]),
+        [[1, 4, { x: 500, y: 700 }, { x: 500, y: 700 }]]);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(result.strokes)),
+            result.strokes);
+        assert.deepEqual(original, [base, other, top, bottom, left]);
+        const large = Array.from({ length: 4096 }, (_, index) => ({
+            ...base, x1: 500 + (index % 2) * 2,
+            x2: 500 + ((index + 1) % 2) * 2,
+        }));
+        const before = encodeGlyphLibrary(large);
+        const scaled = scaleCandidatePath(large, glyph, 4095, 150, 100);
+        assert.equal(scaled.selectedIndex, 4095);
+        assert.equal(scaled.strokes.length, 4096);
+        assert.deepEqual(candidatePenPaths(scaled.strokes, glyph).map(
+            ({ first, last }) => [first, last]), [[1, 4096]]);
+        assert.equal(scaled.strokes[0].x2, 503);
+        assert.equal(scaled.strokes[4095].x2, 500);
+        assert.equal(encodeGlyphLibrary(large), before);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(scaled.strokes)),
+            scaled.strokes);
+    });
