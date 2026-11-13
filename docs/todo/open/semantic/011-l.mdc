@@ -4509,3 +4509,22 @@ byte-identical omitted/explicit square, typed/CLI Markdown-only refusal,
 source-independent option validation and preservation of selected output
 on geometric failure. This is export-only decoration, not full semantic
 notebook acceptance or completion of ATR-P2-011.
+
+
+## Independent Markdown bullet/task pen colors (partial) — 2026-11-13
+
+The native export-only Markdown flow CLI now accepts independent
+`--flow-bullet-color '#RRGGBB'` and `--flow-task-color '#RRGGBB'`.
+The first changes only synthetic unordered bullet ink (dash/dot/ring);
+the second changes only checkbox outlines and their checked strokes
+(square/diamond). Other structures and authored glyph ink retain their
+original colors, row origins, selected insets and pagination. Omitted or
+explicit historical #1E304A retains prior output bytes.
+
+Four native regressions cover all six bullet/task shape combinations,
+unchanged physical geometry and unrelated ink, multiple-page wrapped
+items with first-row-only marks, deterministic real PDF/transparent PNG
+and versioned ink TSV, source-independent invalid/duplicate/non-Markdown
+refusals, typed Markdown admission and preserved selected PDF bytes
+after geometric failure. This remains transient CLI decoration, not
+saved semantic list identity or complete notebook content Export.

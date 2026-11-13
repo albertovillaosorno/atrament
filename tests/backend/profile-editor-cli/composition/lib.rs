@@ -16132,3 +16132,254 @@ fn markdown_task_style_preflights_and_preserves_existing_output() {
         b"preserve-selected-task-PDF");
     fs::remove_file(target).expect("clean test sentinel");
 }
+
+#[test]
+fn markdown_list_marker_colors_change_only_their_own_pen_ink() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "- a\n- [x] a\n+ [ ] a\n1. a\n> a\n\n# a\n\na",
+    ).expect("mixed Markdown list and other structural rows");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 80_000, height: 160_000,
+    };
+    let row_contract = |rows: &[TextRun]| rows.iter()
+        .map(|run| (run.page, run.origin_um, run.text.clone()))
+        .collect::<Vec<_>>();
+    for bullet_style in [BulletStyle::Dash, BulletStyle::Dot,
+        BulletStyle::Ring] {
+        for task_style in [TaskStyle::Square, TaskStyle::Diamond] {
+            let choose = |bullet_color, task_color| {
+                layout_flow_with_typography(
+                    &source, &NotebookProfile::default(), None,
+                    HeadingDecoration::default(), Some(region),
+                    FlowTypography {
+                        bullet_style: Some(bullet_style),
+                        task_style: Some(task_style),
+                        bullet_color, task_color,
+                        bullet_align: Some(BodyAlign::Center),
+                        task_align: Some(BodyAlign::Right),
+                        ..FlowTypography::default()
+                    },
+                ).expect("list marker pen colors")
+            };
+            let (base_rows, base_marks, pages) = choose(None, None);
+            let (same_rows, same_marks, same_pages) =
+                choose(Some([30, 48, 74]), Some([30, 48, 74]));
+            assert_eq!(same_pages, pages);
+            assert_eq!(row_contract(&base_rows), row_contract(&same_rows));
+            assert_eq!(base_marks, same_marks,
+                "explicit historic colors preserve the complete ink");
+            let (colored_rows, colored_marks, colored_pages) =
+                choose(Some([0, 127, 255]), Some([250, 3, 64]));
+            assert_eq!(colored_pages, pages);
+            assert_eq!(row_contract(&colored_rows), row_contract(&base_rows));
+            assert_eq!(colored_marks.len(), base_marks.len());
+            let bullet_segments = if bullet_style == BulletStyle::Ring {
+                8
+            } else {
+                1
+            };
+            for (index, (old, new)) in base_marks.iter()
+                .zip(colored_marks.iter()).enumerate() {
+                assert_eq!((old.page, old.start_um, old.end_um, old.width_um),
+                    (new.page, new.start_um, new.end_um, new.width_um),
+                    "physical marker geometry changed at index {index}");
+                let expected_rgb = if index < bullet_segments {
+                    [0, 127, 255]
+                } else if index < bullet_segments + 10 {
+                    [250, 3, 64]
+                } else {
+                    [30, 48, 74]
+                };
+                assert_eq!(new.rgb, expected_rgb,
+                    "only the selected list marker receives new color");
+                assert_eq!(old.rgb, [30, 48, 74]);
+            }
+        }
+    }
+}
+
+#[test]
+fn markdown_list_marker_colors_stay_on_first_wrapped_page_rows() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        concat!(
+            "- a a a a a a a a a a a a\n\n",
+            "- [x] a a a a a a a a a a a a\n\n",
+            "+ [ ] a a a a a a a a a a a a",
+        ),
+    ).expect("wrapped Markdown list source");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 24_000, height: 25_000,
+    };
+    let choose = |bullet_color, task_color| {
+        layout_flow_with_typography(
+            &source, &NotebookProfile::default(), None,
+            HeadingDecoration::default(), Some(region),
+            FlowTypography {
+                bullet_color, task_color,
+                bullet_style: Some(BulletStyle::Ring),
+                task_style: Some(TaskStyle::Diamond),
+                list_quote_inset: Some(2_000),
+                ..FlowTypography::default()
+            },
+        ).expect("multi-page colored list")
+    };
+    let (original_rows, original_marks, original_pages) =
+        choose(None, None);
+    let (color_rows, color_marks, color_pages) =
+        choose(Some([9, 44, 210]), Some([230, 21, 88]));
+    assert!(original_pages >= 3);
+    assert_eq!(original_pages, color_pages);
+    let row_contract = |rows: &[TextRun]| rows.iter()
+        .map(|run| (run.page, run.origin_um, run.text.clone()))
+        .collect::<Vec<_>>();
+    assert_eq!(row_contract(&original_rows), row_contract(&color_rows));
+    assert_eq!(original_marks.len(), 18,
+        "one ring and two diamonds with one check each");
+    assert_eq!(original_marks.len(), color_marks.len());
+    for (original, colored) in original_marks.iter()
+        .zip(color_marks.iter()) {
+        assert_eq!((original.page, original.start_um, original.end_um,
+            original.width_um), (colored.page, colored.start_um,
+            colored.end_um, colored.width_um));
+    }
+    let bullet_page = color_marks.first().expect("ring first segment").page;
+    let checked_page = color_marks.get(8).expect("checked box").page;
+    let open_page = color_marks.get(14).expect("open box").page;
+    assert!(bullet_page < checked_page && checked_page < open_page);
+    assert!(color_marks.iter().take(8).all(|mark|
+        mark.page == bullet_page && mark.rgb == [9, 44, 210]));
+    assert!(color_marks.iter().skip(8).take(6).all(|mark|
+        mark.page == checked_page && mark.rgb == [230, 21, 88]));
+    assert!(color_marks.iter().skip(14).take(4).all(|mark|
+        mark.page == open_page && mark.rgb == [230, 21, 88]));
+}
+
+#[test]
+fn markdown_list_marker_colors_replay_pdf_png_and_ink_bytes() {
+    let source = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown",
+        "- a\n\n- [x] a\n\n+ [ ] a",
+        "--flow-region", "30000", "40000", "34000", "26000",
+        "--flow-bullet-style", "ring",
+        "--flow-task-style", "diamond",
+    ]);
+    let render = |colors: Option<(&str, &str)>, format: &str| {
+        let mut command = source.clone();
+        if let Some((bullet, task)) = colors {
+            command.extend(args(&[
+                "--flow-bullet-color", bullet,
+                "--flow-task-color", task,
+            ]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72", "--png-page", "2"]));
+        }
+        execute_notebook(&command).expect("native colored export")
+            .expect("PDF, PNG or ink TSV bytes")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let original = render(None, format);
+        assert_eq!(original,
+            render(Some(("#1E304A", "#1e304a")), format),
+            "explicit historical colors must keep original {format} bytes");
+        let altered = render(Some(("#007FFF", "#FA0340")), format);
+        assert_eq!(altered,
+            render(Some(("#007FFF", "#FA0340")), format),
+            "colored {format} must replay exactly");
+        assert_ne!(original, altered,
+            "selected list mark color should change physical {format}");
+        match format {
+            "pdf" => assert!(altered.starts_with(b"%PDF-1.4")),
+            "png" => assert!(altered.starts_with(b"\x89PNG\r\n\x1a\n")),
+            _ => {
+                assert!(altered.starts_with(b"atrament.page-ink.v1\n"));
+                let ink = str::from_utf8(&altered)
+                    .expect("native TSV uses UTF-8");
+                assert!(ink.contains("#007FFF"));
+                assert!(ink.contains("#FA0340"));
+            }
+        }
+    }
+}
+
+#[test]
+fn markdown_list_marker_colors_preflight_and_preserve_output() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "unopened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (option, valid) in [
+        ("--flow-bullet-color", "#FE1234"),
+        ("--flow-task-color", "#1234AA"),
+    ] {
+        for rejected in ["bad", "#12GG00", "#12345", "#1122334",
+            "112233", "#\u{2603}0000"] {
+            let mut command = source.clone();
+            command.extend(args(&[option, rejected]));
+            assert_eq!(preflight_notebook_sources(&command)
+                .expect_err("reject color before reading source"),
+                format!("{option} requires #RRGGBB"));
+        }
+        let mut missing = source.clone();
+        missing.push(option.into());
+        assert_eq!(preflight_notebook_sources(&missing)
+            .expect_err("missing color"), format!("{option} requires #RRGGBB"));
+        let mut duplicate = source.clone();
+        duplicate.extend(args(&[option, valid, option, valid]));
+        assert_eq!(preflight_notebook_sources(&duplicate)
+            .expect_err("duplicate color"),
+            format!("{option} may appear only once"));
+        let mut plain = args(&[
+            "--flow-text", "a", "--export-paper", "pdf",
+        ]);
+        plain.extend(args(&[option, valid]));
+        assert_eq!(preflight_notebook_sources(&plain)
+            .expect_err("Markdown-only color"),
+            format!("{option} requires a Markdown flow"));
+    }
+    let plain = FlowSource::new(FlowFormat::Plain, "a")
+        .expect("plain source");
+    for (selection, expected) in [
+        (FlowTypography {
+            bullet_color: Some([1, 2, 3]),
+            ..FlowTypography::default()
+        }, "flow bullet color requires Markdown flow"),
+        (FlowTypography {
+            task_color: Some([1, 2, 3]),
+            ..FlowTypography::default()
+        }, "flow task color requires Markdown flow"),
+    ] {
+        assert_eq!(layout_flow_with_typography(
+            &plain, &NotebookProfile::default(), None,
+            HeadingDecoration::default(), None, selection,
+        ).expect_err("typed Markdown-only color"), expected);
+    }
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"preserve-selected-color-PDF")
+        .expect("test sentinel");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown", "- [x] a a",
+        "--flow-region", "30000", "40000", "8000", "10000",
+        "--flow-bullet-color", "#007FFF",
+        "--flow-task-color", "#FA0340",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("test path"), "--replace",
+    ]));
+    let error = execute_notebook(&command)
+        .expect_err("unfit color export refuses before replacement");
+    assert!(error.contains("writing row")
+        || error.contains("printable region"), "{error}");
+    assert_eq!(fs::read(&target).expect("unchanged PDF"),
+        b"preserve-selected-color-PDF");
+    fs::remove_file(target).expect("remove test sentinel");
+}

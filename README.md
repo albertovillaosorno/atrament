@@ -803,6 +803,31 @@ flow and remains independent of task/bullet text alignment and selected
 page insets. Invalid/duplicate values and non-Markdown usage refuse
 before input reads; unfit physical layout preserves any existing output.
 
+Markdown bullet and checkbox marks can now receive separate physical pen
+colors using `--flow-bullet-color '#RRGGBB'` and
+`--flow-task-color '#RRGGBB'`. The first colors only the synthetic
+`-`/`*`/`+` bullet strokes, whether dash, dot or ring. The second colors
+the checkbox outline **and** its two connected check strokes, whether
+square or diamond. Neither option recolors the authored words or numbers,
+quote bars, headings, rules or paper decoration.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-bullet-style ring --flow-bullet-color '#007FFF' \
+  --flow-task-style diamond --flow-task-color '#FA0340' \
+  --export-paper pdf --output colored-list-marks.pdf
+```
+
+Omitted colors retain the original dark blue (#1E304A); selecting that
+same color explicitly preserves PDF/transparent PNG/ink TSV bytes.
+Only the first physical row of a wrapped list item receives marker ink,
+even across page breaks. Both controls are transient, Markdown-only,
+and independent of list text alignment and physical placement. Values
+must be exact six-digit hexadecimal RGB; invalid or duplicate flags
+refuse before reading selected sources, and failed geometry cannot
+overwrite a selected output file.
+
 To indent only the **first physical row** of each Markdown prose block,
 select `--flow-body-first-line-indent-um 8000`. This shifts the first
 row 8 mm right and shortens its writing width by the same amount; wrapped

@@ -101,6 +101,7 @@ pub(super) struct FlowTypography {
     pub(super) body_inset: Option<u32>,
     pub(super) body_right_inset: Option<u32>,
     pub(super) bullet_align: Option<BodyAlign>,
+    pub(super) bullet_color: Option<[u8; 3]>,
     pub(super) bullet_style: Option<BulletStyle>,
     pub(super) list_quote_inset: Option<u32>,
     pub(super) list_quote_right_inset: Option<u32>,
@@ -109,6 +110,7 @@ pub(super) struct FlowTypography {
     pub(super) pitch: Option<u32>,
     pub(super) quote_align: Option<BodyAlign>,
     pub(super) task_align: Option<BodyAlign>,
+    pub(super) task_color: Option<[u8; 3]>,
     pub(super) task_style: Option<TaskStyle>,
 }
 
@@ -608,6 +610,7 @@ struct Layout<'model> {
     body_right_inset_um: u32,
     bottom: u32,
     bullet_align: Option<BodyAlign>,
+    bullet_color: Option<[u8; 3]>,
     bullet_style: Option<BulletStyle>,
     heading: HeadingDecoration,
     // Whether the last heading was itself bound to an earlier title/rule.
@@ -633,6 +636,7 @@ struct Layout<'model> {
     rule_chain: Option<RuleChain>,
     statistics: Option<&'model HandwritingStatisticsProfile>,
     task_align: Option<BodyAlign>,
+    task_color: Option<[u8; 3]>,
     task_style: Option<TaskStyle>,
     top: u32,
     y: u32,
@@ -1724,7 +1728,7 @@ impl Layout<'_> {
                 );
                 self.ornaments.push(NotebookInkLine {
                     page: self.page, start_um, end_um, width_um: width,
-                    rgb: [30, 48, 74],
+                    rgb: self.bullet_color.unwrap_or([30, 48, 74]),
                 });
             }
         }
@@ -1929,7 +1933,7 @@ impl Layout<'_> {
                 start_um: start,
                 end_um: end,
                 width_um: 350,
-                rgb: [30, 48, 74],
+                rgb: self.task_color.unwrap_or([30, 48, 74]),
             });
         }
         if checked {
@@ -1960,7 +1964,7 @@ impl Layout<'_> {
                     start_um,
                     end_um,
                     width_um: 450,
-                    rgb: [30, 48, 74],
+                    rgb: self.task_color.unwrap_or([30, 48, 74]),
                 });
             }
         }
@@ -2992,10 +2996,12 @@ fn initialize_layout<'model>(
     Ok(Layout {
         body_align: spacing.body_align,
         bullet_align: spacing.bullet_align,
+        bullet_color: spacing.bullet_color,
         bullet_style: spacing.bullet_style,
         ordered_align: spacing.ordered_align,
         quote_align: spacing.quote_align,
         task_align: spacing.task_align,
+        task_color: spacing.task_color,
         task_style: spacing.task_style,
         body_first_line_indent_um: spacing.body_first_line_indent.unwrap_or(0),
         body_continuation_indent_um:
@@ -3146,6 +3152,46 @@ pub(super) fn layout_flow_with_spacing(
     )
 }
 
+// Structural Markdown choices may not be applied to literal plain-text
+// flow. Preserve the original ordered option precedence for typed callers.
+fn validate_flow_structural_typography(
+    format: FlowFormat, spacing: FlowTypography,
+) -> Result<(), String> {
+    if spacing.quote_align.is_some()
+        && format != FlowFormat::Markdown {
+        return Err("flow quote alignment requires Markdown flow".into());
+    }
+    if spacing.bullet_align.is_some()
+        && format != FlowFormat::Markdown {
+        return Err("flow bullet alignment requires Markdown flow".into());
+    }
+    if spacing.bullet_style.is_some()
+        && format != FlowFormat::Markdown {
+        return Err("flow bullet style requires Markdown flow".into());
+    }
+    if spacing.bullet_color.is_some()
+        && format != FlowFormat::Markdown {
+        return Err("flow bullet color requires Markdown flow".into());
+    }
+    if spacing.ordered_align.is_some()
+        && format != FlowFormat::Markdown {
+        return Err("flow ordered alignment requires Markdown flow".into());
+    }
+    if spacing.task_align.is_some()
+        && format != FlowFormat::Markdown {
+        return Err("flow task alignment requires Markdown flow".into());
+    }
+    if spacing.task_style.is_some()
+        && format != FlowFormat::Markdown {
+        return Err("flow task style requires Markdown flow".into());
+    }
+    if spacing.task_color.is_some()
+        && format != FlowFormat::Markdown {
+        return Err("flow task color requires Markdown flow".into());
+    }
+    Ok(())
+}
+
 /// An optional physical inset applies to every row of a Markdown prose
 /// paragraph. It does not shift structural markers or literal code rows.
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
@@ -3169,30 +3215,7 @@ pub(super) fn layout_flow_with_typography(
         && source.format != FlowFormat::Markdown {
         return Err("flow body alignment requires Markdown flow".into());
     }
-    if spacing.quote_align.is_some()
-        && source.format != FlowFormat::Markdown {
-        return Err("flow quote alignment requires Markdown flow".into());
-    }
-    if spacing.bullet_align.is_some()
-        && source.format != FlowFormat::Markdown {
-        return Err("flow bullet alignment requires Markdown flow".into());
-    }
-    if spacing.bullet_style.is_some()
-        && source.format != FlowFormat::Markdown {
-        return Err("flow bullet style requires Markdown flow".into());
-    }
-    if spacing.ordered_align.is_some()
-        && source.format != FlowFormat::Markdown {
-        return Err("flow ordered alignment requires Markdown flow".into());
-    }
-    if spacing.task_align.is_some()
-        && source.format != FlowFormat::Markdown {
-        return Err("flow task alignment requires Markdown flow".into());
-    }
-    if spacing.task_style.is_some()
-        && source.format != FlowFormat::Markdown {
-        return Err("flow task style requires Markdown flow".into());
-    }
+    validate_flow_structural_typography(source.format, spacing)?;
     if spacing.body_first_line_indent
         .is_some_and(|inset| inset > MAX_BODY_INSET_UM) {
         return Err(

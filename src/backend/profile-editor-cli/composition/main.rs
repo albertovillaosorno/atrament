@@ -191,7 +191,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--flow-quote-align left|center|right (Markdown only)] \
     [--flow-bullet-align left|center|right (Markdown only)] \
     [--flow-bullet-style dash|dot|ring (Markdown only)] \
+    [--flow-bullet-color '#RRGGBB' (Markdown only)] \
     [--flow-task-style square|diamond (Markdown only)] \
+    [--flow-task-color '#RRGGBB' (Markdown only)] \
     [--flow-ordered-align left|center|right (Markdown only)] \
     [--flow-task-align left|center|right (Markdown only)] \
     [--flow-body-first-line-indent-um INSET_UM (0..12000, Markdown only)] \
@@ -253,6 +255,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     --flow-bullet-align aligns unordered bullet and checkbox text \
     while their symbols stay fixed. --flow-bullet-style selects \
     dash, dot or outlined ring for unordered bullets only. \
+    --flow-bullet-color changes only synthetic bullet ink. \
     --flow-ordered-align aligns \
     authored numbered list labels with their item text, preserving \
     the measured hanging indent on continued rows. \
@@ -260,6 +263,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     checkbox boxes remain fixed at their original gutter. \
     --flow-task-style selects square or diamond checkbox outlines, \
     retaining the authored task body and original marker gutter. \
+    --flow-task-color changes only checkbox and check ink. \
     --flow-list-quote-inset-um shifts list/quote ink 0..12 mm right; \
     --flow-list-quote-right-inset-um reserves 0..12 mm on their right. \
     Explicit --place-text overlays may coexist with flow, outside its \
@@ -458,6 +462,14 @@ impl NotebookFlagPreflight {
         Ok(0)
     }
 
+    fn select_flow_marker_color(
+        &mut self, option: &str, iter: &mut Iter<'_, String>,
+    ) -> Result<usize, String> {
+        self.unique(option, &format!("{option} may appear only once"))?;
+        let _color = parse_notebook_flow_marker_color(iter, option)?;
+        Ok(0)
+    }
+
     fn select_flow_pitch(
         &mut self, iter: &mut Iter<'_, String>,
     ) -> Result<usize, String> {
@@ -571,14 +583,12 @@ impl NotebookFlagPreflight {
             }
             "--quality" => {
                 self.unique(option, "--quality may appear only once")?;
-                let _validated = parse_export_quality(
-                    iter.next().map(String::as_str),
-                )?;
+                let _validated =
+                    parse_export_quality(iter.next().map(String::as_str))?;
                 0
             }
             "--flow-paragraph-gap-um" => {
-                self.unique(option,
-                    "--flow-paragraph-gap-um may appear only once")?;
+                self.unique(option, &format!("{option} may appear only once"))?;
                 let _gap = parse_notebook_flow_paragraph_gap(iter)?;
                 0
             }
@@ -588,6 +598,8 @@ impl NotebookFlagPreflight {
                 self.select_flow_align(option, iter)?,
             "--flow-bullet-style" => self.select_flow_bullet_style(iter)?,
             "--flow-task-style" => self.select_flow_task_style(iter)?,
+            "--flow-bullet-color" | "--flow-task-color" =>
+                self.select_flow_marker_color(option, iter)?,
             "--flow-body-first-line-indent-um"
             | "--flow-body-continuation-indent-um" =>
                 self.select_body_row_indent(option, iter)?,
@@ -664,12 +676,16 @@ impl NotebookFlagPreflight {
                     .then_some(BodyAlign::Left),
                 bullet_style: has("--flow-bullet-style")
                     .then_some(BulletStyle::Dash),
+                bullet_color: has("--flow-bullet-color")
+                    .then_some([30, 48, 74]),
                 ordered_align: has("--flow-ordered-align")
                     .then_some(BodyAlign::Left),
                 task_align: has("--flow-task-align")
                     .then_some(BodyAlign::Left),
                 task_style: has("--flow-task-style")
                     .then_some(TaskStyle::Square),
+                task_color: has("--flow-task-color")
+                    .then_some([30, 48, 74]),
                 body_first_line_indent:
                     has("--flow-body-first-line-indent-um").then_some(0),
                 body_continuation_indent:
@@ -2328,6 +2344,25 @@ fn parse_notebook_flow_task_style(
     }
 }
 
+// Parse a caller-selected structural pen color as exact six-digit RGB.
+fn parse_notebook_flow_marker_color(
+    iter: &mut Iter<'_, String>, option: &str,
+) -> Result<[u8; 3], String> {
+    let source = iter.next()
+        .ok_or_else(|| format!("{option} requires #RRGGBB"))?;
+    if source.len() != 7 || !source.starts_with('#')
+        || !source.bytes().skip(1).all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(format!("{option} requires #RRGGBB"));
+    }
+    let parse = |start: usize| -> Result<u8, String> {
+        let pair = source.get(start..start.saturating_add(2))
+            .ok_or_else(|| format!("{option} requires #RRGGBB"))?;
+        u8::from_str_radix(pair, 16)
+            .map_err(|_error| format!("{option} requires #RRGGBB"))
+    };
+    Ok([parse(1)?, parse(3)?, parse(5)?])
+}
+
 fn parse_notebook_flow_align(
     iter: &mut Iter<'_, String>, option: &str,
 ) -> Result<BodyAlign, String> {
@@ -2360,6 +2395,18 @@ fn select_notebook_flow_typography(
             }
             typography.task_style =
                 Some(parse_notebook_flow_task_style(iter)?);
+            Ok(())
+        }
+        "--flow-bullet-color" | "--flow-task-color" => {
+            let selected = if option == "--flow-bullet-color" {
+                &mut typography.bullet_color
+            } else {
+                &mut typography.task_color
+            };
+            if selected.is_some() {
+                return Err(format!("{option} may appear only once"));
+            }
+            *selected = Some(parse_notebook_flow_marker_color(iter, option)?);
             Ok(())
         }
         "--flow-paragraph-gap-um" =>
@@ -2461,6 +2508,10 @@ fn validate_notebook_flow_flag_compatibility(
         && flow_format != Some(FlowFormat::Markdown) {
         return Err("--flow-bullet-style requires a Markdown flow".into());
     }
+    if typography.bullet_color.is_some()
+        && flow_format != Some(FlowFormat::Markdown) {
+        return Err("--flow-bullet-color requires a Markdown flow".into());
+    }
     if typography.ordered_align.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
         return Err("--flow-ordered-align requires a Markdown flow".into());
@@ -2472,6 +2523,10 @@ fn validate_notebook_flow_flag_compatibility(
     if typography.task_style.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
         return Err("--flow-task-style requires a Markdown flow".into());
+    }
+    if typography.task_color.is_some()
+        && flow_format != Some(FlowFormat::Markdown) {
+        return Err("--flow-task-color requires a Markdown flow".into());
     }
     if typography.body_first_line_indent.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
@@ -2877,6 +2932,20 @@ fn preflight_notebook_ink_requirements(
     Ok(())
 }
 
+// Keep the CLI selection vocabulary in one place for typed option
+// dispatch; source-independent preflight validates the same flags first.
+fn is_notebook_flow_typography_option(option: &str) -> bool {
+    matches!(option,
+        "--flow-pitch-um" | "--flow-body-align" | "--flow-quote-align"
+        | "--flow-bullet-align" | "--flow-bullet-style"
+        | "--flow-bullet-color" | "--flow-task-color"
+        | "--flow-ordered-align" | "--flow-task-align" | "--flow-task-style"
+        | "--flow-body-first-line-indent-um" | "--flow-paragraph-gap-um"
+        | "--flow-body-inset-um" | "--flow-body-continuation-indent-um"
+        | "--flow-body-right-inset-um" | "--flow-list-quote-inset-um"
+        | "--flow-list-quote-right-inset-um")
+}
+
 fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     preflight_notebook_sources(args)?;
     let mut profile = NotebookProfile::default();
@@ -2918,15 +2987,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             | "--heading-marker-scale" => heading.parse(option, &mut iter)?,
             "--flow-region" => flow_region = Some(parse_notebook_flow_region(
                 &mut iter, flow_region.is_some())?),
-            "--flow-pitch-um" | "--flow-body-align" | "--flow-quote-align"
-            | "--flow-bullet-align" | "--flow-bullet-style"
-            | "--flow-ordered-align" | "--flow-task-align" | "--flow-task-style"
-            | "--flow-body-first-line-indent-um" | "--flow-paragraph-gap-um"
-            | "--flow-body-inset-um" | "--flow-body-continuation-indent-um"
-            | "--flow-body-right-inset-um" | "--flow-list-quote-inset-um"
-            | "--flow-list-quote-right-inset-um" =>
+            selected if is_notebook_flow_typography_option(selected) =>
                 select_notebook_flow_typography(
-                    &mut iter, &mut flow_typography, option,
+                    &mut iter, &mut flow_typography, selected,
                 )?,
             "--flow-text" | "--flow-markdown"
             | "--flow-text-file" | "--flow-markdown-file" =>
