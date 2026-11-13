@@ -4241,3 +4241,25 @@ flow shard 49 passes 3/3 with complete TAP counts, as do the 3/3 shard-runner
 checks, 1/1 print-ready dry run and 3/3 joined-ink tests. Jig doctor passes;
 Jig check still reports 181 previously known findings, zero in the two
 changed files. A new full 49-shard replay was not performed here.
+
+## Selected native Markdown paragraph gap (partial) — 2026-11-12
+
+The Rust `atrament-profiles notebook` CLI additionally accepts
+`--flow-paragraph-gap-um 0..12000` for the one collapsed physical gap
+between Markdown blocks after blank source lines. The existing default is
+4,000 µm. Zero removes this extra gap; trailing/leading blanks remain
+non-printing, multiple consecutive blanks still collapse, and plain-text
+blank rows keep their full measured pitch. A selected minimum row pitch
+remains independent; the selected gap is not saved to notebook JSON.
+
+The same physical-gap policy now drives heading and separator-chain grouping,
+following-row reservation and fixed-region page placement. No new semantic
+paragraph identity, arbitrary Markdown parser or browser document-body
+export is implied. Four native integration regressions check exact page
+positions at zero/default/maximum gaps, repeated blank normalization,
+heading/quote/rule ornaments, deterministic real PDF/transparent PNG/ink TSV,
+and late invalid/duplicate/unsupported options before source reads.
+
+An insufficient explicit PDF page selection refuses without overwriting a
+selected existing file. The task remains open until persisted semantic
+notebook bodies and the complete saved-document journey are implemented.

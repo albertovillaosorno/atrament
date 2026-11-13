@@ -51,7 +51,8 @@ const MAX_LINE_GRAPHEMES: usize = 96;
 const MAX_PAGES: usize = 32;
 const INSET_UM: u32 = 2_500;
 const EXTRA_RIGHT_UM: u32 = 1_500;
-const PARAGRAPH_GAP_UM: u32 = 4_000;
+const DEFAULT_PARAGRAPH_GAP_UM: u32 = 4_000;
+const MAX_PARAGRAPH_GAP_UM: u32 = 12_000;
 const DEFAULT_PITCH_UM: u32 = 9_000;
 const MAX_SELECTED_PITCH_UM: u32 = 30_000;
 const SEPARATOR_CENTER_UM: u32 = 4_500;
@@ -544,6 +545,7 @@ struct Layout<'model> {
     lines: Vec<TextRun>,
     ornaments: Vec<NotebookInkLine>,
     page: usize,
+    paragraph_gap_um: u32,
     pending_blank_rows: usize,
     pitch: u32,
     right: u32,
@@ -559,7 +561,7 @@ impl Layout<'_> {
         self.flush_blank_rows()?;
         self.y = self
             .y
-            .checked_add(PARAGRAPH_GAP_UM)
+            .checked_add(self.paragraph_gap_um)
             .ok_or("paragraph gap overflow")?;
         Ok(())
     }
@@ -753,7 +755,7 @@ impl Layout<'_> {
             else {
                 return Ok(None);
             };
-            if !matches!(interior_gap, 0 | PARAGRAPH_GAP_UM) {
+            if interior_gap != 0 && interior_gap != self.paragraph_gap_um {
                 return Ok(None);
             }
             if interior_gap != 0 {
@@ -771,7 +773,8 @@ impl Layout<'_> {
         Ok(Some(gaps))
     }
 
-    // A relocated heading/block group retains every collapsed 4-mm gap
+    // A relocated heading/block group retains each selected Markdown
+    // paragraph gap.
     // between titles and before the block. All ink, row and page cursor
     // offsets share these checked measurements; page turns omit the gaps.
     fn fitting_row_offset(
@@ -791,7 +794,7 @@ impl Layout<'_> {
     }
 
     // Consecutive separator marks are run-less measured rows. Admit only
-    // horizontal 0.4-mm rules on one page with collapsed 0/4-mm gaps;
+    // horizontal 0.4-mm rules on one page with selected paragraph gaps;
     // fenced physical blanks and earlier page turns break the group.
     fn fitting_rule_gaps(
         &self, chain: RuleChain, page: usize, following_y: u32,
@@ -817,7 +820,7 @@ impl Layout<'_> {
                 let Some(gap) = rule_y.checked_sub(after) else {
                     return Ok(None);
                 };
-                if !matches!(gap, 0 | PARAGRAPH_GAP_UM) {
+                if gap != 0 && gap != self.paragraph_gap_um {
                     return Ok(None);
                 }
                 if gap != 0 {
@@ -836,7 +839,7 @@ impl Layout<'_> {
         let Some(gap) = following_y.checked_sub(after) else {
             return Ok(None);
         };
-        if !matches!(gap, 0 | PARAGRAPH_GAP_UM) {
+        if gap != 0 && gap != self.paragraph_gap_um {
             return Ok(None);
         }
         if gap != 0 {
@@ -876,7 +879,7 @@ impl Layout<'_> {
             .ok_or("flow following-row budget overflow")?;
         let gaps = u32::try_from(following.paragraph_gaps)
             .map_err(|_error| "flow paragraph-gap budget overflow")?
-            .checked_mul(PARAGRAPH_GAP_UM)
+            .checked_mul(self.paragraph_gap_um)
             .ok_or("flow paragraph-gap budget overflow")?;
         let needed = self.pitch.checked_mul(rows)
             .and_then(|value| value.checked_add(gaps))
@@ -1064,7 +1067,8 @@ impl Layout<'_> {
         let Some(gap) = first.origin_um.1.checked_sub(after_heading) else {
             return Ok(());
         };
-        if heading.page != first.page || !matches!(gap, 0 | PARAGRAPH_GAP_UM) {
+        if heading.page != first.page
+            || (gap != 0 && gap != self.paragraph_gap_um) {
             return Ok(());
         }
         let heading_y = heading.origin_um.1;
@@ -1357,7 +1361,7 @@ impl Layout<'_> {
     }
 
     // Record a title's first run and ornament at the start of a chain.
-    // Adjacent rows or one collapsed Markdown paragraph gap may connect
+    // Adjacent rows or one selected Markdown paragraph gap may connect
     // titles. Fenced blank rows and physical page breaks end the chain;
     // an earlier title/rule still keeps its reservation.
     fn remember_heading_chain(&mut self, style: LineStyle, y: u32) {
@@ -1369,7 +1373,8 @@ impl Layout<'_> {
                 prior.page == self.page
                     && prior.origin_um.1.checked_add(self.pitch)
                         .and_then(|after| y.checked_sub(after))
-                        .is_some_and(|gap| matches!(gap, 0 | PARAGRAPH_GAP_UM))
+                        .is_some_and(|gap| gap == 0
+                            || gap == self.paragraph_gap_um)
             });
         if !continues {
             self.heading_chain = Some(HeadingChain {
@@ -2632,7 +2637,7 @@ fn initialize_layout<'model>(
     profile: &NotebookProfile,
     statistics: Option<&'model HandwritingStatisticsProfile>,
     heading: HeadingDecoration, format: FlowFormat,
-    region: Option<FlowRegion>, pitch: u32,
+    region: Option<FlowRegion>, pitch: u32, paragraph_gap_um: u32,
 ) -> Result<Layout<'model>, String> {
     heading.validate().map_err(str::to_owned)?;
     if heading.is_selected() && format != FlowFormat::Markdown {
@@ -2664,6 +2669,7 @@ fn initialize_layout<'model>(
         right,
         row_count: 0,
         pitch,
+        paragraph_gap_um,
     })
 }
 
@@ -2746,10 +2752,11 @@ fn measured_pitch_with_minimum(
         .max(minimum.unwrap_or(DEFAULT_PITCH_UM)))
 }
 
-/// A caller-selected minimum row pitch increases deliberate notebook leading.
-/// Measured glyph heights still win; a selected value never compresses ink.
-/// This setting is export-only and does not modify the saved notebook profile.
+/// This explicit spacing option changes only collapsed Markdown paragraph
+/// gaps, not physical row pitch, plain-text blank rows, or saved profiles.
+/// Existing callers continue to receive the default 4-mm gap.
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
+#[cfg(test)]
 pub(super) fn layout_flow_with_min_pitch(
     source: &FlowSource,
     profile: &NotebookProfile,
@@ -2758,10 +2765,41 @@ pub(super) fn layout_flow_with_min_pitch(
     region: Option<FlowRegion>,
     min_pitch_um: Option<u32>,
 ) -> Result<(Vec<TextRun>, Vec<NotebookInkLine>, usize), String> {
+    layout_flow_with_spacing(
+        source, profile, statistics, decoration, region, min_pitch_um, None,
+    )
+}
+
+/// The selected minimum row pitch cannot compress measured glyph clearance.
+/// The paragraph gap is a bounded export-only spacing policy.
+#[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
+pub(super) fn layout_flow_with_spacing(
+    source: &FlowSource,
+    profile: &NotebookProfile,
+    statistics: Option<&HandwritingStatisticsProfile>,
+    decoration: HeadingDecoration,
+    region: Option<FlowRegion>,
+    min_pitch_um: Option<u32>,
+    paragraph_gap_um: Option<u32>,
+) -> Result<(Vec<TextRun>, Vec<NotebookInkLine>, usize), String> {
+    if paragraph_gap_um.is_some_and(|gap| gap > MAX_PARAGRAPH_GAP_UM) {
+        return Err("flow paragraph gap must be within 0..12000 um".into());
+    }
+    if paragraph_gap_um.is_some() && source.format != FlowFormat::Markdown {
+        return Err("flow paragraph gap requires Markdown flow".into());
+    }
     let pitch = measured_pitch_with_minimum(source, statistics, min_pitch_um)?;
-    let mut layout = initialize_layout(
+    let layout = initialize_layout(
         profile, statistics, decoration, source.format, region, pitch,
+        paragraph_gap_um.unwrap_or(DEFAULT_PARAGRAPH_GAP_UM),
     )?;
+    compose_flow_rows(source, layout)
+}
+
+// Parse physical rows only after both selected spacing policies are admitted.
+fn compose_flow_rows(
+    source: &FlowSource, mut layout: Layout<'_>,
+) -> Result<(Vec<TextRun>, Vec<NotebookInkLine>, usize), String> {
     // Markdown blank-line runs separate paragraphs once, even after multiple
     // empty source lines; leading and trailing blanks add no physical space.
     // Plain-text blank lines instead consume a full physical writing row.

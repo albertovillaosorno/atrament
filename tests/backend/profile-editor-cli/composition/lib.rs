@@ -12867,3 +12867,210 @@ fn selected_pitch_preserves_markdown_decorations_across_region_page_breaks() {
     }
     assert_eq!(render(30_000).expect("replay").1, marks);
 }
+
+#[test]
+fn selected_markdown_paragraph_gap_preserves_default_and_changes_page_flow() {
+    let source = FlowSource::new(FlowFormat::Markdown, "a\n\nb\n\nc")
+        .expect("three paragraphs");
+    let paper = NotebookProfile::default();
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 50_000, height: 45_000,
+    };
+    let render = |gap| layout_flow_with_spacing(
+        &source, &paper, None, HeadingDecoration::default(),
+        Some(region), None, gap,
+    );
+    let legacy = layout_flow_with_region(
+        &source, &paper, None, HeadingDecoration::default(), Some(region),
+    ).expect("default Markdown layout");
+    let normalize = |(runs, marks, pages):
+        (Vec<TextRun>, Vec<NotebookInkLine>, usize)| {
+        (runs.into_iter().map(|run| (run.page, run.origin_um,
+            run.text, run.heading_ink)).collect::<Vec<_>>(), marks, pages)
+    };
+    assert_eq!(normalize(render(None).expect("implicit default")),
+        normalize(layout_flow_with_region(&source, &paper, None,
+            HeadingDecoration::default(), Some(region))
+            .expect("default layout replay")));
+    assert_eq!(normalize(render(Some(4_000)).expect("explicit default")),
+        normalize(legacy));
+    let origins = |gap| {
+        let (lines, marks, pages) = render(Some(gap)).expect("gap layout");
+        assert!(marks.is_empty());
+        (lines.into_iter().map(|line| (line.page, line.origin_um.1))
+            .collect::<Vec<_>>(), pages)
+    };
+    assert_eq!(origins(0), (
+        vec![(1, 42_500), (1, 51_500), (1, 60_500)], 1,
+    ));
+    assert_eq!(origins(4_000), (
+        vec![(1, 42_500), (1, 55_500), (1, 68_500)], 1,
+    ));
+    assert_eq!(origins(12_000), (
+        vec![(1, 42_500), (1, 63_500), (2, 42_500)], 2,
+    ));
+    for invalid in [12_001, u32::MAX] {
+        assert_eq!(render(Some(invalid)).expect_err("typed bound"),
+            "flow paragraph gap must be within 0..12000 um");
+    }
+    let plain = FlowSource::new(FlowFormat::Plain, "a\n\nb")
+        .expect("plain physical rows");
+    assert_eq!(layout_flow_with_spacing(
+        &plain, &paper, None, HeadingDecoration::default(),
+        Some(region), None, Some(0),
+    ).expect_err("typed Markdown-only gate"),
+        "flow paragraph gap requires Markdown flow");
+    let collapsed = FlowSource::new(FlowFormat::Markdown, "a\n\n\n\nb")
+        .expect("multiple blank lines");
+    let one = FlowSource::new(FlowFormat::Markdown, "a\n\nb")
+        .expect("single blank line");
+    let layout = |source: &FlowSource| layout_flow_with_spacing(
+        source, &paper, None, HeadingDecoration::default(),
+        Some(region), None, Some(12_000),
+    ).expect("collapsed gap layout");
+    assert_eq!(normalize(layout(&collapsed)), normalize(layout(&one)));
+}
+
+#[test]
+fn selected_paragraph_gap_keeps_decorated_heading_and_rule_chains() {
+    let paper = NotebookProfile::default();
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 80_000, height: 70_000,
+    };
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "a  \na  \na\n\n---\n\n# a\n\n## a\n\n> a")
+        .expect("body and decorated title chain");
+    let render = |gap| layout_flow_with_spacing(
+        &source, &paper, None, HeadingDecoration::default(),
+        Some(region), None, Some(gap),
+    );
+    for gap in [0, 4_000, 12_000] {
+        let (runs, marks, pages) = render(gap)
+            .expect("fitting decorated layout");
+        assert!(pages >= 1);
+        if gap == 12_000 {
+            assert!(pages >= 2, "wider gaps must paginate a compact region");
+        }
+        assert_eq!(runs.iter().map(|run| run.text.as_str())
+            .collect::<Vec<_>>(), ["a", "a", "a", "a", "a", "a"]);
+        assert!(marks.len() >= 3, "rule, titles and quote need ink");
+        assert_eq!(render(gap).expect("identical replay").1, marks);
+        assert!(runs.iter().all(|run| run.origin_um.1 >= 42_500
+            && run.origin_um.1 < 107_500));
+        assert!(marks.iter().all(|mark| mark.start_um.1 >= region.top
+            && mark.end_um.1 <= region.top + region.height));
+    }
+}
+
+#[test]
+fn selected_paragraph_gap_exports_real_pdf_png_and_page_ink() {
+    let base = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060",
+        "--glyph-stroke", "b", "900", "900", "2200", "3400",
+        "250", "#204060",
+        "--glyph-stroke", "c", "900", "900", "2200", "3400",
+        "250", "#204060",
+        "--flow-markdown", "a\n\nb\n\nc",
+        "--flow-region", "30000", "40000", "50000", "45000",
+    ]);
+    let export = |gap: Option<&str>, format: &str, page: Option<&str>| {
+        let mut command = base.clone();
+        if let Some(gap) = gap {
+            command.extend(args(&["--flow-paragraph-gap-um", gap]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&[
+                "--dpi", "72", "--png-page", page.unwrap_or("1"),
+            ]));
+        }
+        execute_notebook(&command)
+            .expect("selected native export").expect("native bytes")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let legacy = export(None, format, None);
+        assert_eq!(legacy, export(Some("4000"), format, None),
+            "explicit 4-mm default changes {format}");
+        assert_eq!(export(Some("12000"), format, None),
+            export(Some("12000"), format, None),
+            "selected {format} must replay byte for byte");
+        assert_ne!(legacy, export(Some("12000"), format, None),
+            "selected {format} must change actual physical output");
+    }
+    let pdf = export(Some("12000"), "pdf", None);
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    assert_eq!(String::from_utf8_lossy(&pdf)
+        .split("\nstream\n").skip(1).count(), 2);
+    let second = export(Some("12000"), "png", Some("2"));
+    assert!(second.starts_with(b"\x89PNG\r\n\x1a\n"));
+    let first = export(Some("12000"), "png", Some("1"));
+    assert_ne!(first, second);
+    let ink = String::from_utf8(export(Some("12000"), "ink", None))
+        .expect("valid page-ink TSV");
+    let pages = ink.lines().skip(1)
+        .map(|line| line.split('\t').next().unwrap_or(""))
+        .collect::<Vec<_>>();
+    assert_eq!(pages, ["1", "1", "2"]);
+}
+
+#[test]
+fn invalid_paragraph_gap_refuses_before_input_and_preserves_existing_pdf() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "not-opened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (tokens, diagnostic) in [
+        (vec!["--flow-paragraph-gap-um", "12001"], "within 0..12000"),
+        (vec!["--flow-paragraph-gap-um", "-1"], "within 0..12000"),
+        (vec!["--flow-paragraph-gap-um", "+0"], "within 0..12000"),
+        (vec!["--flow-paragraph-gap-um", "4294967296"],
+            "within 0..12000"),
+        (vec!["--flow-paragraph-gap-um", ""], "within 0..12000"),
+        (vec!["--flow-paragraph-gap-um"], "requires 0..12000"),
+        (vec!["--flow-paragraph-gap-um", "0",
+            "--flow-paragraph-gap-um", "1"], "may appear only once"),
+    ] {
+        let mut command = source.clone();
+        command.extend(args(&tokens));
+        let error = preflight_notebook_sources(&command)
+            .expect_err("invalid late gap must be rejected before stdin");
+        assert!(error.contains(diagnostic), "{tokens:?}: {error}");
+    }
+    for (flag, value) in [
+        ("--flow-text", "a"), ("--ink-file", "not-opened.tsv"),
+    ] {
+        let mut command = args(&[
+            "--export-paper", "pdf", "--glyph-file", "not-opened.tsv",
+            flag, value,
+        ]);
+        command.extend(args(&["--flow-paragraph-gap-um", "0"]));
+        let error = preflight_notebook_sources(&command)
+            .expect_err("only Markdown may select paragraph gap");
+        assert_eq!(error,
+            "--flow-paragraph-gap-um requires a Markdown flow");
+    }
+
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"keep-old-PDF").expect("sentinel PDF");
+    let mut command = args(&[
+        "--export-paper", "pdf", "--pages", "1",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown", "a\n\na\n\na",
+        "--flow-region", "30000", "40000", "50000", "45000",
+        "--flow-paragraph-gap-um", "12000",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("test path"), "--replace",
+    ]));
+    let error = execute_notebook(&command)
+        .expect_err("a 12-mm paragraph gap needs a second page");
+    assert!(error.contains("requires 2 physical pages"), "{error}");
+    assert_eq!(fs::read(&target).expect("sentinel survives"), b"keep-old-PDF");
+    fs::remove_file(target).expect("delete test-owned sentinel");
+}

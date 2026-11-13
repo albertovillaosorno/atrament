@@ -563,7 +563,28 @@ saved notebook JSON or manual `--place-text` positions. Invalid, duplicate
 or unsupported values refuse before reading selected source files or stdin.
 Wider leading can require more physical pages; the normal 32-page limit,
 explicit PDF `--pages` budget, region ink-clearance checks, and PNG page
-selection still apply. It does not add dynamic paragraph or word spacing.
+selection still apply. This pitch option does not change paragraph gaps.
+
+For pasted Markdown with blank lines between paragraphs or blocks, choose
+`--flow-paragraph-gap-um 12000` to request 12 mm of paragraph separation.
+The accepted inclusive range is 0–12,000 µm, with a 4 mm default; `0`
+removes the extra gap, and repeated blank lines still collapse to one gap.
+This setting does not change row pitch or plain-text blank rows. It can
+cause headings, rules and following text to relocate to a later page.
+For example, use both independent spacing controls:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-pitch-um 12000 --flow-paragraph-gap-um 6000 \
+  --export-paper pdf --output spaced-notes.pdf
+```
+
+The paragraph option requires Markdown flow, is export-only and cannot be
+repeated. Invalid selections refuse before opening source files or stdin.
+Normal 32-page, 128-row, selected-region, ink-clearance, explicit PDF-page
+and PNG-page limits continue to apply; this is not automatic word spacing
+or persistent semantic paragraph styling.
 
 The CLI continues content on the next physical page when needed;
 `--pages` and `--png-page` still refuse impossible selections. Invalid,
