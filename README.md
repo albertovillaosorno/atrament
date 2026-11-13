@@ -2071,8 +2071,9 @@ joins when the underlying per-glyph thickness jitter is zero. Nonzero
 per-glyph thickness jitter can still make adjacent pens incompatible.
 
 For shared pigment-lightness rhythm, select
-`--glyph-word-pigment MAX_PERCENT` (0–20) with `--glyph-variation`. Each ASCII-space-delimited
-word gets one seeded signed percentage from an independent stream. Positive
+`--glyph-word-pigment MAX_PERCENT` (0–20) with `--glyph-variation`.
+Each ASCII-space-delimited word gets one seeded signed percentage from an
+independent stream. Positive
 values lighten its RGB toward white; negative values darken it toward black.
 
 The same shade applies to all authored segments and selected same-pen joins,
