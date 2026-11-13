@@ -1686,6 +1686,58 @@ test('indented glyph cannot spill into an invisible physical row',
         }
     });
 
+test('nonbreaking Unicode joins match independent PDF/PNG pen placement',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-nonbreaking-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '32000', '36000'];
+            const glyphs = 'bcdefg';
+            for (const separator of ['\u{a0}', '\u{202f}', '\u{2011}']) {
+                const strokes = [...glyphs, separator].flatMap((glyph) => [
+                    '--glyph-stroke', glyph, '600', '500', '1800',
+                    '3000', '250', '#123456',
+                ]);
+                const source = `abcdef${separator}g`;
+                for (const format of ['pdf', 'png']) {
+                    const manual = join(dir, `manual-${format}.output`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--offline', '--quiet',
+                        '-p', 'atrament_profile_editor_cli', '--',
+                        ...base, ...strokes,
+                        '--place-text', '1', '32500', '42500', 'abcde',
+                        '--place-text', '1', '32500', '51500',
+                        `f${separator}g`,
+                        '--export-paper', format,
+                        ...(format === 'png' ? ['--dpi', '72'] : []),
+                        '--output', manual, '--replace',
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    for (const flag of ['--flow-text', '--flow-markdown']) {
+                        const flowed = render(dir, source, format,
+                            [...strokes, ...region], flag);
+                        assert.equal(flowed.result.status, 0,
+                            flowed.result.stderr);
+                        assert.deepEqual(readFileSync(flowed.output),
+                            readFileSync(manual),
+                            `${format} ${flag}: explicit Unicode pen ink`);
+                        const refused = render(dir, source, format,
+                            [...region], flag);
+                        assert.notEqual(refused.result.status, 0,
+                            'unauthored joiner must never become invisible');
+                        assert.match(refused.result.stderr,
+                            /missing authored glyph|no authored strokes/i);
+                        assert.deepEqual(readFileSync(refused.output),
+                            readFileSync(manual),
+                            'failed coverage must preserve accepted ink');
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('code fences keep literal Unicode ink and physical hard line breaks',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-fence-'));

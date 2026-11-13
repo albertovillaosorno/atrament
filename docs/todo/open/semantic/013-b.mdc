@@ -254,6 +254,27 @@ keeps exact historical byte parity.
 This is output composition only. Persisted semantic block identities,
 image overlays, font shape inference and complete P2-013 remain open.
 
+## Exact nonbreaking grapheme joins in native flow (partial) — 2026-11-13
+
+Native `atrament-profiles notebook` plain/Markdown flow now preserves
+U+00A0, U+202F and U+2011 with both adjacent graphemes while breaking
+unspaced long words. This only changes the advisory measured-row grouping:
+when a group exceeds physical width or source-row limits, the prior
+single-grapheme fallback remains. The exact Unicode identity is never
+rewritten as an implicit ASCII space, and missing authored pen shapes
+still refuse output without replacing the selected file.
+
+Red-before/green-after physical-wrap tests cover all three joiners.
+A deterministic 384-sample NFC/NFD matrix exercises both input modes,
+source reconstruction, region limits and the no-orphan property. Narrow
+5-mm rows prove fallback. Independent authored-stroke placement compares
+real PDF and 72-DPI transparent PNG bytes across 12 Unicode/mode/format
+combinations, with missing-glyph no-clobber assertions.
+
+This does not introduce automatic whitespace ink, language detection,
+word-break standards conformance, dictionary hyphenation or persisted
+semantic notebook content. P2-013 remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

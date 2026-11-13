@@ -8294,6 +8294,9 @@ fn bilingual_punctuation_stays_with_neighbor_when_long_words_wrap()
         ("abcdef’g", ["abcde", "f’g"]),
         ("abcde«¿fg", ["abcde", "«¿fg"]),
         ("abcdef?”g", ["abcde", "f?”g"]),
+        ("abcdef\u{a0}g", ["abcde", "f\u{a0}g"]),
+        ("abcdef\u{202f}g", ["abcde", "f\u{202f}g"]),
+        ("abcdef\u{2011}g", ["abcde", "f\u{2011}g"]),
     ] {
         for format in [FlowFormat::Plain, FlowFormat::Markdown] {
             let source = FlowSource::new(format, text)?;
@@ -8324,7 +8327,7 @@ fn bilingual_punctuation_stays_with_neighbor_when_long_words_wrap()
 }
 
 #[test]
-fn narrow_quoted_rows_retain_exact_unicode_ink_when_pair_cannot_fit()
+fn narrow_paired_rows_retain_exact_unicode_ink_when_pair_cannot_fit()
     -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;
 
@@ -8334,7 +8337,8 @@ fn narrow_quoted_rows_retain_exact_unicode_ink_when_pair_cannot_fit()
         left: 30_000, top: 40_000, width: 9_000, height: 50_000,
     };
     for format in [FlowFormat::Plain, FlowFormat::Markdown] {
-        for text in ["«a»", "“a”", "‘a’", "(a)", "[a]", "{a}"] {
+        for text in ["«a»", "“a”", "‘a’", "(a)", "[a]", "{a}",
+            "a\u{a0}b", "a\u{202f}b", "a\u{2011}b"] {
             let source = FlowSource::new(format, text)?;
             let (runs, ornaments, pages) = super::layout_flow_with_region(
                 &source, &NotebookProfile::default(), None,
@@ -8346,6 +8350,58 @@ fn narrow_quoted_rows_retain_exact_unicode_ink_when_pair_cannot_fit()
             assert_eq!(runs.iter().map(|run| run.text.as_str())
                 .collect::<String>(), text);
             assert!(runs.iter().all(|run| run.text.chars().count() == 1));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn seeded_nonbreaking_joins_keep_exact_graphemes_inside_wrapped_rows()
+    -> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let mut seed = 0x3fb9_7641u32;
+    for case in 0..384usize {
+        seed = seed.wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223);
+        let prefix = 3usize + usize::try_from(seed % 19)
+            .map_err(|error| error.to_string())?;
+        seed = seed.wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223);
+        let suffix = 3usize + usize::try_from(seed % 19)
+            .map_err(|error| error.to_string())?;
+        let separator = ["\u{a0}", "\u{202f}", "\u{2011}"][case % 3];
+        let text = format!("{}n\u{303}{}{}ñ", "a".repeat(prefix),
+            separator, "b".repeat(suffix));
+        let region = super::FlowRegion {
+            left: 30_000, top: 40_000,
+            width: 32_000 + u32::try_from(case % 4)
+                .map_err(|error| error.to_string())? * 3_000,
+            height: 36_000,
+        };
+        for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+            let source = FlowSource::new(format, &text)?;
+            let (rows, ornaments, pages) = super::layout_flow_with_region(
+                &source, &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            let actual = rows.iter().map(|row| row.text.as_str())
+                .collect::<String>();
+            if actual != text || !ornaments.is_empty() || pages == 0
+                || rows.len() < 2 {
+                return Err(format!(
+                    "nonbreaking sample {case} lost ink on {format:?}: {rows:?}"
+                ));
+            }
+            for row in rows {
+                if row.text.starts_with(separator)
+                    || row.text.ends_with(separator)
+                    || row.page > pages {
+                    return Err(format!(
+                        "nonbreaking sample {case} orphaned joiner: {row:?}"
+                    ));
+                }
+            }
         }
     }
     Ok(())

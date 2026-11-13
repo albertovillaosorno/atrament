@@ -2202,11 +2202,17 @@ fn next_punctuation_cluster(
 
 // Keep opening Spanish/English punctuation and paired brackets with the
 // next authored grapheme, and closing marks with the preceding grapheme.
-// Exact Unicode identities survive unchanged; ASCII spaces still break words.
-// Straight quotes/apostrophes are intentionally not inferred as directional.
+// Unlike standalone ASCII spaces, authored nonbreaking Unicode spaces and
+// the nonbreaking hyphen bind *both* adjacent graphemes. An overlarge group
+// still falls back to measured individual glyphs instead of clipping a page.
+// Exact Unicode identities survive; straight quotes remain nondirectional.
 fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
-    matches!(previous, "¿" | "¡" | "«" | "“" | "‘"
-        | "(" | "[" | "{")
+    fn nonbreaking(grapheme: &str) -> bool {
+        matches!(grapheme, "\u{a0}" | "\u{202f}" | "\u{2011}")
+    }
+    nonbreaking(previous) || nonbreaking(next)
+        || matches!(previous, "¿" | "¡" | "«" | "“" | "‘"
+            | "(" | "[" | "{")
         || matches!(next, "?" | "!" | "." | "," | ";" | ":"
             | ")" | "]" | "}" | "»" | "”" | "’")
 }

@@ -1306,6 +1306,16 @@ page when there is room for both (including an optional 4-mm paragraph gap);
 an ending heading and a sheet too short for two rows remain valid. Long text
 wraps and paginates automatically (up to 32 physical pages).
 
+Within an overlong word, the native flow compiler also keeps exact authored
+U+00A0 nonbreaking spaces, U+202F narrow nonbreaking spaces and U+2011
+nonbreaking hyphens beside both neighboring graphemes when the joined ink
+fits. These are *not* converted to invisible ASCII spacing: each requires its
+own user-authored glyph geometry before PDF or PNG export. A narrow physical
+row where the group cannot fit falls back to individual measured glyphs,
+never silent clipping or dropped ink. Plain-text and Markdown export match
+independently placed ink; this does not imply general Unicode line breaking.
+
+
 The Markdown subset supports single-line `#` through `######` headings;
 spaces separating the ATX marker from the title (including expanded tabs)
 are syntax and do not indent the authored heading ink.
