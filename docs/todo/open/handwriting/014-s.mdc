@@ -1381,12 +1381,14 @@ axis before changing the accepted library.
 The browser records one reversible session edit but never downloads
 without an explicit click. Native CLI validates operands before reading
 an unclosed selected stdin source and writes only with explicit output;
-failed edits preserve existing source/target files. Two Rust tests verify
-exact TSV, native path inspection, PDF and transparent PNG parity and
-atomic refusal. Two browser tests cover Unicode isolation, the full
-4096-stroke limit, selection, undo/redo and deliberate TSV download.
-A 256-case subprocess comparison checks accepted and refused browser
-and real Rust native results byte-for-byte.
+failed edits preserve existing source/target files.
+
+Three Rust tests verify exact TSV, native path inspection, PDF and
+transparent PNG parity, atomic refusal, closed contours, and the full
+4096-segment library. Three browser tests cover Unicode isolation,
+closed paths, the 4096-stroke limit, selection, undo/redo and deliberate
+TSV download. A 256-case subprocess comparison checks accepted and
+refused browser and real Rust native results byte-for-byte.
 
 The operation changes concrete v1 line geometry only, without creating
 persistent pen lifts, analytic curve primitives or learned cursive.

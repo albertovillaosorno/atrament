@@ -2513,8 +2513,10 @@ Select the one-based path from `--inspect-paths`. The X pivot must be from
 0–3500 µm, or the Y pivot from 0–4500 µm. Pen caps must remain entirely
 within the same 3500 × 4500 µm cell on **both** axes. Invalid axes,
 missing paths, clipping and unchanged ink refuse without altering input or
-existing output. Reflecting again about the same axis restores the exact
-v1 TSV bytes; there is still no saved pen-lift identity or analytic curve.
+existing output.
+
+Reflecting again about the same axis restores the exact v1 TSV bytes;
+there is still no saved pen-lift identity or analytic curve.
 
 **Apply pen width and color to selected continuous path** updates only the
 selected exact Unicode grapheme's inferred, connected pen path. The browser
