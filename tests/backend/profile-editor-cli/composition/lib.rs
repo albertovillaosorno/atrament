@@ -18256,9 +18256,10 @@ fn native_path_reflection_keeps_closed_loops_and_full_stroke_budget() {
     ])).expect("reflect 4096-path").expect("full mirrored TSV");
     assert_eq!(result.iter().filter(|byte| **byte == b'\n').count(),
         4097, "reflection never adds or drops authored segments");
-    assert!(result.starts_with(
-        b"atrament.glyph-strokes.v1\nn\xcc\x83\t3000\t700\t2998\t700\t251\t#112233\n"
-    ));
+    assert!(result.starts_with(concat!(
+        "atrament.glyph-strokes.v1\n",
+        "n\u{303}\t3000\t700\t2998\t700\t251\t#112233\n",
+    ).as_bytes()));
     let double = execute_glyph_library(&args(&[
         "--profile", source_name,
         "--reflect-path", nfd, "1", "x", "1750",
