@@ -6466,6 +6466,14 @@ fn native_reflection_refuses_bad_parameters_and_clipping_atomically() {
         assert_eq!(fs::read(&target).expect("unchanged target"),
             b"retain accepted reflection");
     }
+    // A y reflection must reject a preexisting x-cap clip too. The
+    // browser checks both axes after reflecting, not only the edited one.
+    let cross_axis = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ó", "136", "708", "1446", "2720",
+        "508", "#243647",
+        "--reflect-glyph", "ó", "y", "2372",
+    ])).expect_err("unreflected X pen cap must still be checked");
+    assert!(cross_axis.contains("clips"), "{cross_axis}");
     // The physical pen radius is half a micrometre for odd pen widths:
     // 2*x >= width and 2*x <= 7000-width must both hold.
     let tangent = execute_glyph_library(&args(&[

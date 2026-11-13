@@ -1959,7 +1959,16 @@ impl GlyphOverlay {
                 let twice = next * 2;
                 let pen = i64::from(stroke.width_um);
                 let limit = i64::from(maximum) * 2 - pen;
-                if twice < pen || twice > limit {
+                let (other, other_max) = if axis == "x" {
+                    (i64::from(point.1), 4500i64)
+                } else {
+                    (i64::from(point.0), 3500i64)
+                };
+                // Check both axes even when only one coordinate changes:
+                // imported pen caps may already clip the untouched axis.
+                if twice < pen || twice > limit
+                    || other * 2 < pen
+                    || other * 2 > other_max * 2 - pen {
                     return Err(
                         "reflected pen contour clips glyph cell".into()
                     );

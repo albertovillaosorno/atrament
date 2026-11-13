@@ -10,7 +10,7 @@ import test from 'node:test';
 import {
     encodeGlyphLibrary, italicizeGlyphStrokes, rotateGlyphStrokes,
     scaleGlyphHeight, scaleGlyphInk, scaleGlyphWidth,
-    translateGlyphStrokes, subdivideGlyphStroke,
+    translateGlyphStrokes, reflectGlyphStrokes, subdivideGlyphStroke,
 // jig-ignore-next-line: static ESM import needs a literal path.
 } from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -69,6 +69,15 @@ const operations = [
         browser: translateGlyphStrokes,
         native: '--translate-glyph',
     },
+    {
+        name: 'reflection',
+        options: (pick) => {
+            const axis = pick(0, 1) === 0 ? 'x' : 'y';
+            return [axis, pick(0, axis === 'x' ? 3500 : 4500)];
+        },
+        browser: reflectGlyphStrokes,
+        native: '--reflect-glyph',
+    },
 ];
 
 function authoredStroke(pick, grapheme, color) {
@@ -90,11 +99,11 @@ function cliStroke(stroke) {
         String(stroke.width), stroke.color];
 }
 
-// All 1,536 checked cases use the real Rust binary, direct UTF-8 TSV output,
+// All 1,792 checked cases use the real Rust binary, direct UTF-8 TSV output,
 // and the browser's production encoder. Neither implementation is mirrored
 // with ad hoc arithmetic in the test. Unselected interleaved Unicode shapes
 // must remain byte-identical when the selected glyph changes.
-test('six native glyph edits match browser decisions and exact TSV bytes',
+test('seven native glyph edits match browser decisions and exact TSV bytes',
     { timeout: 120_000 }, () => {
         const built = spawnSync(cargo, [
             'build', '--locked', '--offline', '--quiet',
@@ -136,7 +145,8 @@ test('six native glyph edits match browser decisions and exact TSV bytes',
                     `${diagnostic}: ${actual.error?.message}`);
                 if (expected instanceof Error) {
                     rejected += 1;
-                    assert.notEqual(actual.status, 0, diagnostic);
+                    assert.notEqual(actual.status, 0, diagnostic
+                        + JSON.stringify(source) + String(expected.message));
                     assert.match(actual.stderr, /^Error: /, diagnostic);
                     assert.equal(actual.stdout, '', diagnostic);
                 } else {
@@ -166,7 +176,7 @@ test('browser and native transformed shapes render identical PDF and PNG',
         ];
         const valuesByOperation = [
             [8, 1750, 2250], [9, 2250], [115, 2250],
-            [120, 1750], [120], [90, -75],
+            [120, 1750], [120], [90, -75], ['x', 1750],
         ];
         for (const [index, operation] of operations.entries()) {
             const values = valuesByOperation[index];
@@ -272,4 +282,69 @@ test("browser stroke subdivision exports valid native PDF and RGBA PNG",
         assert.deepEqual(replay.stdout, actual.stdout,
             "native output must be byte-stable after subdivision");
     }
+});
+
+
+// Browser and Rust must agree on selected exact-glyph stroke ordinals even
+// when NFC/NFD siblings are interleaved. The browser API selects a global
+// zero-based source row; the CLI selects one-based rows within the glyph.
+test('browser subdivision matches native exact TSV and short-line refusal',
+    { timeout: 90_000 }, () => {
+    const built = spawnSync(cargo, [
+        'build', '--locked', '--offline', '--quiet',
+        '-p', 'atrament_profile_editor_cli', '--bin', 'atrament-profiles',
+    ], { cwd: root, encoding: 'utf8', timeout: 90_000,
+        env: { ...process.env, TMPDIR: join(root, '.temp') } });
+    assert.equal(built.error, undefined, built.error?.message);
+    assert.equal(built.status, 0, built.stderr);
+
+    const pick = generator(0x1D35_8910);
+    let approved = 0;
+    let rejected = 0;
+    for (let sample = 0; sample < 256; sample += 1) {
+        const target = sample % 2 === 0 ? nfc : nfd;
+        const neighbor = target === nfc ? nfd : nfc;
+        const source = [
+            authoredStroke(pick, target, colors[0]),
+            authoredStroke(pick, neighbor, colors[1]),
+            authoredStroke(pick, target, colors[0]),
+        ];
+        const selected = sample % 4 < 2 ? 0 : 2;
+        if (sample % 11 === 0) {
+            source[selected].x1 = 1000;
+            source[selected].y1 = 1200;
+            source[selected].x2 = 1001;
+            source[selected].y2 = 1200;
+        }
+        let expected;
+        try {
+            expected = encodeGlyphLibrary(subdivideGlyphStroke(
+                source, target, selected,
+            ));
+        } catch (error) {
+            expected = error;
+        }
+        const actual = spawnSync(binary, [
+            'glyphs', ...source.flatMap(cliStroke),
+            '--split-stroke', target, String(selected === 0 ? 1 : 2),
+        ], { cwd: root, encoding: 'utf8', timeout: 2_000,
+            maxBuffer: 512 * 1024 });
+        const diagnostic = 'subdivision sample ' + sample
+            + ' (' + target + ', source row ' + selected + ')';
+        assert.equal(actual.error, undefined,
+            diagnostic + ': ' + actual.error?.message);
+        if (expected instanceof Error) {
+            rejected += 1;
+            assert.notEqual(actual.status, 0, diagnostic);
+            assert.match(actual.stderr, /^Error: /, diagnostic);
+            assert.equal(actual.stdout, '', diagnostic);
+        } else {
+            approved += 1;
+            assert.equal(actual.status, 0,
+                diagnostic + ': ' + actual.stderr);
+            assert.equal(actual.stdout, expected, diagnostic);
+        }
+    }
+    assert.ok(approved > 0, 'subdivision needs accepted segments');
+    assert.ok(rejected > 0, 'subdivision needs refused short segments');
 });
