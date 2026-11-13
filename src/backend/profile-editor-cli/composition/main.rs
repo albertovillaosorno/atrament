@@ -2092,7 +2092,7 @@ fn parse_notebook_flow_body_inset(
     Ok(inset)
 }
 
-fn select_flow_body_inset(
+fn select_body_inset(
     iter: &mut Iter<'_, String>, typography: &mut FlowTypography,
     option: &str,
 ) -> Result<(), String> {
@@ -2594,7 +2594,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--flow-paragraph-gap-um" => select_notebook_flow_paragraph_gap(
                 &mut iter, &mut flow_typography.paragraph_gap)?,
             "--flow-body-inset-um" | "--flow-body-right-inset-um" =>
-                select_flow_body_inset(&mut iter, &mut flow_typography, option)?,
+                select_body_inset(&mut iter, &mut flow_typography, option)?,
             "--flow-text" | "--flow-markdown"
             | "--flow-text-file" | "--flow-markdown-file" =>
                 parse_notebook_flow(&mut iter, option, &mut flow,
