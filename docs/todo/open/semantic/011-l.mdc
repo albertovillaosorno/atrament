@@ -4264,15 +4264,16 @@ An insufficient explicit PDF page selection refuses without overwriting a
 selected existing file. The task remains open until persisted semantic
 notebook bodies and the complete saved-document journey are implemented.
 
-
 ## Selected native Markdown body inset (partial) — 2026-11-12
 
 The Rust CLI now accepts an opt-in `--flow-body-inset-um 0..12000` for
 physical left indentation of every flowing Markdown prose row. A zero
 default preserves previous layout and export bytes. Selected indentation
 reduces the measured prose width; all wraps and page turns still use the
-validated physical page and fixed-region boundaries. Headings, list labels,
-quote rows, fenced code and literal four-space rows retain their existing
+validated physical page and fixed-region boundaries.
+
+Headings, list labels, quote rows, fenced code and literal four-space rows
+retain their existing
 anchors. No first-line-only semantics or persistent paragraph style is
 implied.
 

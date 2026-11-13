@@ -864,7 +864,7 @@ impl Layout<'_> {
     // Only flowing Markdown prose receives the optional left inset.
     // Literal code, indented source, headings, quotes and list markers
     // retain their original physical anchors and measured row widths.
-    fn flowing_row_measurements(
+    fn flow_row_bounds(
         &self, style: LineStyle, protect_body: bool,
     ) -> Result<(u32, u32), String> {
         let (mut start_x, mut cap) = self.line_measurements(style)?;
@@ -1193,9 +1193,9 @@ impl Layout<'_> {
     ) -> Result<(), String> {
         let (run_start, mark_start) = (self.lines.len(), self.ornaments.len());
         let heading_before_block = self.last_visible_heading;
-        let preceding_reservation = heading_before_block || self.last_visible_rule;
-        let (mut start_x, mut cap) =
-            self.flowing_row_measurements(style, protect_body)?;
+        let preceding_reservation =
+            heading_before_block || self.last_visible_rule;
+        let (mut start_x, mut cap) = self.flow_row_bounds(style, protect_body)?;
         let (hang, ordered_marker) = ordered_hang_and_label(
             style, content, cap, self.statistics,
         )?;
