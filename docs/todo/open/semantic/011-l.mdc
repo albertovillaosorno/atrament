@@ -4490,3 +4490,22 @@ refusals and preserved selected output on geometry failure. Closed rings
 consume eight actual pen segments and remain subject to the existing ink
 budget. This is export-only styling, not persistent semantic list identity
 or completion of the P1 notebook journey.
+
+## Selectable Markdown task checkbox geometry (partial) — 2026-11-13
+
+The CLI now accepts `--flow-task-style square|diamond` on transient
+Markdown flow. The omitted and explicit `square` styles preserve the
+existing 2.5-mm rectangular checkbox and checked stroke bytes. `diamond`
+uses four directed physical pen segments in the same marker band, with
+two contained check strokes for checked tasks; the item body, physical
+rows, independent task alignment, list/quote insets, other Markdown marks
+and pagination remain unchanged. This does not require bracket/checkmark
+glyph shapes or produce persisted checkbox state.
+
+Four native regressions check exact physical shape coordinates and
+untouched surrounding ink, wrapped multipage tasks with markers only on
+opening rows, deterministic real PDF/transparent PNG/versioned ink TSV,
+byte-identical omitted/explicit square, typed/CLI Markdown-only refusal,
+source-independent option validation and preservation of selected output
+on geometric failure. This is export-only decoration, not full semantic
+notebook acceptance or completion of ATR-P2-011.

@@ -783,6 +783,26 @@ alignment for checkbox text without moving the marks. The option requires
 Markdown and is export-only; invalid or duplicate values refuse before input
 reads, and physical layout failure never replaces a selected output file.
 
+Markdown checkbox tasks also support the physical pen shape selection
+`--flow-task-style square|diamond`. By default the exact original square
+is rendered; `diamond` draws four directed pen segments forming a 2.5-mm
+rhombus in the same fixed gutter. Checked diamonds place their two-stroke
+check inside that outline. Neither setting requires an authored checkbox
+glyph, alters task text, affects unordered bullets or adds new page rows.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-task-style diamond --export-paper pdf \
+  --output diamond-tasks.pdf
+```
+
+Omission and explicit `square` produce identical PDF/transparent PNG and
+ink TSV bytes. The option applies only to the native transient Markdown
+flow and remains independent of task/bullet text alignment and selected
+page insets. Invalid/duplicate values and non-Markdown usage refuse
+before input reads; unfit physical layout preserves any existing output.
+
 To indent only the **first physical row** of each Markdown prose block,
 select `--flow-body-first-line-indent-um 8000`. This shifts the first
 row 8 mm right and shortens its writing width by the same amount; wrapped

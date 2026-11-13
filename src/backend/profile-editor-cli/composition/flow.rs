@@ -83,6 +83,14 @@ pub(super) enum BulletStyle {
     Ring,
 }
 
+/// Physical shape of the synthetic checkbox on a Markdown task row.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
+pub(super) enum TaskStyle {
+    Diamond,
+    Square,
+}
+
 /// CLI-only layout selections; absent fields keep previous physical ink.
 #[derive(Clone, Copy, Debug, Default)]
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
@@ -101,6 +109,7 @@ pub(super) struct FlowTypography {
     pub(super) pitch: Option<u32>,
     pub(super) quote_align: Option<BodyAlign>,
     pub(super) task_align: Option<BodyAlign>,
+    pub(super) task_style: Option<TaskStyle>,
 }
 
 #[derive(Debug)]
@@ -624,6 +633,7 @@ struct Layout<'model> {
     rule_chain: Option<RuleChain>,
     statistics: Option<&'model HandwritingStatisticsProfile>,
     task_align: Option<BodyAlign>,
+    task_style: Option<TaskStyle>,
     top: u32,
     y: u32,
 }
@@ -1898,12 +1908,22 @@ impl Layout<'_> {
             .ok_or("task box top overflow")?;
         let bottom = top.checked_add(2_500)
             .ok_or("task box bottom overflow")?;
-        for (start, end) in [
-            ((left, top), (right, top)),
-            ((right, top), (right, bottom)),
-            ((right, bottom), (left, bottom)),
-            ((left, bottom), (left, top)),
-        ] {
+        let center_x = left.checked_add(1_250)
+            .ok_or("task marker X overflow")?;
+        let center_y = top.checked_add(1_250)
+            .ok_or("task marker Y overflow")?;
+        let vertices = match self.task_style.unwrap_or(TaskStyle::Square) {
+            TaskStyle::Square => [
+                (left, top), (right, top), (right, bottom),
+                (left, bottom), (left, top),
+            ],
+            TaskStyle::Diamond => [
+                (center_x, top), (right, center_y),
+                (center_x, bottom), (left, center_y),
+                (center_x, top),
+            ],
+        };
+        for (&start, &end) in vertices.iter().zip(vertices.iter().skip(1)) {
             self.ornaments.push(NotebookInkLine {
                 page: self.page,
                 start_um: start,
@@ -1913,18 +1933,27 @@ impl Layout<'_> {
             });
         }
         if checked {
-            let middle = (
-                left.checked_add(1_100).ok_or("task check X overflow")?,
-                bottom.checked_sub(350).ok_or("task check Y underflow")?,
-            );
-            let start = (
-                left.checked_add(450).ok_or("task check X overflow")?,
-                top.checked_add(1_250).ok_or("task check Y overflow")?,
-            );
-            let end = (
-                right.checked_sub(250).ok_or("task check X underflow")?,
-                top.checked_add(400).ok_or("task check Y overflow")?,
-            );
+            // The diamond check stays inside its sloping perimeter; the
+            // historical square check coordinates remain byte-identical.
+            let (start, middle, end) = match
+                self.task_style.unwrap_or(TaskStyle::Square) {
+                TaskStyle::Square => (
+                    (left.checked_add(450).ok_or("task check X overflow")?,
+                     top.checked_add(1_250).ok_or("task check Y overflow")?),
+                    (left.checked_add(1_100).ok_or("task check X overflow")?,
+                     bottom.checked_sub(350).ok_or("task check Y underflow")?),
+                    (right.checked_sub(250).ok_or("task check X underflow")?,
+                     top.checked_add(400).ok_or("task check Y overflow")?),
+                ),
+                TaskStyle::Diamond => (
+                    (left.checked_add(600).ok_or("task check X overflow")?,
+                     top.checked_add(1_250).ok_or("task check Y overflow")?),
+                    (left.checked_add(1_000).ok_or("task check X overflow")?,
+                     top.checked_add(1_600).ok_or("task check Y overflow")?),
+                    (left.checked_add(1_800).ok_or("task check X overflow")?,
+                     top.checked_add(850).ok_or("task check Y overflow")?),
+                ),
+            };
             for (start_um, end_um) in [(start, middle), (middle, end)] {
                 self.ornaments.push(NotebookInkLine {
                     page: self.page,
@@ -2967,6 +2996,7 @@ fn initialize_layout<'model>(
         ordered_align: spacing.ordered_align,
         quote_align: spacing.quote_align,
         task_align: spacing.task_align,
+        task_style: spacing.task_style,
         body_first_line_indent_um: spacing.body_first_line_indent.unwrap_or(0),
         body_continuation_indent_um:
             spacing.body_continuation_indent.unwrap_or(0),
@@ -3158,6 +3188,10 @@ pub(super) fn layout_flow_with_typography(
     if spacing.task_align.is_some()
         && source.format != FlowFormat::Markdown {
         return Err("flow task alignment requires Markdown flow".into());
+    }
+    if spacing.task_style.is_some()
+        && source.format != FlowFormat::Markdown {
+        return Err("flow task style requires Markdown flow".into());
     }
     if spacing.body_first_line_indent
         .is_some_and(|inset| inset > MAX_BODY_INSET_UM) {

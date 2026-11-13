@@ -15928,3 +15928,207 @@ fn markdown_bullet_style_rejects_early_and_preserves_selected_output() {
         b"preserve-original-bullet-PDF");
     fs::remove_file(target).expect("remove test-owned sentinel");
 }
+
+#[test]
+fn markdown_task_diamonds_preserve_other_marks_and_default_ink() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "- [x] a\n* [ ] a\n- a\n1. a\n> a\n\na",
+    ).expect("mixed Markdown task blocks");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 80_000, height: 160_000,
+    };
+    let choose = |task_style| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), FlowTypography {
+            task_style, task_align: Some(BodyAlign::Right),
+            bullet_style: Some(BulletStyle::Ring),
+            list_quote_inset: Some(4_000),
+            ..FlowTypography::default()
+        },
+    ).expect("task style geometry");
+    let (original_rows, original, original_pages) = choose(None);
+    let (square_rows, square, square_pages) =
+        choose(Some(TaskStyle::Square));
+    assert_eq!(original_pages, square_pages);
+    let rows = |runs: &[TextRun]| runs.iter()
+        .map(|run| (run.text.clone(), run.page, run.origin_um))
+        .collect::<Vec<_>>();
+    assert_eq!(rows(&original_rows), rows(&square_rows),
+        "the explicit square cannot alter the authored text runs");
+    assert_eq!(original, square,
+        "the default square must remain byte-for-byte identical");
+    let (diamond_rows, diamond, diamond_pages) =
+        choose(Some(TaskStyle::Diamond));
+    assert_eq!(diamond_pages, original_pages);
+    assert_eq!(rows(&diamond_rows), rows(&original_rows),
+        "diamond task marks must not change row origins or pagination");
+    assert_eq!(diamond.len(), original.len(),
+        "each checkbox still uses four border and two check strokes");
+    assert_eq!(original.len(), 19,
+        "checked task six, open task four, ring eight and quote one");
+    let expected_first = [
+        ((39_150, 43_700), (40_400, 44_950)),
+        ((40_400, 44_950), (39_150, 46_200)),
+        ((39_150, 46_200), (37_900, 44_950)),
+        ((37_900, 44_950), (39_150, 43_700)),
+    ];
+    for (actual, &(start, end)) in
+        diamond.iter().take(4).zip(expected_first.iter()) {
+        assert_eq!((actual.start_um, actual.end_um), (start, end));
+        assert_eq!(actual.width_um, 350);
+    }
+    let first_check = diamond.get(4).expect("first check stroke");
+    let second_check = diamond.get(5).expect("second check stroke");
+    assert_eq!(first_check.start_um, (38_500, 44_950));
+    assert_eq!(first_check.end_um, (38_900, 45_300));
+    assert_eq!(second_check.start_um, first_check.end_um);
+    assert_eq!(second_check.end_um, (39_700, 44_550));
+    assert_eq!(
+        original.get(10..).expect("unrelated ornaments"),
+        diamond.get(10..).expect("unrelated ornaments"),
+        "unordered rings, numbers, quote bars and body stay unchanged",
+    );
+}
+
+#[test]
+fn markdown_task_diamonds_do_not_repeat_on_wrapped_pages() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "- [x] a a a a a a a a a a a a\n\n+ [ ] a a a a a a a a a a a a",
+    ).expect("wrapped task source");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 24_000, height: 25_000,
+    };
+    let choose = |task_style| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), FlowTypography {
+            task_style, list_quote_right_inset: Some(1_000),
+            ..FlowTypography::default()
+        },
+    ).expect("task wrapping and page turns");
+    let (original_rows, square, original_pages) = choose(None);
+    let (diamond_rows, diamond, diamond_pages) =
+        choose(Some(TaskStyle::Diamond));
+    assert_eq!(original_pages, diamond_pages);
+    assert!(original_pages >= 3, "task continuations must paginate");
+    let coords = |runs: &[TextRun]| runs.iter()
+        .map(|run| (run.text.clone(), run.page, run.origin_um))
+        .collect::<Vec<_>>();
+    assert_eq!(coords(&original_rows), coords(&diamond_rows));
+    assert_eq!(square.len(), 10, "only two first-row checkboxes");
+    assert_eq!(diamond.len(), 10, "no marker on continuation pages");
+    let first = diamond.first().expect("first diamond");
+    let next = diamond.get(6).expect("second diamond");
+    assert!(first.page < next.page);
+    for &(open, close) in &[(0, 3), (6, 9)] {
+        let start = diamond.get(open).expect("diamond opening");
+        let end = diamond.get(close).expect("diamond closure");
+        assert_eq!(start.start_um, end.end_um,
+            "each diamond must close without synthesizing a glyph");
+    }
+    let first_check = diamond.get(4).expect("first check stroke");
+    let second_check = diamond.get(5).expect("second check stroke");
+    assert_eq!(first_check.end_um, second_check.start_um,
+        "the checked diamond keeps one connected checkmark");
+}
+
+#[test]
+fn markdown_task_styles_replay_native_pdf_png_and_ink() {
+    let source = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown",
+        "- [x] a a\n\n+ [ ] a a\n\n* [X] a a",
+        "--flow-region", "30000", "40000", "34000", "26000",
+        "--flow-task-align", "center",
+        "--flow-bullet-style", "ring",
+    ]);
+    let render = |selection: Option<&str>, format: &str| {
+        let mut command = source.clone();
+        if let Some(style) = selection {
+            command.extend(args(&["--flow-task-style", style]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72", "--png-page", "2"]));
+        }
+        execute_notebook(&command).expect("native task export")
+            .expect("PDF, PNG or physical ink TSV bytes")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let baseline = render(None, format);
+        assert_eq!(baseline, render(Some("square"), format),
+            "explicit square must replay original {format} bytes");
+        let diamond = render(Some("diamond"), format);
+        assert_eq!(diamond, render(Some("diamond"), format),
+            "diamond task {format} must be deterministic");
+        assert_ne!(diamond, baseline,
+            "diamond must alter physical {format} ink");
+        match format {
+            "pdf" => assert!(diamond.starts_with(b"%PDF-1.4")),
+            "png" => assert!(diamond.starts_with(b"\x89PNG\r\n\x1a\n")),
+            _ => assert!(diamond.starts_with(b"atrament.page-ink.v1\n")),
+        }
+    }
+}
+
+#[test]
+fn markdown_task_style_preflights_and_preserves_existing_output() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "unopened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (options, expected) in [
+        (vec!["--flow-task-style", "circle"],
+            "--flow-task-style requires square or diamond"),
+        (vec!["--flow-task-style"],
+            "--flow-task-style requires square or diamond"),
+        (vec!["--flow-task-style", "diamond",
+            "--flow-task-style", "square"],
+            "--flow-task-style may appear only once"),
+    ] {
+        let mut command = source.clone();
+        command.extend(args(&options));
+        assert_eq!(preflight_notebook_sources(&command)
+            .expect_err("reject invalid selections before file/stdin"),
+            expected);
+    }
+    assert_eq!(preflight_notebook_sources(&args(&[
+        "--flow-text", "a", "--export-paper", "pdf",
+        "--flow-task-style", "diamond",
+    ])).expect_err("Markdown-only task style"),
+        "--flow-task-style requires a Markdown flow");
+    let plain = FlowSource::new(FlowFormat::Plain, "a")
+        .expect("plain source");
+    assert_eq!(layout_flow_with_typography(
+        &plain, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), None, FlowTypography {
+            task_style: Some(TaskStyle::Diamond),
+            ..FlowTypography::default()
+        },
+    ).expect_err("typed Markdown-only task style"),
+        "flow task style requires Markdown flow");
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"preserve-selected-task-PDF")
+        .expect("test sentinel");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown", "- [x] a a",
+        "--flow-region", "30000", "40000", "8000", "10000",
+        "--flow-task-style", "diamond",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("test path"), "--replace",
+    ]));
+    let error = execute_notebook(&command)
+        .expect_err("unfit task row refuses before replacement");
+    assert!(error.contains("writing row")
+        || error.contains("printable region"), "{error}");
+    assert_eq!(fs::read(&target).expect("unchanged PDF"),
+        b"preserve-selected-task-PDF");
+    fs::remove_file(target).expect("clean test sentinel");
+}
