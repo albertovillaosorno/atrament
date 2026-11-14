@@ -8540,6 +8540,75 @@ fn seeded_bilingual_long_words_keep_punctuation_inside_physical_rows()
 }
 
 #[test]
+fn overlong_punctuation_chain_keeps_longest_fitting_prefix()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 32_000, height: 50_000,
+    };
+    for symbol in ["/", "\\", "?", ";", "…"] {
+        let text = format!("abcde{}g", symbol.repeat(7));
+        let first = format!("e{}", symbol.repeat(5));
+        let last = format!("{}g", symbol.repeat(2));
+        for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+            let source = FlowSource::new(format, &text)?;
+            let (rows, ornaments, pages) = super::layout_flow_with_region(
+                &source, &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            assert_eq!(pages, 1, "{format:?} {symbol:?}");
+            assert!(ornaments.is_empty());
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>(), ["abcd", first.as_str(), last.as_str()],
+                "{format:?} {symbol:?}");
+            assert_eq!(rows.iter().map(|row| row.origin_um.1)
+                .collect::<Vec<_>>(), [42_500, 51_500, 60_500]);
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<String>(), text);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn seeded_overlong_punctuation_prefixes_preserve_exact_flow()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let mut seed = 0x41ab_376du32;
+    for case in 0..384usize {
+        seed = seed.wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223);
+        let count = 7usize + usize::try_from(seed % 33)
+            .map_err(|error| error.to_string())?;
+        let symbol = ["/", "\\", "?", ";", "…", "\u{a0}"][case % 6];
+        let text = format!("abcde{}g", symbol.repeat(count));
+        let region = super::FlowRegion {
+            left: 30_000, top: 40_000, height: 30_000,
+            width: 25_000 + u32::try_from(case % 5)
+                .map_err(|error| error.to_string())? * 4_000,
+        };
+        for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+            let source = FlowSource::new(format, &text)?;
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &source, &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            assert!(marks.is_empty());
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<String>(), text, "case {case} {format:?}");
+            assert!(rows.len() > 1);
+            assert!(rows.iter().all(|row| row.page <= pages
+                && row.origin_um.0 == region.left + 2_500
+                && row.origin_um.1 >= region.top + 2_500
+                && row.origin_um.1 < region.top + region.height));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn page_start_directive_is_exact_and_only_markdown_syntax() {
     for valid in [
         "<!-- atrament:page-break -->",

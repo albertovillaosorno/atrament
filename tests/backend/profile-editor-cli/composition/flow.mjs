@@ -1975,6 +1975,56 @@ test('wrapped dashes, ellipsis and path separators match PDF/PNG ink', () => {
     }
 });
 
+test('overlong punctuation chains use longest fitting physical prefixes',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-punctuation-prefix-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '32000', '50000'];
+            for (const mark of ['/', '\\', '…']) {
+                const source = `abcde${mark.repeat(7)}g`;
+                const glyphs = [...'bcdeg', mark].flatMap((glyph) => [
+                    '--glyph-stroke', glyph, '600', '500', '1800',
+                    '3000', '250', '#123456',
+                ]);
+                for (const format of ['pdf', 'png']) {
+                    const manualFile = join(dir, `manual-${format}`);
+                    const manual = spawnSync(cargo, [
+                        'run', '--offline', '--quiet',
+                        '-p', 'atrament_profile_editor_cli', '--',
+                        ...base, ...glyphs,
+                        '--place-text', '1', '32500', '42500', 'abcd',
+                        '--place-text', '1', '32500', '51500',
+                        `e${mark.repeat(5)}`,
+                        '--place-text', '1', '32500', '60500',
+                        `${mark.repeat(2)}g`, '--export-paper', format,
+                        ...(format === 'png' ? ['--dpi', '72'] : []),
+                        '--output', manualFile, '--replace',
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(manual.status, 0, manual.stderr);
+                    const expected = readFileSync(manualFile);
+                    for (const flag of ['--flow-text', '--flow-markdown']) {
+                        const actual = render(dir, source, format,
+                            [...region, ...glyphs], flag);
+                        assert.equal(actual.result.status, 0,
+                            actual.result.stderr);
+                        assert.deepEqual(readFileSync(actual.output), expected,
+                            `${flag} ${format} ${mark} matches manual ink`);
+                        const failed = render(dir, source, format,
+                            region, flag);
+                        assert.notEqual(failed.result.status, 0);
+                        assert.match(failed.result.stderr,
+                            /missing authored glyph|no authored strokes/i);
+                        assert.deepEqual(readFileSync(failed.output), expected,
+                            'missing shape cannot replace accepted export');
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('single guillemets and compact terminal marks retain exact PDF/PNG ink',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-terminal-marks-'));

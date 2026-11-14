@@ -2212,25 +2212,36 @@ fn next_punctuation_cluster(
         .ok_or("flow punctuation cluster boundary refused")?;
     let (mut advance_um, mut extent_um, mut bytes) =
         (0u32, 0u32, 0usize);
-    for &(grapheme, advance, slot) in selected {
-        extent_um = extent_um.max(advance_um.checked_add(slot)
+    let mut fitting = PunctuationCluster {
+        bytes: first.len(), count: 1, end: from.checked_add(1)
+            .ok_or("flow punctuation fallback offset overflow")?,
+        extent_um: first_extent,
+    };
+    // Keep the longest physically fitting prefix. Falling all the way
+    // back to one glyph can orphan attached punctuation even when a
+    // shorter two- or three-glyph prefix fits the next row.
+    for (index, &(grapheme, advance, slot)) in selected.iter().enumerate() {
+        let next_extent = extent_um.max(advance_um.checked_add(slot)
             .ok_or("flow punctuation contour overflow")?);
+        let next_bytes = bytes.checked_add(grapheme.len())
+            .ok_or("flow punctuation byte overflow")?;
+        let count = index.checked_add(1)
+            .ok_or("flow punctuation count overflow")?;
+        if next_extent > cap || count > MAX_LINE_GRAPHEMES
+            || next_bytes > 384 {
+            break;
+        }
         advance_um = advance_um.checked_add(advance)
             .ok_or("flow punctuation advance overflow")?;
-        bytes = bytes.checked_add(grapheme.len())
-            .ok_or("flow punctuation byte overflow")?;
+        extent_um = next_extent;
+        bytes = next_bytes;
+        fitting = PunctuationCluster {
+            bytes, count, end: from.checked_add(count)
+                .ok_or("flow punctuation prefix overflow")?,
+            extent_um,
+        };
     }
-    if selected.len() > 1 && (extent_um > cap
-        || selected.len() > MAX_LINE_GRAPHEMES || bytes > 384) {
-        return Ok(PunctuationCluster {
-            bytes: first.len(), count: 1, end: from.checked_add(1)
-                .ok_or("flow punctuation fallback offset overflow")?,
-            extent_um: first_extent,
-        });
-    }
-    Ok(PunctuationCluster {
-        bytes, count: selected.len(), end, extent_um,
-    })
+    Ok(fitting)
 }
 
 // Keep opening Spanish/English punctuation and paired brackets with the

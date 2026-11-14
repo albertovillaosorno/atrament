@@ -212,6 +212,8 @@ exercises this sixth policy as well. An accepted-revision application test
 proves exact sheet placement, source ownership and typed refusal on actual
 accepted page-profile authority.
 
-This exposes a measured layout policy only. Neither the native CLI Markdown
-parser nor the persisted semantic notebook schema accepts page-break markup,
-so it does not complete the saved-notebook layout journey.
+This exposes a measured layout policy only. The independently implemented
+native CLI Markdown flow now admits a standalone export-only page-break
+directive, but does not use this semantic `FlowUnitPolicy` or persist page
+breaks in notebook state. Neither slice completes the saved-notebook layout
+journey.

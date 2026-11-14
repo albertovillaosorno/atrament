@@ -349,6 +349,23 @@ stroke placement proves native PDF and transparent PNG parity, including
 an atomic missing-glyph refusal. This is a bounded advisory grouping rule,
 not URL parsing, automatic path normalization or full Unicode line breaking.
 
+## Long attached-punctuation prefixes (partial) — 2026-11-14
+
+When an unspaced run contains more joined punctuation than one physical row
+can fit, the native CLI now selects the longest measured prefix that fits
+its ink width, 96-grapheme row limit and 384-byte row limit. Previously an
+overlong cluster fell all the way back to one grapheme, even when a shorter
+joined prefix could move intact to the next row. The precise authored glyphs
+remain unchanged and an unfit pair still falls back to one glyph.
+
+One failing-before/fixed-after test checks five actual three-row prefixes;
+384 deterministic varied punctuation/width samples retain every authored
+Unicode grapheme in both plain text and Markdown. Real vector PDF and
+transparent PNG exports match independently placed authored ink for three
+punctuation kinds, and an unshaped mark still refuses atomic replacement.
+This is bounded visual grouping, not automatic hyphenation, full Unicode
+line breaking, or an editable saved notebook.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
