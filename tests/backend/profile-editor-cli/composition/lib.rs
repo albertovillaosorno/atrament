@@ -20172,3 +20172,312 @@ fn notebook_shape_coverage_matches_independent_page_presence_oracle()
     }
     Ok(())
 }
+
+#[test]
+fn notebook_stroke_demand_counts_exact_and_borrowed_unicode_per_page()
+-> Result<(), String> {
+    let source = "a\nó\nn\u{303}\na";
+    let base = args(&[
+        "--inspect-flow", "--flow-text", source,
+        "--flow-region", "30000", "40000", "32000", "25000",
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "250", "#123456",
+        "--glyph-stroke", "a", "1500", "2500", "2500", "600",
+        "250", "#123456",
+        "--fallback-glyph", "ó", "a",
+        "--inspect-flow-shape-coverage", "--inspect-flow-inventory",
+        "--inspect-flow-page-inventory",
+    ]);
+    let mut selected = base.clone();
+    selected.push("--inspect-flow-stroke-demand".to_owned());
+    let report = String::from_utf8(execute_notebook(&selected)?
+        .ok_or("missing nominal stroke demand")?)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains(concat!(
+        "Nominal stroke demand: 6 glyph + 0 ornament = 6 known segments, ",
+        "1 unresolved glyph uses (incomplete; native limit 4096)\n",
+        "Page 1 stroke demand: 4 glyph + 0 ornament = 4 known segments, ",
+        "0 unresolved glyph uses (within budget; native limit 4096)\n",
+        "Page 2 stroke demand: 2 glyph + 0 ornament = 2 known segments, ",
+        "1 unresolved glyph uses (incomplete; native limit 4096)\n",
+    )), "{report}");
+    let original = String::from_utf8(execute_notebook(&base)?
+        .ok_or("missing original shape coverage")?)
+        .map_err(|error| error.to_string())?;
+    let before_demand = report.split("Nominal stroke demand:").next()
+        .ok_or("no preceding coverage section")?;
+    assert_eq!(before_demand, original,
+        "opt-in demand must only append to earlier report sections");
+    Ok(())
+}
+
+#[test]
+fn notebook_stroke_demand_counts_native_markdown_ornaments_and_export()
+-> Result<(), String> {
+    let source = "# a\n- a\n> a";
+    let shared = args(&[
+        "--flow-markdown", source,
+        "--flow-region", "30000", "40000", "32000", "25000",
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "250", "#123456",
+    ]);
+    let mut inspected = shared.clone();
+    inspected.extend(args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-stroke-demand", "--inspect-flow-inventory",
+        "--inspect-flow-page-inventory",
+    ]));
+    let report = String::from_utf8(execute_notebook(&inspected)?
+        .ok_or("missing decorated demand")?)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains(concat!(
+        "Nominal stroke demand: 3 glyph + 3 ornament = 6 known segments, ",
+        "0 unresolved glyph uses (within budget; native limit 4096)\n",
+        "Page 1 stroke demand: 2 glyph + 2 ornament = 4 known segments, ",
+        "0 unresolved glyph uses (within budget; native limit 4096)\n",
+        "Page 2 stroke demand: 1 glyph + 1 ornament = 2 known segments, ",
+        "0 unresolved glyph uses (within budget; native limit 4096)\n",
+    )), "{report}");
+    let mut output = shared;
+    output.extend(args(&["--emit-ink-file"]));
+    let ink = String::from_utf8(execute_notebook(&output)?
+        .ok_or("missing exported native physical ink")?)
+        .map_err(|error| error.to_string())?;
+    let records: Vec<_> = ink.lines().skip(1).collect();
+    assert_eq!(records.len(), 6,
+        "nominal known segments must match actual unjoined ink");
+    assert_eq!(records.iter().filter(|row|
+        row.starts_with("1\t")).count(), 4);
+    assert_eq!(records.iter().filter(|row|
+        row.starts_with("2\t")).count(), 2);
+    Ok(())
+}
+
+#[test]
+fn notebook_stroke_demand_flags_refuse_before_selected_file_io() {
+    for (extra, expected) in [
+        (vec!["--inspect-flow-stroke-demand"],
+            "--inspect-flow-stroke-demand requires"),
+        (vec!["--inspect-flow", "--inspect-flow-stroke-demand"],
+            "--inspect-flow-stroke-demand requires"),
+        (vec!["--inspect-flow-shape-coverage",
+            "--inspect-flow-stroke-demand"],
+            "--inspect-flow-shape-coverage requires --inspect-flow"),
+        (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-stroke-demand", "--inspect-flow-stroke-demand"],
+            "--inspect-flow-stroke-demand may appear only once"),
+        (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-stroke-demand", "--export-paper", "pdf"],
+            "--inspect-flow is stdout only"),
+        (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-stroke-demand", "--join-text-pair", "a", "b"],
+            "--inspect-flow cannot include authored ink"),
+    ] {
+        let mut options = args(&[
+            "--profile", "missing-stroke-demand-notebook.json",
+            "--flow-text-file", "missing-stroke-demand-source.txt",
+        ]);
+        options.extend(extra.into_iter().map(str::to_owned));
+        let error = execute_notebook(&options)
+            .expect_err("invalid demand selection must precede file reads");
+        assert!(error.contains(expected), "{options:?}: {error}");
+    }
+}
+
+#[test]
+fn notebook_stroke_demand_exposes_real_native_budget_overflow()
+-> Result<(), String> {
+    let source = std::iter::repeat_n("aaaaaaaaaa", 40)
+        .collect::<Vec<_>>().join("\n");
+    let mut shapes = Vec::new();
+    for index in 0..12u32 {
+        shapes.extend(args(&[
+            "--glyph-stroke", "a", &(100 + 100 * index).to_string(),
+            "200", &(200 + 100 * index).to_string(), "3200",
+            "250", "#123456",
+        ]));
+    }
+    let mut inspected = args(&[
+        "--flow-text", &source, "--inspect-flow",
+        "--inspect-flow-shape-coverage", "--inspect-flow-stroke-demand",
+    ]);
+    inspected.extend(shapes.iter().cloned());
+    let report = String::from_utf8(execute_notebook(&inspected)?
+        .ok_or("missing over-budget demand")?)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains(concat!(
+        "Nominal stroke demand: 4800 glyph + 0 ornament = ",
+        "4800 known segments, 0 unresolved glyph uses ",
+        "(over budget; native limit 4096)",
+    )), "{report}");
+    let path = test_path().with_extension("pdf");
+    fs::write(&path, b"PRESERVE")
+        .map_err(|error| error.to_string())?;
+    let selected = path.to_str().ok_or("invalid test-owned PDF path")?;
+    let mut exported = args(&[
+        "--flow-text", &source, "--export-paper", "pdf",
+        "--output", selected, "--replace",
+    ]);
+    exported.extend(shapes);
+    let error = execute_notebook(&exported)
+        .expect_err("real ink exporter must reject over-budget content");
+    assert!(error.contains("text exceeds 4096 total pen strokes"),
+        "{error}");
+    assert_eq!(fs::read(&path).map_err(|error| error.to_string())?,
+        b"PRESERVE");
+    fs::remove_file(path).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[test]
+fn notebook_stroke_demand_has_zero_totals_on_blank_physical_sheets()
+-> Result<(), String> {
+    let report = execute_notebook(&args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-stroke-demand", "--inspect-flow-inventory",
+        "--inspect-flow-page-inventory", "--flow-text", "\n\na",
+        "--flow-region", "30000", "40000", "32000", "25000",
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "250", "#123456",
+    ]))?.ok_or("missing blank-sheet stroke demand")?;
+    let report = String::from_utf8(report)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains("Pages: 2\n"), "{report}");
+    assert!(report.contains(concat!(
+        "Page 1 stroke demand: 0 glyph + 0 ornament = 0 known segments, ",
+        "0 unresolved glyph uses (within budget; native limit 4096)\n",
+        "Page 2 stroke demand: 1 glyph + 0 ornament = 1 known segments, ",
+        "0 unresolved glyph uses (within budget; native limit 4096)\n",
+    )), "{report}");
+    Ok(())
+}
+
+#[test]
+fn notebook_stroke_demand_matches_seeded_per_sheet_count_oracle()
+-> Result<(), String> {
+    let glyphs = ["a", "ó", "n\u{303}", "x"];
+    let shapes = args(&[
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "250", "#123456",
+        "--glyph-stroke", "a", "1000", "700", "1500", "3000",
+        "250", "#123456",
+        "--glyph-stroke", "n\u{303}", "500", "600", "1500", "2500",
+        "250", "#123456",
+        "--glyph-stroke", "n\u{303}", "500", "700", "1500", "3000",
+        "250", "#123456",
+        "--glyph-stroke", "n\u{303}", "500", "800", "1500", "3500",
+        "250", "#123456",
+        "--fallback-glyph", "ó", "a",
+    ]);
+    let mut seed = 0x7b02_14cd_55ec_6d51u64;
+    for case in 0..256 {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        let count = 1 + (seed as usize % 64);
+        let mut lines = Vec::with_capacity(count);
+        for _ in 0..count {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            lines.push(glyphs[(seed as usize) % glyphs.len()]);
+        }
+        let source = lines.join("\n");
+        let mut flags = args(&[
+            "--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-stroke-demand", "--inspect-flow-inventory",
+            "--inspect-flow-page-inventory", "--flow-text", &source,
+            "--flow-region", "30000", "40000", "32000", "25000",
+        ]);
+        flags.extend(shapes.iter().cloned());
+        let report = String::from_utf8(execute_notebook(&flags)?
+            .ok_or("missing randomized demand")?)
+            .map_err(|error| error.to_string())?;
+        let demand = |values: &[&str]| {
+            let known = values.iter().map(|value| match *value {
+                "a" | "ó" => 2usize,
+                "n\u{303}" => 3,
+                _ => 0,
+            }).sum::<usize>();
+            let missing = values.iter().filter(|&&value| value == "x")
+                .count();
+            let status = if missing > 0 { "incomplete" }
+                else { "within budget" };
+            (known, missing, status)
+        };
+        let (known, missing, status) = demand(&lines);
+        assert!(report.contains(&format!(
+            "Nominal stroke demand: {known} glyph + 0 ornament = \
+             {known} known segments, {missing} unresolved glyph uses \
+             ({status}; native limit 4096)",
+        )), "case {case}: {report}");
+        for (page, rows) in lines.chunks(2).enumerate() {
+            let (known, missing, status) = demand(rows);
+            assert!(report.contains(&format!(
+                "Page {} stroke demand: {known} glyph + 0 ornament = \
+                 {known} known segments, {missing} unresolved glyph uses \
+                 ({status}; native limit 4096)",
+                page + 1,
+            )), "case {case}, page {page}: {report}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn notebook_stroke_demand_imported_library_matches_native_pdf_and_png()
+-> Result<(), String> {
+    let path = test_path().with_extension("tsv");
+    let library = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "a\t500\t600\t1500\t2500\t250\t#123456\n",
+        "a\t1500\t2500\t2500\t600\t250\t#123456\n",
+        "ñ\t500\t600\t1500\t2500\t250\t#123456\n",
+    );
+    fs::write(&path, library).map_err(|error| error.to_string())?;
+    let selected = path.to_str().ok_or("invalid imported shape path")?;
+    let shared = args(&[
+        "--flow-text", "a\nó\nn\u{303}",
+        "--flow-region", "30000", "40000", "32000", "25000",
+        "--glyph-file", selected, "--fallback-glyph", "ó", "a",
+    ]);
+    let mut flags = shared.clone();
+    flags.extend(args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-stroke-demand", "--inspect-flow-inventory",
+        "--inspect-flow-page-inventory",
+    ]));
+    let report = String::from_utf8(execute_notebook(&flags)?
+        .ok_or("missing imported-library demand")?)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains(concat!(
+        "Nominal stroke demand: 5 glyph + 0 ornament = 5 known segments, ",
+        "0 unresolved glyph uses (within budget; native limit 4096)\n",
+        "Page 1 stroke demand: 4 glyph + 0 ornament = 4 known segments, ",
+        "0 unresolved glyph uses (within budget; native limit 4096)\n",
+        "Page 2 stroke demand: 1 glyph + 0 ornament = 1 known segments, ",
+        "0 unresolved glyph uses (within budget; native limit 4096)\n",
+    )), "{report}");
+    let mut ink_flags = shared.clone();
+    ink_flags.extend(args(&["--emit-ink-file"]));
+    let ink = String::from_utf8(execute_notebook(&ink_flags)?
+        .ok_or("missing saved-library ink")?)
+        .map_err(|error| error.to_string())?;
+    assert_eq!(ink.lines().skip(1).count(), 5);
+    let mut pdf_flags = shared.clone();
+    pdf_flags.extend(args(&["--export-paper", "pdf"]));
+    let pdf = execute_notebook(&pdf_flags)?
+        .ok_or("missing saved-library vector PDF")?;
+    assert!(pdf.starts_with(b"%PDF-"));
+    let mut png_flags = shared;
+    png_flags.extend(args(&[
+        "--export-paper", "png", "--dpi", "72", "--png-page", "2",
+    ]));
+    let png = execute_notebook(&png_flags)?
+        .ok_or("missing selected transparent PNG")?;
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_eq!(fs::read(&path).map_err(|error| error.to_string())?,
+        library.as_bytes(), "inspection and exports never mutate glyph file");
+    fs::remove_file(path).map_err(|error| error.to_string())?;
+    Ok(())
+}

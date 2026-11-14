@@ -4769,3 +4769,27 @@ available for locating where new glyph authoring would be useful.
 Focused Rust tests cover borrowed counts for a three-sheet Unicode source and
 a loaded-library single-form case; no visual equivalence is inferred.
 This remains a planning diagnostic, not proof of physical pen clearance.
+
+## Nominal stroke-demand preflight (partial) — 2026-11-13
+
+The read-only Rust flow inspector now accepts
+`--inspect-flow-stroke-demand` only alongside its explicit shape-coverage
+flag. It multiplies laid-out exact Unicode grapheme occurrences by the
+selected library's authored-stroke counts, follows validated one-hop
+fallbacks, and adds actual native Markdown heading/list/quote ornament
+segments. It reports the global known count against the shared 4,096-pen
+segment export limit, plus unresolved glyph *uses* whose demand cannot be
+inferred. Per-physical-page totals are opt-in through the existing page
+inventory flags; the export limit still applies to all sheets together.
+
+Seven native tests check exact NFC/NFD, fallback and unresolved counts across
+two pages, compare ornament totals with actual emitted physical-ink TSV,
+verify blank sheets and 256 independent seeded per-sheet demand cases,
+reject invalid flag combinations before selected source reads, inspect a
+saved Unicode glyph library against real PDF and transparent PNG, and detect
+a 4,800-segment flow before the real exporter refuses while preserving a
+preexisting output file. Historical reports are unchanged when omitted.
+
+These are nominal source-shape counts, not final ink clearance, visual
+quality, join-connector estimation, persisted semantic notebook content or
+complete PDF/PNG export readiness. ATR-P2-011 remains open.

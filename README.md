@@ -529,6 +529,32 @@ native mapping checks as PDF/PNG exports.
 Source-independent mapping conflicts refuse before selected profile/source
 reads; imported-library target existence is checked after the library loads.
 
+For a numeric **native stroke-budget preview**, add
+`--inspect-flow-stroke-demand` to the shape coverage flags. It counts each
+laid-out glyph use multiplied by its selected library stroke count, including
+explicit borrowed shapes, plus actual Markdown heading/list/quote ornaments.
+The report compares the whole notebook's **known** segments with the native
+4,096-segment export cap.
+
+An unauthored grapheme contributes one unresolved *use*, not a guessed number
+of strokes; the budget is only certified when there are no missing shapes.
+Add `--inspect-flow-inventory` and
+`--inspect-flow-page-inventory` for breakdowns on every physical sheet,
+including empty ones. The native limit applies **across all pages**, not
+independently to each sheet.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --flow-markdown-file notes.md --inspect-flow \
+  --inspect-flow-shape-coverage --inspect-flow-stroke-demand \
+  --inspect-flow-inventory --inspect-flow-page-inventory \
+  --glyph-file writer.tsv
+```
+
+This is read-only, does not connect or project pen strokes, and cannot prove
+physical ink clearance, acceptable appearance or a successful PDF/PNG export.
+Unselected reports remain byte-identical.
+
 A match or explicit borrow does **not** prove visually equivalent glyphs,
 physical ink clearance or a successful render. Variation and placed text
 remain disallowed in coverage-only mode. The source library stays untouched;
