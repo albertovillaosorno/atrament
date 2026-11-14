@@ -4975,3 +4975,13 @@ ink order is reversed. Both inspectors reject invalid first and later
 page references without appending a partial report, even after an earlier
 valid segment. The reports remain advisory actual centerline geometry,
 not motion instructions or material estimates.
+
+## Maximum physical sheet count for measured lengths — 2026-11-13
+
+A native 32-sheet acceptance regression compares the exact page-local
+pen-down and RGB-color distance reports to 32 independently emitted
+physical TSV page rows. Each sheet receives one authored segment and
+contributes the same rounded micrometre distance; their sum matches the
+global report. A 33rd flow row requiring a new sheet refuses instead of
+silently omitting its ink from the aggregate. This preserves the existing
+native page-count ceiling without promising plotter travel semantics.

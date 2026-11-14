@@ -21667,3 +21667,65 @@ fn randomized_ink_distance_reports_match_independent_color_oracle()
     assert_eq!(unchanged, "previous report\n");
     Ok(())
 }
+
+#[test]
+fn maximum_page_flow_reports_last_sheet_pen_distance_and_color()
+-> Result<(), String> {
+    let one_row_per_sheet = ["a"; 32].join("\n");
+    let shared = args(&[
+        "--flow-text", &one_row_per_sheet,
+        "--flow-region", "30000", "40000", "30000", "14000",
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "251", "#123456",
+    ]);
+    let mut inspect = shared.clone();
+    inspect.extend(args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-ink-validation", "--inspect-flow-ink-length",
+        "--inspect-flow-ink-length-by-color",
+    ]));
+    let report = String::from_utf8(execute_notebook(&inspect)?
+        .ok_or("missing maximal flow physical ink report")?)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains("Pages: 32\nRows: 32\n"), "{report}");
+    assert!(report.contains(concat!(
+        "Validated ink pen-down length: 68704 um\n",
+        "Page 1 validated ink pen-down length: 2147 um\n",
+    )), "{report}");
+    assert!(report.contains(concat!(
+        "Validated ink length by color: 1 RGB color\n",
+        "  #123456: 68704 um across 32 segments\n",
+    )), "{report}");
+    for page in 1..=32 {
+        assert!(report.contains(&format!(
+            "Page {page} validated ink pen-down length: 2147 um\n"
+        )), "page {page}: {report}");
+        assert!(report.contains(&format!(
+            "Page {page} validated ink length by color: 1 RGB color\n  \
+             #123456: 2147 um across 1 segment\n"
+        )), "page {page}: {report}");
+    }
+    assert!(!report.contains("Page 33 validated ink"), "{report}");
+    let mut export = shared.clone();
+    export.push("--emit-ink-file".into());
+    let tsv = String::from_utf8(execute_notebook(&export)?
+        .ok_or("missing 32-sheet native ink TSV")?)
+        .map_err(|error| error.to_string())?;
+    let lines = tsv.lines().skip(1).collect::<Vec<_>>();
+    assert_eq!(lines.len(), 32);
+    for (index, line) in lines.iter().enumerate() {
+        assert!(line.starts_with(&format!("{}\t", index + 1)),
+            "line {} physical page: {line}", index + 1);
+    }
+    let mut too_many = shared;
+    too_many[1] = ["a"; 33].join("\n");
+    too_many.extend(args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-ink-validation", "--inspect-flow-ink-length",
+        "--inspect-flow-ink-length-by-color",
+    ]));
+    let error = execute_notebook(&too_many)
+        .expect_err("33 physical sheets must exceed native flow limit");
+    assert!(error.contains("32 physical pages"), "{error}");
+    Ok(())
+}
