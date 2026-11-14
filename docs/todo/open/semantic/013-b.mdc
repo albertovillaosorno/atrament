@@ -333,6 +333,22 @@ This is bounded visual punctuation grouping, not full Unicode line-breaking,
 automatic writer calibration, locale-sensitive hyphenation or a persisted
 semantic notebook. P2-013 remains open.
 
+## Slash/path separator wrapping in native flow (partial) — 2026-11-14
+
+The bounded CLI plain-text and Markdown layout now keeps an authored ASCII
+forward slash `/` or reverse solidus `\` with its preceding grapheme when
+breaking a long unspaced path, date or compound. It may wrap immediately
+after either separator. The grammar and exact source ink are unchanged;
+a Markdown backslash used as a terminal hard-break marker still follows
+its existing syntactic rules.
+
+A failing-before/fixed-after native test verifies exact two-row placement
+for both separators, with a 384-sample measured physical-row matrix in
+both source modes and a 5-mm too-narrow fallback. Independent manual
+stroke placement proves native PDF and transparent PNG parity, including
+an atomic missing-glyph refusal. This is a bounded advisory grouping rule,
+not URL parsing, automatic path normalization or full Unicode line breaking.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

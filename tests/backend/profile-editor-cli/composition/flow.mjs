@@ -1927,13 +1927,13 @@ test('nonbreaking Unicode joins match independent PDF/PNG pen placement',
         }
     });
 
-test('wrapped dashes and ellipsis match direct PDF/PNG ink', () => {
+test('wrapped dashes, ellipsis and path separators match PDF/PNG ink', () => {
     const dir = mkdtempSync(join(root, '.temp/flow-dash-'));
     try {
         const region = ['--flow-region', '30000', '40000',
             '32000', '36000'];
         for (const dash of ['-', '\u{2010}', '\u{2013}',
-            '\u{2014}', '…']) {
+            '\u{2014}', '…', '/', '\\']) {
             const strokes = [...'bcdefg', dash].flatMap((glyph) => [
                 '--glyph-stroke', glyph, '600', '500', '1800',
                 '3000', '250', '#123456',

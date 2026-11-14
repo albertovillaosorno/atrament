@@ -8309,6 +8309,8 @@ fn bilingual_punctuation_stays_with_neighbor_when_long_words_wrap()
         ("abcdef\u{2013}g", ["abcde", "f\u{2013}g"]),
         ("abcdef\u{2014}g", ["abcde", "f\u{2014}g"]),
         ("abcdef…g", ["abcde", "f…g"]),
+        ("abcdef/g", ["abcde", "f/g"]),
+        ("abcdef\\g", ["abcde", "f\\g"]),
     ] {
         for format in [FlowFormat::Plain, FlowFormat::Markdown] {
             let source = FlowSource::new(format, text)?;
@@ -8353,7 +8355,7 @@ fn narrow_paired_rows_retain_exact_unicode_ink_when_pair_cannot_fit()
             "a⁈b", "a⁉b", "a‼b", "“a”", "‘a’", "(a)", "[a]", "{a}",
             "a\u{a0}b", "a\u{202f}b", "a\u{2011}b",
             "a-b", "a\u{2010}b", "a\u{2013}b", "a\u{2014}b",
-            "a…b"] {
+            "a…b", "a/b", "a\\b"] {
             let source = FlowSource::new(format, text)?;
             let (runs, ornaments, pages) = super::layout_flow_with_region(
                 &source, &NotebookProfile::default(), None,
@@ -8438,8 +8440,8 @@ fn seeded_trailing_punctuation_does_not_start_overflow_rows()
         let suffix = 3usize + usize::try_from(seed % 19)
             .map_err(|error| error.to_string())?;
         let trailing = ["-", "\u{2010}", "\u{2013}",
-            "\u{2014}", "…", "›", "‽", "⁇", "⁈", "⁉", "‼"]
-            [case % 11];
+            "\u{2014}", "…", "›", "‽", "⁇", "⁈", "⁉", "‼",
+            "/", "\\"][case % 13];
         let text = format!("{}n\u{303}{}{}ñ", "a".repeat(prefix),
             trailing, "b".repeat(suffix));
         let region = super::FlowRegion {

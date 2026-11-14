@@ -2237,9 +2237,9 @@ fn next_punctuation_cluster(
 // next authored grapheme, and closing marks with the preceding grapheme.
 // Unlike standalone ASCII spaces, authored nonbreaking Unicode spaces and
 // the nonbreaking hyphen bind *both* adjacent graphemes. Ordinary hyphen
-// and dash marks, as well as an ellipsis, stay after their preceding ink,
-// but can wrap before the next grapheme. An overlarge group falls back to
-// measured individual ink.
+// and dash marks, an ellipsis, and path separators stay after their
+// preceding ink, but can wrap before the next grapheme. An overlarge group
+// falls back to measured individual ink.
 // Exact Unicode identities survive; straight quotes remain nondirectional.
 fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
     fn nonbreaking(grapheme: &str) -> bool {
@@ -2250,6 +2250,7 @@ fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
             | "(" | "[" | "{")
         || matches!(next, "?" | "!" | "." | "," | ";" | ":"
             | "-" | "\u{2010}" | "\u{2013}" | "\u{2014}" | "…"
+            | "/" | "\\"
             | ")" | "]" | "}" | "»" | "›" | "”" | "’"
             | "‽" | "⁇" | "⁈" | "⁉" | "‼")
 }
