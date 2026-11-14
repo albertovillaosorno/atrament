@@ -306,8 +306,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     --inspect-flow-inventory lists exact visible graphemes after Markdown \
     parsing, excluding synthetic ornaments and ASCII spaces. \
     --inspect-flow-page-inventory splits those requirements per sheet. \
-    --inspect-flow-shape-coverage compares exact grapheme keys against \
-    --glyph-file/--glyph-stroke shapes without rendering any ink. \
+    --inspect-flow-shape-coverage checks exact authored glyph shapes \
+    and explicit --fallback-glyph mappings without rendering ink. \
     Shape coverage is opt-in and does not validate physical ink bounds. \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
@@ -362,6 +362,20 @@ struct GlyphStroke {
 struct GlyphFallback {
     authored: String,
     missing: String,
+}
+
+// Coverage is exact-key, with an optional explicit one-hop substitution.
+// It never promises that the borrowed contours are visually equivalent.
+enum ShapeCoverage<'shape> {
+    Authored,
+    Borrowed(&'shape str),
+    Missing,
+}
+
+impl ShapeCoverage<'_> {
+    fn is_present(&self) -> bool {
+        !matches!(self, Self::Missing)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -2932,7 +2946,8 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                 | "--glyph-word-pressure" | "--glyph-word-pigment"
                 | "--glyph-word-tracking" | "--glyph-word-baseline-step" => {
                     glyph_edited = true;
-                    glyph_non_shape_selected |= option != "--glyph-stroke";
+                    glyph_non_shape_selected |= !matches!(option.as_str(),
+                        "--glyph-stroke" | "--fallback-glyph");
                     preflight_notebook_glyph_option(
                         option, &mut glyph_preflight, &mut iter)?;
                     (0, false)
@@ -3372,7 +3387,7 @@ fn admit_flow_page_selection(
 
 // Match exact caller-authored stroke keys only after the same nominal flow
 // has placed all visible graphemes. Do not interpret membership as rendered
-// pen clearance, accepted fallbacks or persistent semantic content.
+// pen clearance, implicit fallbacks or persistent semantic content.
 #[expect(clippy::use_debug, reason =
     "preserve escaped exact Unicode grapheme-key report spelling")]
 fn append_flow_shape_coverage(
@@ -3382,25 +3397,42 @@ fn append_flow_shape_coverage(
     pages: usize, show_page_detail: bool,
 ) -> Result<(), String> {
     let shapes = glyphs.exact_authored_shapes()?;
+    let status = |grapheme: &str| {
+        if shapes.contains(grapheme) {
+            ShapeCoverage::Authored
+        } else if let Some(mapping) = glyphs.fallbacks.iter()
+            .find(|mapping| mapping.missing == grapheme) {
+            ShapeCoverage::Borrowed(mapping.authored.as_str())
+        } else {
+            ShapeCoverage::Missing
+        }
+    };
     let present_forms = inventory.keys()
-        .filter(|key| shapes.contains(key.as_str())).count();
+        .filter(|key| status(key).is_present()).count();
     let present_uses: usize = inventory.iter()
-        .filter(|(key, _)| shapes.contains(key.as_str()))
+        .filter(|(key, _)| status(key).is_present())
         .map(|(_, occurrences)| *occurrences).sum();
     let total_uses: usize = inventory.values().sum();
+    let description = if glyphs.fallbacks.is_empty() {
+        "Exact"
+    } else {
+        "Selected"
+    };
     writeln!(report,
-        "Exact shape coverage: {present_forms}/{} forms, \
+        "{description} shape coverage: {present_forms}/{} forms, \
          {present_uses}/{total_uses} uses (ink clearance unchecked)",
         inventory.len(),
     ).map_err(|error| format!("flow coverage refused: {error}"))?;
     for (grapheme, count) in inventory {
-        let status = if shapes.contains(grapheme.as_str()) {
-            "Authored"
-        } else {
-            "Missing"
-        };
-        writeln!(report, "{status} {grapheme:?}: {count}")
-            .map_err(|error| format!("flow coverage refused: {error}"))?;
+        match status(grapheme) {
+            ShapeCoverage::Authored =>
+                writeln!(report, "Authored {grapheme:?}: {count}"),
+            ShapeCoverage::Borrowed(authored) =>
+                writeln!(report,
+                    "Borrowed {grapheme:?} from {authored:?}: {count}"),
+            ShapeCoverage::Missing =>
+                writeln!(report, "Missing {grapheme:?}: {count}"),
+        }.map_err(|error| format!("flow coverage refused: {error}"))?;
     }
     if show_page_detail {
         for page in 1..=pages {
@@ -3413,9 +3445,9 @@ fn append_flow_shape_coverage(
                 continue;
             };
             let count = forms.keys()
-                .filter(|key| shapes.contains(key.as_str())).count();
+                .filter(|key| status(key).is_present()).count();
             let covered: usize = forms.iter()
-                .filter(|(key, _)| shapes.contains(key.as_str()))
+                .filter(|(key, _)| status(key).is_present())
                 .map(|(_, occurrences)| *occurrences).sum();
             let page_uses: usize = forms.values().sum();
             writeln!(report,
@@ -3424,10 +3456,18 @@ fn append_flow_shape_coverage(
                 forms.len(),
             ).map_err(|error| format!("flow coverage refused: {error}"))?;
             for (grapheme, occurrences) in forms {
-                if !shapes.contains(grapheme.as_str()) {
-                    writeln!(report,
-                        "  Missing {grapheme:?}: {occurrences}",
-                    ).map_err(|error| {
+                let line = match status(grapheme) {
+                    ShapeCoverage::Borrowed(authored) => Some(format!(
+                        concat!("  Borrowed {:?} from ", "{:?}: {}"),
+                        grapheme, authored, occurrences,
+                    )),
+                    ShapeCoverage::Missing => Some(format!(
+                        "  Missing {grapheme:?}: {occurrences}"
+                    )),
+                    ShapeCoverage::Authored => None,
+                };
+                if let Some(line) = line {
+                    writeln!(report, "{line}").map_err(|error| {
                         format!("flow coverage refused: {error}")
                     })?;
                 }

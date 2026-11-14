@@ -518,11 +518,17 @@ uses, plus the status of each form. With per-page inventory enabled, it also
 lists missing shapes for each physical sheet, including zero-use sheets.
 
 Without an authored library all visible forms are reported missing. NFC
-and NFD remain distinct; explicit glyph fallbacks, variation and placed text
-are not accepted in coverage-only mode. A match means only that a validated
-stroke exists for that exact key, **not** that the ink will fit a page or
-render successfully. The source library remains untouched and no profile is
-saved, PNG/PDF created or export target replaced by this inspection.
+and NFD remain distinct unless the caller explicitly supplies a single-hop
+`--fallback-glyph MISSING AUTHORED` mapping whose target is an existing
+stroke shape. With mappings, the report calls coverage **selected** rather
+than exact, and separately labels borrowed keys and their source strokes,
+including per-sheet counts. Invalid, duplicate, chained or ambiguous
+fallbacks refuse under the same native mapping checks as PDF/PNG exports.
+
+A match or explicit borrow does **not** prove visually equivalent glyphs,
+physical ink clearance or a successful render. Variation and placed text
+remain disallowed in coverage-only mode. The source library stays untouched;
+no profile is saved, PNG/PDF created or output replaced by this inspection.
 
 To add reproducible, bounded pen-like variation to the **printed paper
 ruling** under the authored text, select both export-only options:

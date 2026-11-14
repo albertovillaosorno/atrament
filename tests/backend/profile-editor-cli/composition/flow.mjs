@@ -198,6 +198,49 @@ test('page-specific exact inventory agrees with two-sheet native ink', () => {
     }
 });
 
+test('inspected one-hop NFD fallback matches real two-page native ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-fallback-coverage-'));
+        try {
+            const source = 'a\nn\u0303\nn\u0303';
+            const region = ['--flow-region', '30000', '40000',
+                '32000', '25000'];
+            const fallback = ['--fallback-glyph', 'n\u0303', 'ó'];
+            const inspect = spawnSync(cargo, [
+                'run', '--offline', '--quiet',
+                '-p', 'atrament_profile_editor_cli', '--',
+                'notebook', '--flow-text', source,
+                '--inspect-flow', '--inspect-flow-inventory',
+                '--inspect-flow-page-inventory',
+                '--inspect-flow-shape-coverage',
+                ...base.slice(1), ...fallback, ...region,
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(inspect.status, 0, inspect.stderr);
+            assert.match(inspect.stdout, /Pages: 2\nRows: 3/);
+            assert.match(inspect.stdout,
+                /Selected shape coverage: 2\/2 forms, 3\/3 uses/);
+            assert.match(inspect.stdout,
+                /Borrowed "n\\u\{303\}" from "ó": 2/);
+            assert.match(inspect.stdout,
+                /Page 2 shape coverage: 1\/1 forms, 1\/1 uses/);
+            for (const format of ['pdf', 'png']) {
+                const direct = render(dir, 'a\nó\nó', format,
+                    region, '--flow-text', 2);
+                assert.equal(direct.result.status, 0,
+                    direct.result.stderr);
+                const expected = readFileSync(direct.output);
+                const borrowed = render(dir, source, format,
+                    [...region, ...fallback], '--flow-text', 2);
+                assert.equal(borrowed.result.status, 0,
+                    borrowed.result.stderr);
+                assert.deepEqual(readFileSync(borrowed.output), expected,
+                    'selected fallback must place the same exact strokes');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('compressed numbered label refuses overlap without clobbering PDF/PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-number-clearance-'));

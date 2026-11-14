@@ -19903,7 +19903,7 @@ fn notebook_shape_coverage_refuses_ink_and_invalid_flags_before_source_io() {
             "--place-text", "1", "30000", "40000", "a"],
             "--inspect-flow cannot include authored ink"),
         (&["--inspect-flow-shape-coverage", "--inspect-flow",
-            "--fallback-glyph", "ó", "o"],
+            "--join-text-pair", "a", "ó"],
             "--inspect-flow cannot include authored ink"),
         (&["--inspect-flow", "--glyph-file", "missing-glyph.tsv"],
             "--inspect-flow cannot include authored ink"),
@@ -19922,6 +19922,95 @@ fn notebook_shape_coverage_refuses_ink_and_invalid_flags_before_source_io() {
             .expect_err("incompatible inspection must refuse before IO");
         assert!(error.contains(expected), "{command:?}: {error:?}");
     }
+}
+
+#[test]
+fn notebook_shape_coverage_reports_only_explicit_fallbacks_and_page_uses()
+-> Result<(), String> {
+    let source = "a\nn\u{303}\n¿\nó\nn\u{303}";
+    let original = args(&[
+        "--inspect-flow", "--inspect-flow-inventory",
+        "--inspect-flow-page-inventory", "--flow-text", source,
+        "--flow-region", "30000", "40000", "32000", "25000",
+    ]);
+    let baseline = execute_notebook(&original)?
+        .ok_or("missing baseline page inventory")?;
+    let mut selected = original;
+    selected.extend(args(&[
+        "--inspect-flow-shape-coverage",
+        "--glyph-stroke", "a", "600", "500", "1800", "3000",
+        "250", "#123456",
+        "--glyph-stroke", "ó", "600", "500", "1800", "3000",
+        "250", "#123456",
+        "--fallback-glyph", "n\u{303}", "ó",
+    ]));
+    let result = execute_notebook(&selected)?
+        .ok_or("missing explicit fallback coverage")?;
+    assert!(result.starts_with(&baseline),
+        "explicit fallbacks cannot alter the nominal physical page plan");
+    let report = String::from_utf8(result)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains(concat!(
+        "Selected shape coverage: 3/4 forms, 4/5 uses ",
+        "(ink clearance unchecked)\n",
+    )), "{report}");
+    assert!(report.contains(
+        "Borrowed \"n\\u{303}\" from \"ó\": 2\n"), "{report}");
+    assert!(report.contains("Missing \"¿\": 1\n"), "{report}");
+    assert!(report.contains(
+        "Page 1 shape coverage: 2/2 forms, 2/2 uses\n"),
+        "{report}");
+    assert!(report.contains(
+        "Page 2 shape coverage: 1/2 forms, 1/2 uses\n"),
+        "{report}");
+    assert!(report.contains(
+        "Page 3 shape coverage: 1/1 forms, 1/1 uses\n"),
+        "{report}");
+    assert_eq!(report.matches(
+        "  Borrowed \"n\\u{303}\" from \"ó\": 1\n").count(),
+        2);
+    Ok(())
+}
+
+#[test]
+fn notebook_shape_coverage_rejects_invalid_fallback_mappings()
+-> Result<(), String> {
+    let shape = [
+        "--glyph-stroke", "a", "500", "500", "1500", "2500",
+        "250", "#123456",
+    ];
+    for (extra, error) in [
+        (vec!["--fallback-glyph", "ó", "n\u{303}"],
+            "fallback target has no authored strokes"),
+        (vec!["--fallback-glyph", "a", "ó"],
+            "fallback source already has authored strokes"),
+        (vec!["--fallback-glyph", "ó", "a",
+             "--fallback-glyph", "n\u{303}", "ó"],
+            "chained glyph fallbacks refused"),
+        (vec!["--fallback-glyph", "ó", "a",
+             "--fallback-glyph", "ó", "a"],
+            "duplicate exact glyph fallback"),
+    ] {
+        let mut selected = args(&[
+            "--inspect-flow", "--inspect-flow-shape-coverage",
+            "--flow-text", "a",
+        ]);
+        selected.extend(args(&shape));
+        selected.extend(args(&extra));
+        let refused = execute_notebook(&selected)
+            .expect_err("invalid fallback cannot be marked covered");
+        assert!(refused.contains(error), "{selected:?}: {refused}");
+    }
+    // The nominal inspection flag alone must still refuse every mapped
+    // glyph selection; an opt-in coverage flag remains mandatory.
+    let mut legacy = args(&["--inspect-flow", "--flow-text", "a"]);
+    legacy.extend(args(&shape));
+    legacy.extend(args(&["--fallback-glyph", "ó", "a"]));
+    let error = execute_notebook(&legacy)
+        .expect_err("nominal flow forbids authored glyph selections");
+    assert!(error.contains("--inspect-flow cannot include authored ink"),
+        "{error}");
+    Ok(())
 }
 
 #[test]

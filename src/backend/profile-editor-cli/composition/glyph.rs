@@ -1258,6 +1258,7 @@ impl GlyphOverlay {
     pub(super) fn exact_authored_shapes(&self)
     -> Result<BTreeSet<&str>, String> {
         self.validate_stroke_library()?;
+        self.validate_fallbacks()?;
         Ok(self.strokes.iter()
             .map(|stroke| stroke.grapheme.as_str()).collect())
     }
@@ -3395,6 +3396,13 @@ impl GlyphOverlay {
                 "and placed text",
             ).into());
         }
+        self.validate_fallbacks()?;
+        Ok(())
+    }
+
+    // Shape inspection needs the same exact fallbacks as export but never
+    // creates placeholder text runs or bypasses malformed mapping refusal.
+    fn validate_fallbacks(&self) -> Result<(), String> {
         // Sibling typed callers can change fallback entries without going
         // through --fallback-glyph parsing. Preserve exact Unicode identity
         // and deterministic single-owner mappings at export admission.

@@ -4706,7 +4706,7 @@ graphemes against the validated stroke-library keys, reporting covered and
 missing forms/uses globally and, when selected, per physical page. The prior
 inspection and inventory report bytes are unchanged when omitted; an absent
 library reports every required form missing. It cannot place text, render
-ink, apply explicit fallbacks or bypass native source-independent preflight.
+ink, infer fallbacks or bypass native source-independent preflight.
 
 Five Rust regressions include 256 independent randomized per-page membership
 cases, NFC/NFD and Markdown syntax, empty sheets, loaded plus inline shapes,
@@ -4716,3 +4716,25 @@ native two-page PDF and second-page transparent PNG output, and verifies that
 missing ink refuses without replacing either accepted output. Library bytes
 remain unchanged. This is shape *membership*, not proof of physical ink
 clearance, saved semantic content, or the full P1 notebook journey.
+
+## Explicit one-hop fallback coverage preflight (partial) — 2026-11-13
+
+The read-only `--inspect-flow-shape-coverage` report now accepts the native
+exporter's explicit `--fallback-glyph MISSING AUTHORED` mappings alongside
+admitted authored strokes. It distinguishes direct shapes, borrowed source
+shapes and missing graphemes by exact Unicode key, with occurrence counts
+globally and for each selected physical page. A fallback's shape is never
+called exact coverage: the summary labels the result *selected coverage*,
+while the previous report bytes remain unchanged without a selected mapping.
+
+The shared native validator refuses missing targets, already-authored source
+keys, duplicate sources and chained mappings rather than inferring a glyph.
+Two Rust regressions verify NFC/NFD distinctions, three physical pages,
+preserved nominal report bytes and invalid mapping refusal; a Node integration
+proves an explicit NFD borrowing path creates byte-identical real two-page
+PDF and page-two transparent PNG against the same directly authored ink.
+The full Rust CLI suite passes.
+
+This remains a read-only shape-availability preflight, not demonstrated ink
+clearance, saved notebook layout or automatic glyph synthesis. ATR-P2-011
+remains open.
