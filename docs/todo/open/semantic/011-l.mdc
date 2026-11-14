@@ -5172,3 +5172,23 @@ replacing an accepted output file.
 
 This is not expression parsing, equation layout or the saved semantic
 notebook-to-PDF pathway. ATR-P2-011 remains open.
+
+## Attached numeric measurement ink (partial) — 2026-11-14
+
+The CLI-only native measured-flow pass now keeps a multi-digit ASCII value
+with its existing attached percent (`%`), per-mille (`‰`), permyriad (`‱`)
+or degree (`°`) punctuation when the complete authored ink fits the row.
+The established punctuation rule keeps `°C` and `°F` together. Signed,
+decimal and exponent values retain their earlier grouping, and bare letters
+(`123C`) do not acquire implied measurement-unit semantics.
+
+Physical overflow still falls back to the original exact-grapheme sequence,
+including a one-glyph-per-row region. Focused Rust assertions check numeric
+ties, negative ordinary cases and narrow-row preservation; native subprocess
+acceptance checks independently positioned physical PDF/PNG strokes for
+plain and Markdown flow, and refusal without clobbering prior output when
+an exact required unit glyph is absent.
+
+The change is an advisory line-break policy, not SI unit parsing, expression
+typography, implicit glyph generation or a saved notebook flow compiler.
+The full ATR-P2-011 semantic journey remains open.

@@ -2392,7 +2392,14 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
                 }
             }
         }
-        if has_separator {
+        // Keep ordinary multi-digit values with their already-supported
+        // attached percent/per-mille/permyriad or degree punctuation. A
+        // trailing C/F remains bound by the degree punctuation rule; no
+        // unit vocabulary or implicit glyph is introduced here.
+        let measurement_suffix = glyphs.get(cursor).is_some_and(|item| {
+            matches!(item.0, "%" | "‰" | "‱" | "°")
+        });
+        if has_separator || measurement_suffix {
             if let Some(ties) = joins.get_mut(start..cursor.saturating_sub(1)) {
                 ties.fill(true);
             }

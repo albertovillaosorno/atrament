@@ -8715,6 +8715,81 @@ fn numeric_comparison_prefixes_bind_fitting_number_ink()
 }
 
 #[test]
+fn numeric_measurement_suffixes_keep_the_complete_value_when_it_fits()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let glyphs = |source: &str| -> Vec<super::MeasuredGrapheme<'static>> {
+        source.chars().map(|ch| {
+            let form = match ch {
+                '0'..='9' => "1",
+                '%' => "%", '‰' => "‰", '‱' => "‱", '°' => "°",
+                'C' => "C", 'F' => "F", '.' => ".", 'e' => "e",
+                _ => "x",
+            };
+            (form, 4_000, 4_000)
+        }).collect()
+    };
+    for (source, expected) in [
+        ("25%", &[0][..]),
+        ("100‰", &[0, 1]),
+        ("123‱", &[0, 1]),
+        ("12°C", &[0]),
+        ("12°F", &[0]),
+        ("12°", &[0]),
+        ("12.5%", &[0, 1, 2]),
+        ("12e3°C", &[0, 1, 2]),
+        ("12x", &[]),
+        ("123C", &[]),
+        ("12%abc", &[0]),
+    ] {
+        let joined = super::numeric_separator_joins(&glyphs(source));
+        for (index, tie) in joined.iter().enumerate() {
+            assert_eq!(*tie, expected.contains(&index),
+                "{source} measurement tie at {index}");
+        }
+    }
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 33_000, height: 36_000,
+    };
+    for (source, expected) in [
+        ("abcde12°Cg", "12°Cg"),
+        ("abcde25%g", "25%g"),
+        ("abcde100‰g", "100‰g"),
+        ("abcde12°Fg", "12°Fg"),
+    ] {
+        for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            assert_eq!(pages, 1);
+            assert!(marks.is_empty());
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>(), ["abcde", expected],
+                "{source} {format:?}");
+        }
+    }
+    let narrow = super::FlowRegion {
+        width: 9_000, height: 96_000, ..region
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        for source in ["12°C", "25%", "100‰", "123‱"] {
+            let (rows, _, _) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(narrow),
+            )?;
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<String>(), source, "{source} narrow {format:?}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn numeric_relations_move_as_one_fitting_physical_row()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;
