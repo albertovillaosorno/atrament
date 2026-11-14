@@ -8652,6 +8652,28 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             assert.equal(incomplete.status, 0, incomplete.stderr);
             assert.match(incomplete.stdout,
                 /Missing "x": 1 use \(at least 1 segment\)/);
+            const verified = run([
+                '--inspect-flow', '--inspect-flow-inventory',
+                '--inspect-flow-page-inventory',
+                '--inspect-flow-shape-coverage',
+                '--inspect-flow-stroke-demand',
+                '--inspect-flow-ink-validation',
+                '--flow-text', source, ...region, ...shape,
+            ]);
+            assert.equal(verified.status, 0, verified.stderr);
+            assert.ok(verified.stdout.startsWith(inspection.stdout),
+                'full validation must preserve the nominal report bytes');
+            assert.equal(verified.stdout.slice(inspection.stdout.length),
+                'Native ink validation: 5 segments across 2 physical pages '
+                + '(PDF geometry accepted; no output file written)\n');
+            const missingInk = run([
+                '--inspect-flow', '--inspect-flow-shape-coverage',
+                '--inspect-flow-ink-validation',
+                '--flow-text', source + '\nx', ...region, ...shape,
+            ]);
+            assert.notEqual(missingInk.status, 0);
+            assert.match(missingInk.stderr,
+                /missing authored glyph shapes.*U\+0078/);
             const inkPath = join(dir, 'paper-ink.tsv');
             const ink = run(['--flow-text', source, ...region, ...shape,
                 '--emit-ink-file', '--output', inkPath]);
@@ -8694,6 +8716,15 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             assert.match(invalidDetail.stderr,
                 /--inspect-flow-stroke-breakdown requires/);
             assert.doesNotMatch(invalidDetail.stderr, /FileIo\(NotFound\)/);
+            const invalidInkCheck = run([
+                '--flow-text-file', join(dir, 'nonexistent.md'),
+                '--inspect-flow', '--inspect-flow-ink-validation',
+            ]);
+            assert.notEqual(invalidInkCheck.status, 0);
+            assert.match(invalidInkCheck.stderr,
+                /--inspect-flow-ink-validation requires/);
+            assert.doesNotMatch(invalidInkCheck.stderr,
+                /FileIo\(NotFound\)/);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

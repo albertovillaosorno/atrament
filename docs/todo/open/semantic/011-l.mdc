@@ -4834,3 +4834,27 @@ missing forms and source-independent refusal with an imported library.
 The result is advisory known-stroke budgeting, not a claim about ink geometry,
 calibrated handwriting, physical clearance, aesthetic quality, or persistent
 semantic notebook editing. ATR-P2-011 remains open.
+
+## Read-only native flow ink geometry verification (partial) — 2026-11-13
+
+The opt-in `--inspect-flow-ink-validation` adds an actual physical check to
+the nominal row report when shape coverage and a complete authored glyph
+library are selected. It projects exact and explicitly borrowed shapes with
+the selected native handwriting dimensions, verifies any fixed flow rectangle,
+then invokes the same all-page Rust vector-PDF geometry and total-segment
+admission path as native export. Success appends the actual segment and page
+counts; missing or clipped ink, invalid shapes and budget overflow refuse
+without writing a PDF, PNG, TSV, or changing the caller's library.
+
+Three focused Rust tests compare two-page Markdown ornaments with real TSV,
+PDF and selected PNG output, preserve previous report bytes, match missing
+shape and global stroke-overflow export errors, and reject bad flag
+combinations before selected file I/O. A separate real-process Node test
+checks imported Unicode/fallback ink, read-only report preservation, all-page
+counts, refusal of missing shapes and source-independent invalid selections.
+
+This is an **in-memory PDF geometry check**, not a PNG pixel/resource check,
+material simulation, calibrated writer claim, persistent semantic notebook,
+or an alternative to inspecting the final page. Variation, direct overlays
+and text joins remain export-only in the flow-inspection mode. ATR-P2-011
+remains open.

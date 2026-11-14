@@ -20731,3 +20731,181 @@ fn notebook_stroke_breakdown_randomized_matches_independent_usage_oracle()
     }
     Ok(())
 }
+
+#[test]
+fn notebook_ink_validation_checks_physical_flow_without_exporting()
+-> Result<(), String> {
+    let shared = args(&[
+        "--flow-markdown", "# a\n- a\n> a",
+        "--flow-region", "30000", "40000", "32000", "25000",
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "250", "#123456",
+    ]);
+    let mut inspect = shared.clone();
+    inspect.extend(args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-stroke-demand", "--inspect-flow-stroke-breakdown",
+        "--inspect-flow-inventory", "--inspect-flow-page-inventory",
+    ]));
+    let before = String::from_utf8(execute_notebook(&inspect)?
+        .ok_or("missing original inspection")?)
+        .map_err(|error| error.to_string())?;
+    inspect.push("--inspect-flow-ink-validation".to_owned());
+    let report = String::from_utf8(execute_notebook(&inspect)?
+        .ok_or("missing read-only full ink validation")?)
+        .map_err(|error| error.to_string())?;
+    assert_eq!(report.strip_prefix(&before), Some(concat!(
+        "Native ink validation: 6 segments across 2 physical pages ",
+        "(PDF geometry accepted; no output file written)\n",
+    )), "{report}");
+    let mut ink_flags = shared.clone();
+    ink_flags.push("--emit-ink-file".into());
+    let tsv = String::from_utf8(execute_notebook(&ink_flags)?
+        .ok_or("missing physical ink TSV")?)
+        .map_err(|error| error.to_string())?;
+    assert_eq!(tsv.lines().skip(1).count(), 6);
+    let mut pdf_flags = shared.clone();
+    pdf_flags.extend(args(&["--export-paper", "pdf"]));
+    assert!(execute_notebook(&pdf_flags)?
+        .ok_or("missing native vector PDF")?.starts_with(b"%PDF-"));
+    let mut png_flags = shared;
+    png_flags.extend(args(&[
+        "--export-paper", "png", "--dpi", "72", "--png-page", "2",
+    ]));
+    assert!(execute_notebook(&png_flags)?
+        .ok_or("missing native transparent PNG")?
+        .starts_with(b"\x89PNG\r\n\x1a\n"));
+    Ok(())
+}
+
+#[test]
+fn notebook_ink_validation_reports_real_missing_shape_and_budget_errors()
+-> Result<(), String> {
+    let one_stroke = args(&[
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "250", "#123456",
+    ]);
+    let mut inspect = args(&[
+        "--flow-text", "ax", "--inspect-flow",
+        "--inspect-flow-shape-coverage", "--inspect-flow-ink-validation",
+    ]);
+    inspect.extend(one_stroke.iter().cloned());
+    let error = execute_notebook(&inspect)
+        .expect_err("physical inspection must refuse absent glyphs");
+    assert!(error.contains("missing authored glyph shapes"), "{error}");
+    let mut actual = args(&[
+        "--flow-text", "ax", "--export-paper", "pdf",
+    ]);
+    actual.extend(one_stroke);
+    let export_error = execute_notebook(&actual)
+        .expect_err("actual native PDF must refuse the same missing ink");
+    assert_eq!(error, export_error);
+
+    // More than 16 measured rows are *not* manual text overlays. The
+    // renderer permits them with the generated-flow run boundary.
+    let source = std::iter::repeat_n("a", 18)
+        .collect::<Vec<_>>().join("\n");
+    let mut long_inspect = args(&[
+        "--flow-text", &source, "--inspect-flow",
+        "--inspect-flow-shape-coverage", "--inspect-flow-ink-validation",
+    ]);
+    long_inspect.extend(args(&[
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "250", "#123456",
+    ]));
+    let accepted = String::from_utf8(execute_notebook(&long_inspect)?
+        .ok_or("missing long flow validation")?)
+        .map_err(|error| error.to_string())?;
+    assert!(accepted.contains("Native ink validation: 18 segments "),
+        "{accepted}");
+
+    let no_shapes = args(&[
+        "--flow-text", "a", "--inspect-flow",
+        "--inspect-flow-shape-coverage", "--inspect-flow-ink-validation",
+    ]);
+    let error = execute_notebook(&no_shapes)
+        .expect_err("read-only ink validation needs authored glyphs");
+    assert_eq!(error, "flow requires authored glyph shapes");
+
+    // Physical ink thickness is transformed after nominal glyph coverage.
+    // Even a perfectly covered title must refuse its clipped pen contour.
+    let heading = args(&[
+        "--flow-markdown", "# a", "--heading-ink-scale", "250",
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "700", "#123456",
+    ]);
+    let mut verify_heading = heading.clone();
+    verify_heading.extend(args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-ink-validation",
+    ]));
+    let preview_error = execute_notebook(&verify_heading)
+        .expect_err("scaled pen must not pass physical validation");
+    assert!(preview_error.contains("scaled glyph ink width exceeds"),
+        "{preview_error}");
+    let mut export_heading = heading;
+    export_heading.extend(args(&["--export-paper", "pdf"]));
+    let render_error = execute_notebook(&export_heading)
+        .expect_err("scaled pen must not pass native vector PDF");
+    assert_eq!(preview_error, render_error);
+
+    let source = "a".repeat(400);
+    let mut shapes = Vec::new();
+    for index in 0..12u32 {
+        shapes.extend(args(&[
+            "--glyph-stroke", "a", &(100 + 100 * index).to_string(),
+            "200", &(200 + 100 * index).to_string(), "3200",
+            "250", "#123456",
+        ]));
+    }
+    let mut inspect = args(&[
+        "--flow-text", &source, "--inspect-flow",
+        "--inspect-flow-shape-coverage", "--inspect-flow-ink-validation",
+    ]);
+    inspect.extend(shapes.iter().cloned());
+    let error = execute_notebook(&inspect)
+        .expect_err("4,800-segment physical inspection must refuse");
+    assert!(error.contains("text exceeds 4096 total pen strokes"),
+        "{error}");
+    let mut exported = args(&[
+        "--flow-text", &source, "--export-paper", "pdf",
+    ]);
+    exported.extend(shapes);
+    let export_error = execute_notebook(&exported)
+        .expect_err("native PDF exporter must refuse the same ink");
+    assert_eq!(error, export_error);
+    Ok(())
+}
+
+#[test]
+fn notebook_ink_validation_flags_refuse_before_selected_file_io() {
+    for (extra, expected) in [
+        (vec!["--inspect-flow-ink-validation"],
+            "--inspect-flow-ink-validation requires"),
+        (vec!["--inspect-flow", "--inspect-flow-ink-validation"],
+            "--inspect-flow-ink-validation requires"),
+        (vec!["--inspect-flow-shape-coverage",
+            "--inspect-flow-ink-validation"],
+            "--inspect-flow-shape-coverage requires --inspect-flow"),
+        (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-ink-validation",
+            "--inspect-flow-ink-validation"],
+            "--inspect-flow-ink-validation may appear only once"),
+        (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-ink-validation", "--output", "bad.pdf"],
+            "--inspect-flow is stdout only"),
+        (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-ink-validation", "--place-text", "1", "10000",
+            "10000", "a"],
+            "--inspect-flow cannot include authored ink"),
+    ] {
+        let mut selected = args(&[
+            "--profile", "missing-ink-validation-notebook.json",
+            "--flow-text-file", "missing-ink-validation-source.txt",
+        ]);
+        selected.extend(extra.into_iter().map(str::to_owned));
+        let error = execute_notebook(&selected)
+            .expect_err("invalid ink validation must refuse before sources");
+        assert!(error.contains(expected), "{selected:?}: {error}");
+    }
+}

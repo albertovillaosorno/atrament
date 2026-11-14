@@ -471,9 +471,9 @@ cargo run -q -p atrament_profile_editor_cli -- \
 `--inspect-flow` prints each measured row's page and x/y position in
 micrometres, its exact text and the counts of heading/list/quote ornaments.
 It accepts an optional notebook/paper and handwriting-statistics profile,
-without requiring glyph strokes or writing a file. This report is **not a
-renderability verdict**: actual pen contours, physical ink clearance and
-PDF/PNG validation are checked only when exporting with a glyph library.
+without requiring glyph strokes or writing a file. Nominal inspection is
+**not a renderability verdict**: actual contours and physical ink clearance
+remain unchecked unless explicit ink validation is selected below.
 Inspection cannot be combined with `--output`, `--inspect`, export or
 manually placed ink; its opt-in coverage check permits unplaced shapes.
 
@@ -569,8 +569,26 @@ an unresolved form gives a one-segment-per-use lower bound, not an estimate
 of its actual eventual strokes. Prior reports are byte-identical when the
 flag is absent, and no versioned notebook profile field changes.
 
-This is read-only, does not connect or project pen strokes, and cannot prove
-physical ink clearance, acceptable appearance or a successful PDF/PNG export.
+For a stronger opt-in native physical check, supply
+`--inspect-flow-ink-validation` with `--inspect-flow` and
+`--inspect-flow-shape-coverage` plus a complete authored glyph library.
+Unlike the nominal budget and membership reports, this path **expands the
+actual authored pen segments** at the measured positions, validates any
+selected fixed flow region, and runs the shared vector PDF serializer's
+all-page printable-geometry and stroke-budget checks in memory. A successful
+report prints the validated segment count and physical page count, but
+creates no PDF, PNG or TSV output file. Missing glyphs, out-of-bounds ink and
+excess stroke demand produce explicit errors rather than a misleading pass.
+
+This is an in-memory dry run of the current unjoined, non-varied flow ink,
+not a PNG pixel-budget test, a calibrated handwriting inspection or a proof
+of visual quality. Explicit placed ink, joins and seeded variation remain
+incompatible with the flow-inspection mode; use a real export to validate
+those options. Earlier nominal report bytes are unchanged when this flag
+is omitted, and inspecting never modifies the library or saved profiles.
+
+The nominal reports alone do not connect or project pen strokes; they cannot
+prove physical ink clearance, acceptable appearance or successful export.
 Unselected reports remain byte-identical.
 
 A match or explicit borrow does **not** prove visually equivalent glyphs,

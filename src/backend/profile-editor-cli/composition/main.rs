@@ -189,6 +189,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--inspect-flow-shape-coverage (requires --inspect-flow)] \
     [--inspect-flow-stroke-demand (requires --inspect-flow-shape-coverage)] \
     [--inspect-flow-stroke-breakdown (requires --inspect-flow-stroke-demand)] \
+    [--inspect-flow-ink-validation (requires --inspect-flow-shape-coverage)] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--ruler-seed UINT32 --ruler-error-mm 0.001..0.250] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
@@ -314,6 +315,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     unresolved glyph uses against the native 4096-segment export budget. \
     --inspect-flow-stroke-breakdown attributes this demand to each exact \
     or borrowed shape, globally and optionally per page. \
+    --inspect-flow-ink-validation checks expanded native ink geometry \
+    with the PDF validator without writing a file. \
     Shape coverage is opt-in and does not validate physical ink bounds. \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
@@ -454,6 +457,7 @@ struct NotebookRequest {
     inspect_flow_shape_coverage: bool,
     inspect_flow_stroke_demand: bool,
     inspect_flow_stroke_breakdown: bool,
+    inspect_flow_ink_validation: bool,
     output: Option<String>,
     pages: usize,
     pages_explicit: bool,
@@ -614,7 +618,8 @@ impl NotebookFlagPreflight {
             | "--inspect-flow-page-inventory"
             | "--inspect-flow-shape-coverage"
             | "--inspect-flow-stroke-demand"
-            | "--inspect-flow-stroke-breakdown" => {
+            | "--inspect-flow-stroke-breakdown"
+            | "--inspect-flow-ink-validation" => {
                 self.unique(option, &format!("{option} may appear only once"))?;
                 0
             }
@@ -745,6 +750,13 @@ impl NotebookFlagPreflight {
             return Err(
                 "--inspect-flow-inventory requires --inspect-flow".into()
             );
+        }
+        if has("--inspect-flow-ink-validation")
+            && !has("--inspect-flow-shape-coverage") {
+            return Err(concat!(
+                "--inspect-flow-ink-validation requires ",
+                "--inspect-flow-shape-coverage",
+            ).into());
         }
         if has("--inspect-flow-stroke-breakdown")
             && !has("--inspect-flow-stroke-demand") {
@@ -3210,6 +3222,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut inspect_flow_shape_coverage = false;
     let mut inspect_flow_stroke_demand = false;
     let mut inspect_flow_stroke_breakdown = false;
+    let mut inspect_flow_ink_validation = false;
     let (mut export, mut ink) = (NotebookExportOptions::default(), Vec::new());
     let (mut glyphs, mut statistics) = (GlyphOverlay::default(), None);
     let (mut flow, mut flow_region) = (None, None);
@@ -3272,6 +3285,12 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 ),
             "--inspect-flow-stroke-breakdown" =>
                 inspect_flow_stroke_breakdown = true,
+            "--inspect-flow-ink-validation" if inspect_flow_ink_validation =>
+                return Err(
+                    "--inspect-flow-ink-validation may appear only once".into()
+                ),
+            "--inspect-flow-ink-validation" =>
+                inspect_flow_ink_validation = true,
             "--handwriting-profile" =>
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
             "--heading-style" | "--heading-align" | "--heading-color"
@@ -3337,6 +3356,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         inspect_flow_shape_coverage,
         inspect_flow_stroke_demand,
         inspect_flow_stroke_breakdown,
+        inspect_flow_ink_validation,
         output,
         pages: export.pages.unwrap_or(1),
         png_page: export.png_page.unwrap_or(1),
@@ -3690,6 +3710,44 @@ fn append_flow_stroke_breakdown(
     Ok(())
 }
 
+// Opt-in full native geometry check. The same glyph expansion and physical
+// PDF admission as export run in memory; no file is selected or written.
+// Keep this separate from nominal coverage, which may inspect missing shapes.
+fn append_flow_ink_validation(
+    report: &mut String, request: &NotebookRequest,
+    runs: Vec<TextRun>, ornaments: &[NotebookInkLine], pages: usize,
+) -> Result<(), String> {
+    // Match the export-only preflight: flow cannot be rendered without an
+    // explicitly supplied glyph library, even for syntax-only ornaments.
+    if request.glyphs.strokes.is_empty() {
+        return Err("flow requires authored glyph shapes".into());
+    }
+    let flow_run_count = runs.len();
+    let glyphs = GlyphOverlay {
+        fallbacks: request.glyphs.fallbacks.clone(),
+        runs,
+        strokes: request.glyphs.strokes.clone(),
+        ..GlyphOverlay::default()
+    };
+    // Flow rows are generated, not individually placed text. Preserve the
+    // same generated-run boundary as export so the 16 *manual* run limit
+    // never rejects a long, otherwise valid measured flow.
+    let (ink, _) = glyphs.expand_with_run_boundary(
+        ornaments, request.statistics.as_ref(), flow_run_count,
+    )?;
+    if let Some(region) = request.flow_region {
+        region.validate_ink(request.profile.printable_rect_um()?, &ink)?;
+    }
+    // Validate every page, not only a selected PNG page. This also tests
+    // the native global stroke budget and final printable pen clearance.
+    drop(request.profile.paper_layer_pdf_with_ink_ruler(pages, &ink, None)?);
+    let page_noun = if pages == 1 { "page" } else { "pages" };
+    writeln!(report,
+        "Native ink validation: {} segments across {pages} physical {page_noun} \
+         (PDF geometry accepted; no output file written)", ink.len(),
+    ).map_err(|error| format!("flow ink validation refused: {error}"))
+}
+
 // Inspect nominal physical rows before drawing any authored glyph shapes.
 fn inspect_notebook_flow(request: &NotebookRequest)
 -> Result<Vec<u8>, String> {
@@ -3707,7 +3765,7 @@ fn inspect_notebook_flow(request: &NotebookRequest)
     let mut inventory = BTreeMap::<String, usize>::new();
     let mut page_inventories =
         BTreeMap::<usize, BTreeMap<String, usize>>::new();
-    for row in runs {
+    for row in &runs {
         write!(report,
             "Page {} x={} um y={} um: {:?}\n",
             row.page, row.origin_um.0, row.origin_um.1, row.text,
@@ -3784,6 +3842,11 @@ fn inspect_notebook_flow(request: &NotebookRequest)
         append_flow_stroke_breakdown(
             &mut report, &request.glyphs, &inventory, &page_inventories,
             pages, request.inspect_flow_page_inventory,
+        )?;
+    }
+    if request.inspect_flow_ink_validation {
+        append_flow_ink_validation(
+            &mut report, request, runs, &ornaments, pages,
         )?;
     }
     Ok(report.into_bytes())
