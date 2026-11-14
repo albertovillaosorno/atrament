@@ -186,6 +186,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--printed-sheet true|false] [--inspect | --inspect-flow] \
     [--inspect-flow-inventory (requires --inspect-flow)] \
     [--inspect-flow-page-inventory (requires --inspect-flow-inventory)] \
+    [--inspect-flow-shape-coverage (requires --inspect-flow)] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--ruler-seed UINT32 --ruler-error-mm 0.001..0.250] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
@@ -305,7 +306,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     --inspect-flow-inventory lists exact visible graphemes after Markdown \
     parsing, excluding synthetic ornaments and ASCII spaces. \
     --inspect-flow-page-inventory splits those requirements per sheet. \
-    It does not validate authored pen contour or glyph coverage. \
+    --inspect-flow-shape-coverage compares exact grapheme keys against \
+    --glyph-file/--glyph-stroke shapes without rendering any ink. \
+    Shape coverage is opt-in and does not validate physical ink bounds. \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
     PDF page count includes the last manual ink page, with or without \
@@ -428,6 +431,7 @@ struct NotebookRequest {
     inspect_flow: bool,
     inspect_flow_inventory: bool,
     inspect_flow_page_inventory: bool,
+    inspect_flow_shape_coverage: bool,
     output: Option<String>,
     pages: usize,
     pages_explicit: bool,
@@ -585,7 +589,8 @@ impl NotebookFlagPreflight {
             .saturating_add(usize::from(option == "--ink-file"));
         let operands = match option {
             "--inspect" | "--inspect-flow" | "--inspect-flow-inventory"
-            | "--inspect-flow-page-inventory" => {
+            | "--inspect-flow-page-inventory"
+            | "--inspect-flow-shape-coverage" => {
                 self.unique(option, &format!("{option} may appear only once"))?;
                 0
             }
@@ -708,13 +713,18 @@ impl NotebookFlagPreflight {
     fn validate(
         self, flow_format: Option<FlowFormat>, region_selected: bool,
         inline_ink_count: usize, inline_last_page: usize,
-        glyph_has_any: bool,
+        glyph_has_any: bool, glyph_non_shape_selected: bool,
     ) -> Result<(), String> {
         let has = |option: &str| self.selected.contains(option);
         let inspect_flow = has("--inspect-flow");
         if has("--inspect-flow-inventory") && !inspect_flow {
             return Err(
                 "--inspect-flow-inventory requires --inspect-flow".into()
+            );
+        }
+        if has("--inspect-flow-shape-coverage") && !inspect_flow {
+            return Err(
+                "--inspect-flow-shape-coverage requires --inspect-flow".into()
             );
         }
         if has("--inspect-flow-page-inventory")
@@ -735,8 +745,12 @@ impl NotebookFlagPreflight {
                 "--inspect, --output or export",
             ).into());
         }
-        if inspect_flow && (inline_ink_count > 0 || glyph_has_any
-            || self.imported_overlay_selected) {
+        if inspect_flow && (inline_ink_count > 0
+            || self.imported_ink_count > 0
+            || (has("--inspect-flow-shape-coverage")
+                && glyph_non_shape_selected)
+            || (!has("--inspect-flow-shape-coverage")
+                && (glyph_has_any || self.imported_overlay_selected))) {
             return Err("--inspect-flow cannot include authored ink or glyphs"
                 .into());
         }
@@ -821,7 +835,7 @@ impl NotebookFlagPreflight {
         )?;
         // Explicit ink and glyph intent needs an output mode even before
         // selected library or stdin bytes are available.
-        if self.export_format.is_none()
+        if self.export_format.is_none() && !inspect_flow
             && (inline_ink_count != 0 || glyph_has_any
                 || self.imported_overlay_selected)
         {
@@ -2239,6 +2253,7 @@ fn validate_notebook_export_flags(
     replace: bool,
     output: Option<&str>,
     inspect: bool, inspect_flow: bool,
+    inspect_flow_shape_coverage: bool,
     export: &NotebookExportOptions,
     ink: &[NotebookInkLine],
     glyphs: &GlyphOverlay,
@@ -2278,7 +2293,8 @@ fn validate_notebook_export_flags(
         return Err("ruler variation requires --export-paper pdf or png"
             .into());
     }
-    if (glyphs.has_any() || !ink.is_empty()) && export.format.is_none() {
+    if (glyphs.has_any() || !ink.is_empty()) && export.format.is_none()
+        && !(inspect_flow && inspect_flow_shape_coverage) {
         return Err(concat!(
             "ink and glyph overlays need ",
             "--export-paper pdf or png or --emit-ink-file",
@@ -2885,6 +2901,7 @@ fn preflight_glyph_file_selection(
 fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let (mut iter, mut stdin_selected) = (args.iter(), false);
     let (mut glyph_file_selected, mut glyph_edited) = (false, false);
+    let mut glyph_non_shape_selected = false;
     let (mut flow_format, mut region_selected) = (None, false);
     let (mut region_geometry, mut preview) = (None, NotebookProfile::default());
     let (mut profile_selected, mut profile_edited) = (false, false);
@@ -2915,6 +2932,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                 | "--glyph-word-pressure" | "--glyph-word-pigment"
                 | "--glyph-word-tracking" | "--glyph-word-baseline-step" => {
                     glyph_edited = true;
+                    glyph_non_shape_selected |= option != "--glyph-stroke";
                     preflight_notebook_glyph_option(
                         option, &mut glyph_preflight, &mut iter)?;
                     (0, false)
@@ -2978,7 +2996,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     preflight_notebook_export_and_ink(
         flags, flow_format, region_selected,
         &inline_ink, glyph_file_selected, handwriting_selected,
-        &glyph_preflight)?;
+        &glyph_preflight, glyph_non_shape_selected)?;
     preflight_default_notebook_metadata(&preview, profile_edited,
         profile_selected, paper_selected)?;
     // A caller-selected notebook/paper profile may change the margins.
@@ -3058,7 +3076,7 @@ fn preflight_notebook_export_and_ink(
     flags: NotebookFlagPreflight, flow_format: Option<FlowFormat>,
     region_selected: bool, inline_ink: &[NotebookInkLine],
     glyph_file_selected: bool, handwriting_selected: bool,
-    glyphs: &GlyphOverlay,
+    glyphs: &GlyphOverlay, glyph_non_shape_selected: bool,
 ) -> Result<(), String> {
     glyphs.validate_optional_rhythm()?;
     let manual_last_page = inline_ink.iter().map(|line| line.page)
@@ -3066,7 +3084,8 @@ fn preflight_notebook_export_and_ink(
         .max().unwrap_or(0);
     let inspect_flow = flags.selected.contains("--inspect-flow");
     flags.validate(flow_format, region_selected, inline_ink.len(),
-        manual_last_page, glyphs.has_any())?;
+        manual_last_page, glyphs.has_any(),
+        glyph_non_shape_selected)?;
     if inspect_flow {
         return Ok(());
     }
@@ -3146,6 +3165,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let (mut inspect, mut output, mut replace) = (false, None, false);
     let (mut inspect_flow, mut inspect_flow_inventory) = (false, false);
     let mut inspect_flow_page_inventory = false;
+    let mut inspect_flow_shape_coverage = false;
     let (mut export, mut ink) = (NotebookExportOptions::default(), Vec::new());
     let (mut glyphs, mut statistics) = (GlyphOverlay::default(), None);
     let (mut flow, mut flow_region) = (None, None);
@@ -3190,6 +3210,12 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 ),
             "--inspect-flow-page-inventory" =>
                 inspect_flow_page_inventory = true,
+            "--inspect-flow-shape-coverage" if inspect_flow_shape_coverage =>
+                return Err(
+                    "--inspect-flow-shape-coverage may appear only once".into()
+                ),
+            "--inspect-flow-shape-coverage" =>
+                inspect_flow_shape_coverage = true,
             "--handwriting-profile" =>
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
             "--heading-style" | "--heading-align" | "--heading-color"
@@ -3230,7 +3256,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         &export, inspect_flow,
     )?;
     validate_notebook_export_flags(
-        replace, output.as_deref(), inspect, inspect_flow, &export, &ink,
+        replace, output.as_deref(), inspect, inspect_flow,
+        inspect_flow_shape_coverage, &export, &ink,
         &glyphs, statistics.as_ref(),
     )?;
     profile.validate()?;
@@ -3251,6 +3278,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         inspect_flow,
         inspect_flow_inventory,
         inspect_flow_page_inventory,
+        inspect_flow_shape_coverage,
         output,
         pages: export.pages.unwrap_or(1),
         png_page: export.png_page.unwrap_or(1),
@@ -3342,6 +3370,73 @@ fn admit_flow_page_selection(
     Ok(())
 }
 
+// Match exact caller-authored stroke keys only after the same nominal flow
+// has placed all visible graphemes. Do not interpret membership as rendered
+// pen clearance, accepted fallbacks or persistent semantic content.
+#[expect(clippy::use_debug, reason =
+    "preserve escaped exact Unicode grapheme-key report spelling")]
+fn append_flow_shape_coverage(
+    report: &mut String, glyphs: &GlyphOverlay,
+    inventory: &BTreeMap<String, usize>,
+    page_inventories: &BTreeMap<usize, BTreeMap<String, usize>>,
+    pages: usize, show_page_detail: bool,
+) -> Result<(), String> {
+    let shapes = glyphs.exact_authored_shapes()?;
+    let present_forms = inventory.keys()
+        .filter(|key| shapes.contains(key.as_str())).count();
+    let present_uses: usize = inventory.iter()
+        .filter(|(key, _)| shapes.contains(key.as_str()))
+        .map(|(_, occurrences)| *occurrences).sum();
+    let total_uses: usize = inventory.values().sum();
+    writeln!(report,
+        "Exact shape coverage: {present_forms}/{} forms, \
+         {present_uses}/{total_uses} uses (ink clearance unchecked)",
+        inventory.len(),
+    ).map_err(|error| format!("flow coverage refused: {error}"))?;
+    for (grapheme, count) in inventory {
+        let status = if shapes.contains(grapheme.as_str()) {
+            "Authored"
+        } else {
+            "Missing"
+        };
+        writeln!(report, "{status} {grapheme:?}: {count}")
+            .map_err(|error| format!("flow coverage refused: {error}"))?;
+    }
+    if show_page_detail {
+        for page in 1..=pages {
+            let Some(forms) = page_inventories.get(&page) else {
+                writeln!(report,
+                    "Page {page} shape coverage: 0/0 forms, 0/0 uses",
+                ).map_err(|error| {
+                    format!("flow coverage refused: {error}")
+                })?;
+                continue;
+            };
+            let count = forms.keys()
+                .filter(|key| shapes.contains(key.as_str())).count();
+            let covered: usize = forms.iter()
+                .filter(|(key, _)| shapes.contains(key.as_str()))
+                .map(|(_, occurrences)| *occurrences).sum();
+            let page_uses: usize = forms.values().sum();
+            writeln!(report,
+                "Page {page} shape coverage: {count}/{} forms, \
+                 {covered}/{page_uses} uses",
+                forms.len(),
+            ).map_err(|error| format!("flow coverage refused: {error}"))?;
+            for (grapheme, occurrences) in forms {
+                if !shapes.contains(grapheme.as_str()) {
+                    writeln!(report,
+                        "  Missing {grapheme:?}: {occurrences}",
+                    ).map_err(|error| {
+                        format!("flow coverage refused: {error}")
+                    })?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 // Inspect nominal physical rows before drawing any authored glyph shapes.
 fn inspect_notebook_flow(request: &NotebookRequest)
 -> Result<Vec<u8>, String> {
@@ -3364,7 +3459,8 @@ fn inspect_notebook_flow(request: &NotebookRequest)
             "Page {} x={} um y={} um: {:?}\n",
             row.page, row.origin_um.0, row.origin_um.1, row.text,
         ).map_err(|error| format!("flow report refused: {error}"))?;
-        if request.inspect_flow_inventory {
+        if request.inspect_flow_inventory
+            || request.inspect_flow_shape_coverage {
             let mut remaining = row.text.as_str();
             while !remaining.is_empty() {
                 let (grapheme, rest) = first_grapheme(remaining)?;
@@ -3391,7 +3487,7 @@ fn inspect_notebook_flow(request: &NotebookRequest)
             "Glyph inventory: {} exact forms, {total} uses\n",
             inventory.len(),
         ).map_err(|error| format!("flow inventory refused: {error}"))?;
-        for (grapheme, uses) in inventory {
+        for (grapheme, uses) in &inventory {
             write!(report, "{grapheme:?}: {uses}\n")
                 .map_err(|error| format!("flow inventory refused: {error}"))?;
         }
@@ -3418,6 +3514,12 @@ fn inspect_notebook_flow(request: &NotebookRequest)
                 }
             }
         }
+    }
+    if request.inspect_flow_shape_coverage {
+        append_flow_shape_coverage(
+            &mut report, &request.glyphs, &inventory, &page_inventories,
+            pages, request.inspect_flow_page_inventory,
+        )?;
     }
     Ok(report.into_bytes())
 }

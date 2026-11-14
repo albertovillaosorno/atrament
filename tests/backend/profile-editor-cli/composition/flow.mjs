@@ -8443,3 +8443,92 @@ test('tab-attached and hard-broken marks render exact native PDF/PNG ink',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('exact shape coverage predicts missing authored ink across native sheets',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-shape-coverage-'));
+        try {
+            const library = join(dir, 'writer.tsv');
+            const originalLibrary = [
+                'atrament.glyph-strokes.v1',
+                'a\t600\t500\t1800\t3000\t250\t#123456',
+                'n\u0303\t600\t500\t1800\t3000\t250\t#123456',
+                '',
+            ].join('\n');
+            writeFileSync(library, originalLibrary);
+            const source = 'a\nó\nó\nn\u0303';
+            const region = ['--flow-region', '30000', '40000',
+                '32000', '25000'];
+            const stroke = ['--glyph-stroke', 'ó', '600', '500',
+                '1800', '3000', '250', '#123456'];
+            const inspect = (extra = []) => spawnSync(cargo, [
+                'run', '--offline', '--quiet',
+                '-p', 'atrament_profile_editor_cli', '--',
+                'notebook', '--inspect-flow', '--inspect-flow-inventory',
+                '--inspect-flow-page-inventory',
+                '--inspect-flow-shape-coverage', '--glyph-file', library,
+                ...extra, '--flow-text', source, ...region,
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            const missing = inspect();
+            assert.equal(missing.status, 0, missing.stderr);
+            assert.match(missing.stdout,
+                /Exact shape coverage: 2\/3 forms, 2\/4 uses/);
+            for (const page of [1, 2]) {
+                assert.ok(missing.stdout.includes([
+                    `Page ${page} shape coverage: 1/2 forms, 1/2 uses`,
+                    '  Missing "ó": 1',
+                ].join('\n')), missing.stdout);
+            }
+            const complete = inspect(stroke);
+            assert.equal(complete.status, 0, complete.stderr);
+            assert.match(complete.stdout,
+                /Exact shape coverage: 3\/3 forms, 4\/4 uses/);
+            assert.doesNotMatch(complete.stdout, /Missing /);
+            assert.equal(readFileSync(library, 'utf8'), originalLibrary);
+
+            for (const format of ['pdf', 'png']) {
+                const output = join(dir, `covered-${format}`);
+                const manual = join(dir, `manual-${format}`);
+                const pageFlags = format === 'pdf' ? ['--pages', '2']
+                    : ['--png-page', '2', '--dpi', '72'];
+                const shared = [
+                    'notebook', '--printed-sheet', 'false',
+                    '--glyph-file', library, ...stroke,
+                    '--export-paper', format, ...pageFlags,
+                ];
+                const run = (args) => spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--', ...args,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                const generated = run([...shared, '--flow-text', source,
+                    ...region, '--output', output]);
+                assert.equal(generated.status, 0, generated.stderr);
+                const literal = run([...shared,
+                    '--place-text', '1', '32500', '42500', 'a',
+                    '--place-text', '1', '32500', '51500', 'ó',
+                    '--place-text', '2', '32500', '42500', 'ó',
+                    '--place-text', '2', '32500', '51500', 'n\u0303',
+                    '--output', manual]);
+                assert.equal(literal.status, 0, literal.stderr);
+                const accepted = readFileSync(output);
+                assert.deepEqual(accepted, readFileSync(manual),
+                    `${format} emitted flow equals exact manual physical ink`);
+                assert.ok(accepted.length > 100);
+                const refused = run([
+                    'notebook', '--printed-sheet', 'false',
+                    '--glyph-file', library,
+                    '--flow-text', source, ...region,
+                    '--export-paper', format, ...pageFlags,
+                    '--output', output, '--replace',
+                ]);
+                assert.notEqual(refused.status, 0,
+                    'missing exact glyph must refuse export');
+                assert.match(refused.stderr,
+                    /missing authored glyph shapes.*U\+00F3/);
+                assert.deepEqual(readFileSync(output), accepted,
+                    'refusal cannot overwrite an earlier PDF or PNG');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

@@ -472,10 +472,10 @@ cargo run -q -p atrament_profile_editor_cli -- \
 micrometres, its exact text and the counts of heading/list/quote ornaments.
 It accepts an optional notebook/paper and handwriting-statistics profile,
 without requiring glyph strokes or writing a file. This report is **not a
-renderability verdict**: exact authored glyph availability, actual pen
-contours, physical ink clearance and PDF/PNG validation are checked only
-when exporting with the selected glyph library. Inspection cannot be
-combined with `--output`, `--inspect`, export or manually supplied ink.
+renderability verdict**: actual pen contours, physical ink clearance and
+PDF/PNG validation are checked only when exporting with a glyph library.
+Inspection cannot be combined with `--output`, `--inspect`, export or
+manually placed ink; its opt-in coverage check permits unplaced shapes.
 
 `--inspect-flow-inventory` (with `--inspect-flow`) appends a sorted,
 occurrence-counted list of the **exact grapheme keys** that need authored
@@ -501,6 +501,28 @@ sheet, without modifying the existing global inventory. Repeated glyphs
 appear on each sheet where they are used; their per-page counts sum to the
 global count. An ornament-only sheet has zero authored glyph requirements.
 This remains nominal, read-only planning rather than actual ink clearance.
+
+To see which exact shapes are already present, add
+`--inspect-flow-shape-coverage` with `--inspect-flow` and optionally a
+previously saved `--glyph-file` or explicit `--glyph-stroke` options:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --flow-markdown-file notes.md --inspect-flow \
+  --inspect-flow-inventory --inspect-flow-page-inventory \
+  --inspect-flow-shape-coverage --glyph-file writer.tsv
+```
+
+The report appends the count of matched and missing exact grapheme forms and
+uses, plus the status of each form. With per-page inventory enabled, it also
+lists missing shapes for each physical sheet, including zero-use sheets.
+
+Without an authored library all visible forms are reported missing. NFC
+and NFD remain distinct; explicit glyph fallbacks, variation and placed text
+are not accepted in coverage-only mode. A match means only that a validated
+stroke exists for that exact key, **not** that the ink will fit a page or
+render successfully. The source library remains untouched and no profile is
+saved, PNG/PDF created or export target replaced by this inspection.
 
 To add reproducible, bounded pen-like variation to the **printed paper
 ruling** under the authored text, select both export-only options:

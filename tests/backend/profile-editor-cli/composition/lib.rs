@@ -19787,3 +19787,206 @@ fn notebook_inspect_flow_page_inventory_matches_independent_row_oracle()
     }
     Ok(())
 }
+
+#[test]
+fn notebook_shape_coverage_checks_exact_visible_markdown_glyphs()
+-> Result<(), String> {
+    let source = "# a\n- ó\n> n\u{303}\n1. a";
+    let visible = args(&[
+        "--inspect-flow", "--inspect-flow-inventory",
+        "--flow-markdown", source,
+    ]);
+    let baseline = execute_notebook(&visible)?
+        .ok_or("missing legacy inventory")?;
+    let mut selected = visible;
+    selected.extend(args(&[
+        "--inspect-flow-shape-coverage",
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "250", "#123456",
+        "--glyph-stroke", "ó", "500", "600", "1500", "2500",
+        "250", "#123456",
+    ]));
+    let result = execute_notebook(&selected)?
+        .ok_or("missing authored membership report")?;
+    assert!(result.starts_with(&baseline),
+        "shape report cannot change previously admitted rows or inventory");
+    let report = String::from_utf8(result)
+        .map_err(|error| error.to_string())?;
+    assert_eq!(report.split("Exact shape coverage: ").nth(1),
+        Some(concat!(
+            "2/5 forms, 3/6 uses (ink clearance unchecked)\n",
+            "Missing \".\": 1\n",
+            "Missing \"1\": 1\n",
+            "Authored \"a\": 2\n",
+            "Missing \"n\\u{303}\": 1\n",
+            "Authored \"ó\": 1\n",
+        )));
+    // Missing an exact NFD shape is not repaired with an NFC lookalike.
+    assert!(!report.contains("Authored \"n\\u{303}\""));
+    Ok(())
+}
+
+#[test]
+fn notebook_shape_coverage_without_library_reports_all_missing()
+-> Result<(), String> {
+    let report = execute_notebook(&args(&[
+        "--inspect-flow-shape-coverage", "--inspect-flow",
+        "--inspect-flow-inventory", "--inspect-flow-page-inventory",
+        "--flow-text", "\n\na\nó",
+        "--flow-region", "30000", "40000", "32000", "25000",
+    ]))?.ok_or("missing inspection")?;
+    let report = String::from_utf8(report)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains("Pages: 2\nRows: 2\n"), "{report}");
+    assert!(report.contains(concat!(
+        "Exact shape coverage: 0/2 forms, 0/2 uses ",
+        "(ink clearance unchecked)\n",
+        "Missing \"a\": 1\nMissing \"ó\": 1\n",
+        "Page 1 shape coverage: 0/0 forms, 0/0 uses\n",
+        "Page 2 shape coverage: 0/2 forms, 0/2 uses\n",
+        "  Missing \"a\": 1\n  Missing \"ó\": 1\n",
+    )), "{report}");
+    Ok(())
+}
+
+#[test]
+fn notebook_shape_coverage_imports_validated_library_and_inline_strokes()
+-> Result<(), String> {
+    let path = test_path().with_extension("tsv");
+    let library = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "a\t600\t500\t1800\t3000\t250\t#123456\n",
+        "ó\t600\t500\t1800\t3000\t250\t#123456\n",
+    );
+    fs::write(&path, library).map_err(|error| error.to_string())?;
+    let selected = path.to_str().ok_or("invalid test path")?;
+    let coverage = execute_notebook(&args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-inventory", "--inspect-flow-page-inventory",
+        "--glyph-file", selected,
+        "--glyph-stroke", "n\u{303}", "500", "600", "1500",
+        "2500", "250", "#123456",
+        "--flow-text", "a\nó\nn\u{303}\na",
+        "--flow-region", "30000", "40000", "32000", "25000",
+    ]));
+    let bytes = fs::read(&path).map_err(|error| error.to_string())?;
+    fs::remove_file(&path).map_err(|error| error.to_string())?;
+    assert_eq!(bytes, library.as_bytes(), "read-only source");
+    let report = String::from_utf8(coverage?
+        .ok_or("missing library coverage report")?)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains(concat!(
+        "Exact shape coverage: 3/3 forms, 4/4 uses ",
+        "(ink clearance unchecked)\n",
+    )), "{report}");
+    assert!(report.contains(
+        "Page 1 shape coverage: 2/2 forms, 2/2 uses\n"), "{report}");
+    assert!(report.contains(
+        "Page 2 shape coverage: 2/2 forms, 2/2 uses\n"), "{report}");
+    assert!(!report.contains("Missing "), "{report}");
+    Ok(())
+}
+
+#[test]
+fn notebook_shape_coverage_refuses_ink_and_invalid_flags_before_source_io() {
+    let cases: &[(&[&str], &str)] = &[
+        (&["--inspect-flow-shape-coverage"],
+            "--inspect-flow-shape-coverage requires --inspect-flow"),
+        (&["--inspect-flow-shape-coverage", "--inspect-flow-shape-coverage"],
+            "--inspect-flow-shape-coverage may appear only once"),
+        (&["--inspect-flow-shape-coverage", "--inspect-flow",
+            "--export-paper", "pdf"], "--inspect-flow is stdout only"),
+        (&["--inspect-flow-shape-coverage", "--inspect-flow",
+            "--ink-file", "missing-ink.tsv"],
+            "--inspect-flow cannot include authored ink"),
+        (&["--inspect-flow-shape-coverage", "--inspect-flow",
+            "--place-text", "1", "30000", "40000", "a"],
+            "--inspect-flow cannot include authored ink"),
+        (&["--inspect-flow-shape-coverage", "--inspect-flow",
+            "--fallback-glyph", "ó", "o"],
+            "--inspect-flow cannot include authored ink"),
+        (&["--inspect-flow", "--glyph-file", "missing-glyph.tsv"],
+            "--inspect-flow cannot include authored ink"),
+        (&["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--glyph-stroke", "a", "500", "600", "1500", "2500",
+            "250", "#123456", "--place-text", "1", "30000",
+            "40000", "a"], "--inspect-flow cannot include authored ink"),
+    ];
+    for (extra, expected) in cases {
+        let mut command = args(&[
+            "--profile", "missing-coverage-notebook.json",
+            "--flow-text-file", "missing-coverage-source.txt",
+        ]);
+        command.extend(args(extra));
+        let error = execute_notebook(&command)
+            .expect_err("incompatible inspection must refuse before IO");
+        assert!(error.contains(expected), "{command:?}: {error:?}");
+    }
+}
+
+#[test]
+fn notebook_shape_coverage_matches_independent_page_presence_oracle()
+-> Result<(), String> {
+    let forms = ["a", "ó", "n\u{303}", ""];
+    let mut seed = 0x5b92_610e_1df5_7c83u64;
+    for case in 0..256 {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        let count = 1 + (seed as usize % 48);
+        let mut lines = Vec::with_capacity(count);
+        for index in 0..count {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            lines.push(if index + 1 == count { "a" }
+                else { forms[(seed as usize) % forms.len()] });
+        }
+        let source = lines.join("\n");
+        let report = execute_notebook(&args(&[
+            "--inspect-flow-shape-coverage", "--inspect-flow",
+            "--inspect-flow-inventory", "--inspect-flow-page-inventory",
+            "--flow-text", &source,
+            "--flow-region", "30000", "40000", "32000", "25000",
+            "--glyph-stroke", "a", "500", "600", "1500",
+            "2500", "250", "#123456",
+            "--glyph-stroke", "n\u{303}", "500", "600", "1500",
+            "2500", "250", "#123456",
+        ]))?.ok_or("missing seeded shape report")?;
+        let report = String::from_utf8(report)
+            .map_err(|error| error.to_string())?;
+        let present = lines.iter()
+            .filter(|&&text| matches!(text, "a" | "n\u{303}"))
+            .count();
+        let uses = lines.iter().filter(|&&text| !text.is_empty()).count();
+        let distinct = forms[..3].iter()
+            .filter(|&&form| lines.contains(&form)).count();
+        let present_forms = ["a", "n\u{303}"].iter()
+            .filter(|&&form| lines.contains(&form)).count();
+        let expected = format!(
+            "Exact shape coverage: {present_forms}/{distinct} forms, \
+             {present}/{uses} uses (ink clearance unchecked)\n",
+        );
+        assert!(report.contains(&expected),
+            "case {case} source {source:?}: {report}");
+        for page in 0..count.div_ceil(2) {
+            let chunk = &lines[page * 2..(page * 2 + 2).min(count)];
+            let page_uses = chunk.iter()
+                .filter(|&&item| !item.is_empty()).count();
+            let covered = chunk.iter().filter(|&&item|
+                matches!(item, "a" | "n\u{303}")).count();
+            let all_forms = forms[..3].iter()
+                .filter(|&&form| chunk.contains(&form)).count();
+            let covered_forms = ["a", "n\u{303}"].iter()
+                .filter(|&&form| chunk.contains(&form)).count();
+            let expected = format!(
+                "Page {} shape coverage: {covered_forms}/{all_forms} \
+                 forms, {covered}/{page_uses} uses\n",
+                page + 1,
+            );
+            assert!(report.contains(&expected),
+                "case {case}, page {page}: {report}");
+        }
+    }
+    Ok(())
+}

@@ -33,7 +33,7 @@
 
 //! Exact, explicitly authored glyph contours for a bounded CLI text overlay.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::f64::consts::PI;
 use std::fmt::Write as _;
 use std::mem::{replace, swap};
@@ -1251,6 +1251,15 @@ impl GlyphOverlay {
             .into());
         }
         Ok(())
+    }
+
+    // Coverage inspection validates the same bounded library as export,
+    // while intentionally withholding any promise of physical clearance.
+    pub(super) fn exact_authored_shapes(&self)
+    -> Result<BTreeSet<&str>, String> {
+        self.validate_stroke_library()?;
+        Ok(self.strokes.iter()
+            .map(|stroke| stroke.grapheme.as_str()).collect())
     }
 
     pub(super) fn expand(

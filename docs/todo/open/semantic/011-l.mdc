@@ -4696,3 +4696,23 @@ same nominal pages against the native vector PDF and second-page PNG with
 explicit caller-authored ink. This is a read-only inspection, not saved
 semantic notebook persistence, available-shape verification or full Export.
 ATR-P2-011 remains open.
+
+## Exact authored-shape coverage preflight (partial) — 2026-11-13
+
+The read-only native `atrament-profiles notebook` inspector now accepts
+`--inspect-flow-shape-coverage` with an optional selected `--glyph-file` and
+unplaced `--glyph-stroke` shapes. It compares actual laid-out exact Unicode
+graphemes against the validated stroke-library keys, reporting covered and
+missing forms/uses globally and, when selected, per physical page. The prior
+inspection and inventory report bytes are unchanged when omitted; an absent
+library reports every required form missing. It cannot place text, render
+ink, apply explicit fallbacks or bypass native source-independent preflight.
+
+Five Rust regressions include 256 independent randomized per-page membership
+cases, NFC/NFD and Markdown syntax, empty sheets, loaded plus inline shapes,
+and source-independent refusal before any selected file read. One Node
+integration checks missing/complete reports against byte-identical actual
+native two-page PDF and second-page transparent PNG output, and verifies that
+missing ink refuses without replacing either accepted output. Library bytes
+remain unchanged. This is shape *membership*, not proof of physical ink
+clearance, saved semantic content, or the full P1 notebook journey.
