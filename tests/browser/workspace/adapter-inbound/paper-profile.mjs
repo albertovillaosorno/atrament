@@ -2,7 +2,7 @@
 // Paper-only form adapter: exercises authenticated Rust requests and local files.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPaperProfileEditor } from "../../../../src/browser/workspace/adapter-inbound/generated/paper-profile.js";
+import { createPaperProfileEditor, readBoundedPaperExport } from "../../../../src/browser/workspace/adapter-inbound/generated/paper-profile.js";
 
 const numericIds = ["paper-width", "paper-height", "paper-spacing",
     "paper-upper", "paper-bottom", "paper-left", "paper-right"];
@@ -246,4 +246,100 @@ test("paper editor exports Rust PDF and PNG", async () => {
         URL.createObjectURL = original.createObjectURL;
         URL.revokeObjectURL = original.revokeObjectURL;
     }
+});
+
+
+test("paper export streams exact binary bytes without Response.blob", async () => {
+    const bytes = Uint8Array.of(0x89, 80, 78, 71, 0, 255, 128, 4);
+    const reply = new Response(new ReadableStream({
+        start(stream) {
+            stream.enqueue(bytes.slice(0, 3));
+            stream.enqueue(bytes.slice(3, 5));
+            stream.enqueue(bytes.slice(5));
+            stream.close();
+        },
+    }), { headers: { "Content-Length": "8" } });
+    reply.blob = () => { throw Error("Response.blob must not be called"); };
+    const image = await readBoundedPaperExport(reply, "image/png");
+    assert.equal(image.type, "image/png");
+    assert.deepEqual(new Uint8Array(await image.arrayBuffer()), bytes);
+    const pdf = await readBoundedPaperExport(new Response("%PDF-1.7"),
+        "application/pdf");
+    assert.equal(pdf.type, "application/pdf");
+    assert.equal(await pdf.text(), "%PDF-1.7");
+});
+
+
+test("paper export rejects malformed declared length and incomplete payload", async () => {
+    for (const length of ["0", "-1", "+4", "1e3", "4.0", "24000001",
+        "18446744073709551615"]) {
+        await assert.rejects(readBoundedPaperExport(new Response("four", {
+            headers: { "Content-Length": length },
+        }), "application/pdf"), /Invalid native paper export byte count/,
+        "refused declared length " + length);
+    }
+    for (const length of ["3", "5"]) {
+        await assert.rejects(readBoundedPaperExport(new Response("four", {
+            headers: { "Content-Length": length },
+        }), "application/pdf"), length === "3"
+            ? /exceeds declared byte count/
+            : /Incomplete native paper export response/);
+    }
+    await assert.rejects(readBoundedPaperExport(new Response(null), "image/png"),
+        /has no body/);
+    await assert.rejects(readBoundedPaperExport(
+        new Response(new Uint8Array()), "image/png"),
+    /Incomplete native paper export response/);
+});
+
+test("paper export cancels oversized and rejects broken streams", async () => {
+    let cancelled = false;
+    const oversized = new Response(new ReadableStream({
+        pull(stream) { stream.enqueue(new Uint8Array(24_000_001)); },
+        cancel() { cancelled = true; },
+    }));
+    await assert.rejects(readBoundedPaperExport(oversized, "image/png"),
+        /exceeds byte limit/);
+    assert.equal(cancelled, true, "oversized stream must be cancelled");
+    const broken = new Response(new ReadableStream({
+        start(stream) {
+            stream.enqueue(Uint8Array.of(1, 2, 3));
+            stream.error(new Error("truncated native transport"));
+        },
+    }));
+    await assert.rejects(readBoundedPaperExport(broken, "application/pdf"),
+        /truncated native transport/);
+});
+
+
+test("paper export cancels bad announced length before reading bytes", async () => {
+    let pulls = 0;
+    let cancelled = false;
+    const reply = new Response(new ReadableStream({
+        pull(stream) {
+            pulls += 1;
+            stream.enqueue(Uint8Array.of(7));
+        },
+        cancel() { cancelled = true; },
+    }), { headers: { "Content-Length": "24000001" } });
+    await assert.rejects(readBoundedPaperExport(reply, "image/png"),
+        /Invalid native paper export byte count/);
+    assert.equal(cancelled, true);
+    assert.equal(pulls, 0, "declared overlong body is not consumed");
+});
+
+test("paper export refuses infinite empty chunks within a finite budget", async () => {
+    let cancelled = false;
+    let pulls = 0;
+    const reply = new Response(new ReadableStream({
+        pull(stream) {
+            pulls += 1;
+            stream.enqueue(new Uint8Array());
+        },
+        cancel() { cancelled = true; },
+    }));
+    await assert.rejects(readBoundedPaperExport(reply, "application/pdf"),
+        /stalled on empty chunks/);
+    assert.equal(cancelled, true);
+    assert.ok(pulls <= 67, "empty data cannot spin indefinitely");
 });

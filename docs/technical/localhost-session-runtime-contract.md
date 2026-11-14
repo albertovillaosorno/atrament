@@ -336,6 +336,14 @@ adapter contract.
 A successful export does not turn its directory into an autosave location.
 Subsequent edits remain memory-only until another explicit export.
 
+The authenticated paper and notebook PDF/PNG downloads also have a bounded
+browser receive path. The frontend reads native binary responses as byte
+streams rather than relying on a one-shot browser Blob conversion, checks the
+renderer output cap of 24,000,000 bytes, validates any declared Content-Length
+against received bytes, and refuses incomplete or repeatedly empty streams.
+Only a fully received response can become a download or notebook PNG preview.
+The native renderer remains the source of the page bytes and geometry.
+
 ### Shutdown and failure
 
 Orderly shutdown stops accepting new application requests, cancels or safely

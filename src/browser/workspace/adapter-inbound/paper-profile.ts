@@ -72,6 +72,65 @@ const SHEET_PRESETS: Record<string, readonly [number, number]> = {
     legal: [215_900, 355_600],
 };
 
+// The native renderer limits each PDF/PNG to 24,000,000 bytes. Consume the
+// body in bounded chunks: Firefox can abort Response.blob() on large native
+// PNGs even after a successful authenticated HTTP 200. A partial response
+// must never become a downloadable or previewable paper layer.
+const MAX_PAPER_EXPORT_BYTES = 24_000_000;
+
+export async function readBoundedPaperExport(
+    response: Response, mime: "application/pdf" | "image/png",
+): Promise<Blob> {
+    const declared = response.headers.get("content-length");
+    if (declared !== null && (!/^[0-9]+$/.test(declared)
+        || !Number.isSafeInteger(Number(declared))
+        || Number(declared) === 0
+        || Number(declared) > MAX_PAPER_EXPORT_BYTES)) {
+        if (response.body !== null) {
+            await response.body.cancel().catch(() => undefined);
+        }
+        throw new Error("Invalid native paper export byte count");
+    }
+    if (response.body === null) {
+        throw new Error("Native paper export response has no body");
+    }
+    const reader = response.body.getReader();
+    const parts: Uint8Array<ArrayBuffer>[] = [];
+    let received = 0;
+    let emptyChunks = 0;
+    try {
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (value.byteLength === 0) {
+                emptyChunks += 1;
+                if (emptyChunks > 64) {
+                    throw new Error("Native paper export stalled on empty chunks");
+                }
+                continue;
+            }
+            received += value.byteLength;
+            if (received > MAX_PAPER_EXPORT_BYTES) {
+                throw new Error("Native paper export exceeds byte limit");
+            }
+            if (declared !== null && received > Number(declared)) {
+                throw new Error("Native paper export exceeds declared byte count");
+            }
+            parts.push(new Uint8Array(value));
+        }
+        if (received === 0 || (declared !== null
+            && received !== Number(declared))) {
+            throw new Error("Incomplete native paper export response");
+        }
+        return new Blob(parts, { type: mime });
+    } catch (error) {
+        await reader.cancel().catch(() => undefined);
+        throw error;
+    } finally {
+        reader.releaseLock();
+    }
+}
+
 function required<T extends Element>(id: string): T {
     const element = document.getElementById(id);
     if (element === null) {
@@ -477,7 +536,7 @@ export function createPaperProfileEditor(
                 !== "application/pdf") {
                 throw new Error("Rust PDF export refused");
             }
-            const pdf = await response.blob();
+            const pdf = await readBoundedPaperExport(response, "application/pdf");
             if (isCurrent(secret, observed)) {
                 offerDownload(pdf, "atrament-paper.pdf");
                 setStatus("Rust PDF downloaded · paper only.");
@@ -508,7 +567,7 @@ export function createPaperProfileEditor(
                 !== "image/png") {
                 throw new Error("Rust PNG export refused");
             }
-            const png = await response.blob();
+            const png = await readBoundedPaperExport(response, "image/png");
             if (isCurrent(secret, observed)) {
                 offerDownload(png, "atrament-paper.png");
                 setStatus("Rust transparent PNG downloaded · paper only.");
@@ -1091,7 +1150,7 @@ export function createNotebookProfileEditor(
                 || reply.headers.get("content-type") !== "image/png") {
                 throw new Error("Rust notebook PNG preview refused");
             }
-            const blob = await reply.blob();
+            const blob = await readBoundedPaperExport(reply, "image/png");
             if (active(secret, observed)) {
                 display(result.profile);
                 previewUrl = URL.createObjectURL(blob);
@@ -1129,7 +1188,7 @@ export function createNotebookProfileEditor(
                     || reply.headers.get("content-type") !== mime) {
                     throw new Error("Rust notebook paper export refused");
                 }
-                const blob = await reply.blob();
+                const blob = await readBoundedPaperExport(reply, mime);
                 if (active(secret, observed)) {
                     display(result.profile);
                     const filename = format === "png" && page !== 1
