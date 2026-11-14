@@ -9210,42 +9210,48 @@ fn authored_parenthesized_powers_bind_only_closed_digit_groups()
         ("x^(2)", &[0, 1, 2, 3][..]),
         ("x^(-2)", &[0, 1, 2, 3, 4]),
         ("x^(+12)", &[0, 1, 2, 3, 4, 5]),
-        ("x^(−2)", &[0, 1, 2, 3, 4]),
-        ("x⁽²⁾", &[0, 1, 2]),
-        ("x⁽⁻²⁾", &[0, 1, 2, 3]),
-        ("x₍₂₎", &[0, 1, 2]),
-        ("x₍₋₂₎", &[0, 1, 2, 3]),
-        ("x⁽²⁾₍₃₎", &[0, 1, 2, 3, 4, 5]),
+        ("x^(\u{2212}2)", &[0, 1, 2, 3, 4]),
+        ("x\u{207d}\u{b2}\u{207e}", &[0, 1, 2]),
+        ("x\u{207d}\u{207b}\u{b2}\u{207e}", &[0, 1, 2, 3]),
+        ("x\u{208d}\u{2082}\u{208e}", &[0, 1, 2]),
+        ("x\u{208d}\u{208b}\u{2082}\u{208e}", &[0, 1, 2, 3]),
+        (concat!("x\u{207d}\u{b2}\u{207e}",
+            "\u{208d}\u{2083}\u{208e}"), &[0, 1, 2, 3, 4, 5]),
         ("x^(2)^3", &[0, 1, 2, 3, 4, 5]),
-        ("x²⁽³", &[0]),
-        ("x⁽²⁾⁻", &[0, 1, 2]),
+        ("x\u{b2}\u{207d}\u{b3}", &[0]),
+        ("x\u{207d}\u{b2}\u{207e}\u{207b}", &[0, 1, 2]),
         ("x^(2", &[]),
         ("x^()", &[]),
-        ("x^(−)", &[]),
+        ("x^(\u{2212})", &[]),
         ("x^(2a)", &[]),
-        ("x⁽²", &[]),
-        ("x⁽⁻²", &[]),
-        ("x₍₂", &[]),
-        ("x₍₋₎", &[]),
-        ("x⁽²₎", &[]),
+        ("x\u{207d}\u{b2}", &[]),
+        ("x\u{207d}\u{207b}\u{b2}", &[]),
+        ("x\u{208d}\u{2082}", &[]),
+        ("x\u{208d}\u{208b}\u{208e}", &[]),
+        ("x\u{207d}\u{b2}\u{208e}", &[]),
         ("x^(a)", &[]),
     ] {
         let glyphs = super::measured_word(source, None)?.0;
         let joins = super::numeric_separator_joins(&glyphs);
         for (index, tied) in joins.iter().enumerate() {
-            assert_eq!(*tied, expected.contains(&index),
-                "{source:?} parenthesized power pair {index}");
+            if *tied != expected.contains(&index) {
+                return Err(format!("{source:?} parenthesized power \
+                    pair {index}: expected {}, got {tied}",
+                    expected.contains(&index)));
+            }
         }
     }
     // A closing delimiter at the last admitted byte must not make a
     // complete script quadratic or silently shorten the authored run.
     for source in [
         format!("x^({})", "2".repeat(4_092)),
-        format!("x⁽{}⁾", "²".repeat(2_044)),
+        format!("x\u{207d}{}\u{207e}", "\u{b2}".repeat(2_044)),
     ] {
         let glyphs = super::measured_word(&source, None)?.0;
-        assert!(super::numeric_separator_joins(&glyphs)
-            .iter().all(|joined| *joined));
+        if super::numeric_separator_joins(&glyphs)
+            .iter().any(|joined| !*joined) {
+            return Err("complete full-size script has a broken tie".into());
+        }
     }
 
     let region = super::FlowRegion {
@@ -9254,32 +9260,39 @@ fn authored_parenthesized_powers_bind_only_closed_digit_groups()
     for format in [FlowFormat::Plain, FlowFormat::Markdown] {
         for (source, tail) in [
             ("abcdeX^(2)g", "X^(2)g"),
-            ("abcdeX⁽⁻²⁾g", "X⁽⁻²⁾g"),
-            ("abcdeX₍₂₎g", "X₍₂₎g"),
+            ("abcdeX\u{207d}\u{207b}\u{b2}\u{207e}g",
+                "X\u{207d}\u{207b}\u{b2}\u{207e}g"),
+            ("abcdeX\u{208d}\u{2082}\u{208e}g", "X\u{208d}\u{2082}\u{208e}g"),
         ] {
             let (rows, ornaments, pages) = super::layout_flow_with_region(
                 &FlowSource::new(format, source)?,
                 &NotebookProfile::default(), None,
                 super::HeadingDecoration::default(), Some(region),
             )?;
-            assert_eq!(pages, 1);
-            assert!(ornaments.is_empty());
-            assert_eq!(rows.iter().map(|row| row.text.as_str())
-                .collect::<Vec<_>>(), ["abcde", tail],
-                "{source:?} {format:?}");
+            let actual = rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>();
+            if pages != 1 || !ornaments.is_empty()
+                || actual != ["abcde", tail] {
+                return Err(format!("{source:?} {format:?}: {actual:?}"));
+            }
         }
         let narrow = super::FlowRegion {
             width: 9_000, height: 128_000, ..region
         };
-        for source in ["x^(-2)", "x⁽⁻²⁾", "x₍₋₂₎"] {
+        for source in [
+            "x^(-2)", "x\u{207d}\u{207b}\u{b2}\u{207e}",
+            "x\u{208d}\u{208b}\u{2082}\u{208e}",
+        ] {
             let (rows, _, _) = super::layout_flow_with_region(
                 &FlowSource::new(format, source)?,
                 &NotebookProfile::default(), None,
                 super::HeadingDecoration::default(), Some(narrow),
             )?;
-            assert_eq!(rows.iter().map(|row| row.text.as_str())
-                .collect::<String>(), source,
-                "narrow parenthesized power must preserve exact glyphs");
+            if rows.iter().map(|row| row.text.as_str())
+                .collect::<String>() != source {
+                return Err("narrow parenthesized power lost authored ink"
+                    .into());
+            }
         }
     }
     Ok(())

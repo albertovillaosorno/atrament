@@ -2551,8 +2551,8 @@ fn mark_authored_script_joins(
                 after_digits = after_digits.saturating_add(1);
             }
             if let Some(close) = closing {
-                if !glyphs.get(after_digits)
-                    .is_some_and(|item| item.0 == close) {
+                if glyphs.get(after_digits)
+                    .is_none_or(|item| item.0 != close) {
                     break;
                 }
                 after_digits = after_digits.saturating_add(1);
