@@ -524,6 +524,8 @@ stroke shape. With mappings, the report calls coverage **selected** rather
 than exact, and separately labels borrowed keys and their source strokes,
 including per-sheet counts. Invalid, duplicate, chained or ambiguous
 fallbacks refuse under the same native mapping checks as PDF/PNG exports.
+Source-independent mapping conflicts refuse before selected profile/source
+reads; imported-library target existence is checked after the library loads.
 
 A match or explicit borrow does **not** prove visually equivalent glyphs,
 physical ink clearance or a successful render. Variation and placed text

@@ -4738,3 +4738,21 @@ The full Rust CLI suite passes.
 This remains a read-only shape-availability preflight, not demonstrated ink
 clearance, saved notebook layout or automatic glyph synthesis. ATR-P2-011
 remains open.
+
+## Source-independent fallback rejection (partial) — 2026-11-13
+
+Flow inspection and real exports now share a pre-source-I/O fallback gate.
+Self-contained mappings with an invalid source, an already-authored source,
+an absent inline-only target or a chain refuse before selected notebook or
+flow files are opened. An imported glyph library may supply the target:
+preflight defers only that existence test until the file is loaded and
+reuses the same definitive validator.
+
+A focused native regression distinguishes all three early refusals from
+an intentionally deferred file-backed target. A second regression
+proves a valid imported target yields the same native vector PDF as
+the directly authored source without changing the glyph file.
+The complete Rust CLI suite and native PDF/PNG reports remain authoritative.
+
+Preflight does not read or mutate the imported library. Remaining
+P1/P2 notebook work stays open.

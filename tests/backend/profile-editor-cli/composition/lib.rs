@@ -20014,6 +20014,95 @@ fn notebook_shape_coverage_rejects_invalid_fallback_mappings()
 }
 
 #[test]
+fn notebook_fallback_preflight_refuses_impossible_mappings_before_file_io() {
+    let sources = args(&[
+        "--profile", "missing-preflight-notebook.json",
+        "--flow-text-file", "missing-preflight-flow.txt",
+    ]);
+    let shape = args(&[
+        "--glyph-stroke", "a", "500", "500", "1500",
+        "2500", "250", "#123456",
+    ]);
+    for (mapping, expected) in [
+        (args(&["--fallback-glyph", "ó", "b"]),
+            "fallback target has no authored strokes"),
+        (args(&["--fallback-glyph", "a", "ó"]),
+            "fallback source already has authored strokes"),
+        (args(&["--fallback-glyph", "ó", "a",
+            "--fallback-glyph", "n\u{303}", "ó"]),
+            "chained glyph fallbacks refused"),
+    ] {
+        for intent in [
+            args(&["--inspect-flow", "--inspect-flow-shape-coverage"]),
+            args(&["--export-paper", "pdf"]),
+        ] {
+            let mut selected = sources.clone();
+            selected.extend(intent);
+            selected.extend(shape.iter().cloned());
+            selected.extend(mapping.iter().cloned());
+            let error = preflight_notebook_sources(&selected)
+                .expect_err("source-independent fallback error ignored");
+            assert!(error.contains(expected), "{selected:?}: {error}");
+        }
+    }
+
+    // A selected file may contain the target shape. Its absence from
+    // inline flags is not an error until native bounded file admission.
+    let mut deferred = sources.clone();
+    deferred.extend(args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--glyph-file", "missing-preflight-library.tsv",
+        "--fallback-glyph", "n\u{303}", "a",
+    ]));
+    assert!(preflight_notebook_sources(&deferred).is_ok(),
+        "file-backed target shape is not yet known");
+    let error = execute_notebook(&deferred)
+        .expect_err("missing library must not be silently accepted");
+    assert!(error.contains("FileIo(NotFound)"), "{error}");
+}
+
+#[test]
+fn notebook_imported_fallback_coverage_matches_native_vector_pdf()
+-> Result<(), String> {
+    let library = test_path().with_extension("tsv");
+    let authored = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "a\t600\t500\t1800\t3000\t250\t#123456\n",
+    );
+    fs::write(&library, authored).map_err(|error| error.to_string())?;
+    let path = library.to_str().ok_or("invalid glyph library path")?;
+    let coverage = execute_notebook(&args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--flow-text", "ó", "--glyph-file", path,
+        "--fallback-glyph", "ó", "a",
+    ]))?.ok_or("missing imported fallback inspection")?;
+    let report = String::from_utf8(coverage)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains(concat!(
+        "Selected shape coverage: 1/1 forms, 1/1 uses ",
+        "(ink clearance unchecked)\n",
+        "Borrowed \"ó\" from \"a\": 1\n",
+    )), "{report}");
+
+    let borrowed = execute_notebook(&args(&[
+        "--flow-text", "ó", "--glyph-file", path,
+        "--fallback-glyph", "ó", "a",
+        "--export-paper", "pdf",
+    ]))?.ok_or("missing borrowed vector PDF")?;
+    let direct = execute_notebook(&args(&[
+        "--flow-text", "a", "--glyph-file", path,
+        "--export-paper", "pdf",
+    ]))?.ok_or("missing direct vector PDF")?;
+    let unchanged = fs::read(&library).map_err(|error| error.to_string())?;
+    fs::remove_file(&library).map_err(|error| error.to_string())?;
+    assert_eq!(unchanged, authored.as_bytes(),
+        "inspection and export never edit the glyph source");
+    assert_eq!(borrowed, direct,
+        "deferred imported target must match native export exactly");
+    Ok(())
+}
+
+#[test]
 fn notebook_shape_coverage_matches_independent_page_presence_oracle()
 -> Result<(), String> {
     let forms = ["a", "ó", "n\u{303}", ""];

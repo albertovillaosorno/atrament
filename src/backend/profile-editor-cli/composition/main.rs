@@ -3101,6 +3101,9 @@ fn preflight_notebook_export_and_ink(
     flags.validate(flow_format, region_selected, inline_ink.len(),
         manual_last_page, glyphs.has_any(),
         glyph_non_shape_selected)?;
+    if flow_format.is_some() && !glyphs.fallbacks.is_empty() {
+        glyphs.validate_fallbacks(glyph_file_selected)?;
+    }
     if inspect_flow {
         return Ok(());
     }
