@@ -1975,6 +1975,61 @@ test('wrapped dashes, ellipsis and path separators match PDF/PNG ink', () => {
     }
 });
 
+test('currency prefixes and measurement suffixes match native PDF/PNG ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-measurement-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '32000', '36000'];
+            const cases = [
+                ...['$', '€', '£', '¥'].map((mark) => ({
+                    mark, source: `abcde${mark}fg`, tail: `${mark}fg`,
+                })),
+                ...['%', '‰', '‱', '°'].map((mark) => ({
+                    mark, source: `abcdef${mark}g`, tail: `f${mark}g`,
+                })),
+            ];
+            for (const { mark, source, tail } of cases) {
+                const strokes = [...'bcdefg', mark].flatMap((glyph) => [
+                    '--glyph-stroke', glyph, '600', '500', '1800',
+                    '3000', '250', '#123456',
+                ]);
+                for (const format of ['pdf', 'png']) {
+                    const manualFile = join(dir, `manual-${format}`);
+                    const placed = spawnSync(cargo, [
+                        'run', '--offline', '--quiet',
+                        '-p', 'atrament_profile_editor_cli', '--',
+                        ...base, ...strokes,
+                        '--place-text', '1', '32500', '42500', 'abcde',
+                        '--place-text', '1', '32500', '51500', tail,
+                        '--export-paper', format,
+                        ...(format === 'png' ? ['--dpi', '72'] : []),
+                        '--output', manualFile, '--replace',
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(placed.status, 0, placed.stderr);
+                    const expected = readFileSync(manualFile);
+                    for (const flag of ['--flow-text', '--flow-markdown']) {
+                        const flowed = render(dir, source, format,
+                            [...strokes, ...region], flag);
+                        assert.equal(flowed.result.status, 0,
+                            flowed.result.stderr);
+                        assert.deepEqual(readFileSync(flowed.output),
+                            expected, `${format} ${flag} affix ${mark}`);
+                        const missing = render(dir, source, format,
+                            [...strokes.slice(0, -8), ...region], flag);
+                        assert.notEqual(missing.result.status, 0);
+                        assert.match(missing.result.stderr,
+                            /missing authored glyph|no authored strokes/i);
+                        assert.deepEqual(readFileSync(missing.output),
+                            expected, 'missing affix preserves selected ink');
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('overlong punctuation chains use longest fitting physical prefixes',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-punctuation-prefix-'));

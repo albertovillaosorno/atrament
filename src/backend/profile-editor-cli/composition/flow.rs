@@ -2249,8 +2249,9 @@ fn next_punctuation_cluster(
 // Unlike standalone ASCII spaces, authored nonbreaking Unicode spaces and
 // the nonbreaking hyphen bind *both* adjacent graphemes. Ordinary hyphen
 // and dash marks, an ellipsis, and path separators stay after their
-// preceding ink, but can wrap before the next grapheme. An overlarge group
-// falls back to measured individual ink.
+// preceding ink, but can wrap before the next grapheme. Currency prefixes
+// bind following ink, and percent/degree suffixes bind preceding ink. An
+// overlarge group falls back to measured individual ink.
 // Exact Unicode identities survive; straight quotes remain nondirectional.
 fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
     fn nonbreaking(grapheme: &str) -> bool {
@@ -2258,8 +2259,9 @@ fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
     }
     nonbreaking(previous) || nonbreaking(next)
         || matches!(previous, "¿" | "¡" | "«" | "‹" | "“" | "‘"
-            | "(" | "[" | "{")
+            | "(" | "[" | "{" | "$" | "€" | "£" | "¥")
         || matches!(next, "?" | "!" | "." | "," | ";" | ":"
+            | "%" | "‰" | "‱" | "°"
             | "-" | "\u{2010}" | "\u{2013}" | "\u{2014}" | "…"
             | "/" | "\\"
             | ")" | "]" | "}" | "»" | "›" | "”" | "’"
