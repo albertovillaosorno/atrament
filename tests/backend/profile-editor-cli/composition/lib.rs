@@ -21542,3 +21542,128 @@ fn notebook_ink_length_by_color_matches_native_tsv()
     )), "{report}");
     Ok(())
 }
+
+#[test]
+fn randomized_ink_distance_reports_match_independent_color_oracle()
+-> Result<(), String> {
+    use std::fmt::Write as _;
+    let colors = [[12, 34, 56], [255, 128, 0], [0, 0, 0], [75, 90, 120]];
+    let mut seed = 0xAB12_CD34_98EF_0123u64;
+    let next = |value: &mut u64| {
+        *value = value.wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        *value >> 17
+    };
+    for case in 0..512usize {
+        let pages = 1 + (next(&mut seed) % 6) as usize;
+        let count = (next(&mut seed) % 95) as usize;
+        let mut lines = Vec::new();
+        let mut global_colors = BTreeMap::<[u8; 3], (u128, usize)>::new();
+        let mut page_colors = vec![
+            BTreeMap::<[u8; 3], (u128, usize)>::new(); pages
+        ];
+        let mut page_lengths = vec![None::<u128>; pages];
+        let mut length_total = 0u128;
+        for _ in 0..count {
+            let page = 1 + (next(&mut seed) % pages as u64) as usize;
+            let rgb = colors[(next(&mut seed) % 4) as usize];
+            let x1 = 40000 + (next(&mut seed) % 30000) as u32;
+            let y1 = 40000 + (next(&mut seed) % 50000) as u32;
+            let dx = (next(&mut seed) % 16000) as u32;
+            let dy = (next(&mut seed) % 16000) as u32;
+            if dx == 0 && dy == 0 { continue; }
+            let line = NotebookInkLine {
+                page, rgb, width_um: 80 + (next(&mut seed) % 600) as u32,
+                start_um: (x1, y1), end_um: (x1 + dx, y1 + dy),
+            };
+            // Independent real-valued oracle over independently generated
+            // emitted endpoints, not the production integer square root.
+            let measured = f64::from(dx).hypot(f64::from(dy)).round() as u128;
+            length_total += measured;
+            *page_lengths[page - 1].get_or_insert(0) += measured;
+            for totals in [&mut global_colors, &mut page_colors[page - 1]] {
+                let entry = totals.entry(rgb).or_default();
+                entry.0 += measured;
+                entry.1 += 1;
+            }
+            lines.push(line);
+        }
+        let mut expected = format!(
+            "Validated ink pen-down length: {length_total} um\n"
+        );
+        for (index, value) in page_lengths.iter().enumerate() {
+            match value {
+                Some(distance) => writeln!(expected,
+                    "Page {} validated ink pen-down length: {distance} um",
+                    index + 1),
+                None => writeln!(expected,
+                    "Page {} validated ink pen-down length: empty", index + 1),
+            }.map_err(|error| error.to_string())?;
+        }
+        let mut observed = String::new();
+        append_flow_ink_length(&mut observed, &lines, pages)?;
+        assert_eq!(observed, expected,
+            "case {case}: global and physical page lengths");
+        let describe = |label: &str,
+            palette: &BTreeMap<[u8; 3], (u128, usize)>|
+            -> Result<String, String> {
+            let mut report = String::new();
+            if palette.is_empty() {
+                writeln!(report, "{label}: empty")
+                    .map_err(|error| error.to_string())?;
+            } else {
+                let noun = if palette.len() == 1 { "color" }
+                    else { "colors" };
+                writeln!(report, "{label}: {} RGB {noun}", palette.len())
+                    .map_err(|error| error.to_string())?;
+                for (rgb, (distance, segments)) in palette {
+                    let segment_noun = if *segments == 1 { "segment" }
+                        else { "segments" };
+                    writeln!(report,
+                        "  #{:02X}{:02X}{:02X}: {distance} um \
+                         across {segments} {segment_noun}",
+                        rgb[0], rgb[1], rgb[2],
+                    ).map_err(|error| error.to_string())?;
+                }
+            }
+            Ok(report)
+        };
+        let mut expected = describe(
+            "Validated ink length by color", &global_colors)?;
+        for (index, colors) in page_colors.iter().enumerate() {
+            expected.push_str(&describe(
+                &format!("Page {} validated ink length by color", index + 1),
+                colors,
+            )?);
+        }
+        observed.clear();
+        append_flow_ink_length_by_color(&mut observed, &lines, pages)?;
+        assert_eq!(observed, expected, "case {case}: grouped RGB distance");
+        lines.reverse();
+        observed.clear();
+        append_flow_ink_length_by_color(&mut observed, &lines, pages)?;
+        assert_eq!(observed, expected,
+            "case {case}: reversing stroke order does not change inventory");
+    }
+    let forged = NotebookInkLine {
+        page: 0, start_um: (100, 100), end_um: (200, 250),
+        width_um: 250, rgb: [0, 0, 0],
+    };
+    let mut unchanged = String::from("previous report\n");
+    assert_eq!(append_flow_ink_length_by_color(
+        &mut unchanged, &[forged], 2
+    ), Err("validated ink references nonexistent physical page".into()));
+    assert_eq!(unchanged, "previous report\n");
+    let later_invalid = NotebookInkLine { page: 3, ..forged };
+    let valid = NotebookInkLine { page: 1, ..forged };
+    assert_eq!(append_flow_ink_length_by_color(
+        &mut unchanged, &[valid, later_invalid], 2
+    ), Err("validated ink references nonexistent physical page".into()));
+    assert_eq!(unchanged, "previous report\n",
+        "later invalid page must not leak an earlier valid report");
+    assert_eq!(append_flow_ink_length(
+        &mut unchanged, &[valid, later_invalid], 2
+    ), Err("validated ink references nonexistent physical page".into()));
+    assert_eq!(unchanged, "previous report\n");
+    Ok(())
+}

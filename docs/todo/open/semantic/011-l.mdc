@@ -4963,3 +4963,15 @@ inspection byte prefix, and verifies invalid selections refuse before
 opening a missing source. This remains diagnostic-only: it does not
 estimate material use, pen-up motion, plot duration, color blending or
 persisted notebook semantics. ATR-P2-011 remains open.
+
+## Seeded pen-distance and color attribution oracles — 2026-11-13
+
+A further 512-case independent native oracle compares the exact read-only
+pen-down global and per-page reports against floating-point Euclidean
+calculations on bounded synthetic physical line endpoints. It also checks
+sorted global/per-page RGB length and count inventories, pages without
+segments, varied pen widths and deterministic replay when the original
+ink order is reversed. Both inspectors reject invalid first and later
+page references without appending a partial report, even after an earlier
+valid segment. The reports remain advisory actual centerline geometry,
+not motion instructions or material estimates.
