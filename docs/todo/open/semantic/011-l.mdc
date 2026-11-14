@@ -5013,3 +5013,25 @@ These measurements describe endpoint separations in emitted segment order,
 not an actual pen-up itinerary, optimized device route, travel time, ink
 material usage or completion of persisted semantic notebook compilation.
 ATR-P2-011 remains open.
+
+The opt-in `--inspect-flow-ink-gap-details` reports endpoint geometry and
+adjacent RGB changes after the existing validated gap report. For each
+sheet and globally it distinguishes exact coincident endpoints from
+separated endpoints, counts RGB changes independently of geometry, and
+reports the largest single rounded separation. The old gap report remains
+unchanged when details are not selected; one-segment sheets report zero
+transitions, and physically blank sheets report `empty`. No cross-page
+pairing is inferred.
+
+One direct native regression checks interleaved pages, a shared endpoint
+with a color change, displaced endpoints and refusal without partial
+report output for an invalid late sheet. The expanded 1,024-case randomized
+independent oracle now verifies per-sheet coincident/separate geometry,
+color switches and maxima as well as original Euclidean gap sums.
+
+A real process-level two-page TSV oracle checks the appended report against
+native emitted strokes and rejects missing prerequisites and duplicate
+options before reading a nonexistent selected file. No native pen-up
+motion plan, color-changing device adapter, or persistent semantic block
+is implied.
+ATR-P2-011 remains open.

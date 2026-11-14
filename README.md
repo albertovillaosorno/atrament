@@ -696,6 +696,17 @@ read-only report, and a missing library, invalid page or bad option refuses
 without writing anything. Previously available report bytes remain unchanged
 when this option is omitted.
 
+For a finer geometric diagnostic, append `--inspect-flow-ink-gap-details` to
+that command. It requires `--inspect-flow-ink-gaps` and reports how many
+successive segments have **exactly coincident** or **separate** endpoints,
+how often consecutive segments use different RGB colors, and the largest
+rounded endpoint separation. Results include the whole document and each
+physical sheet, including `empty` sheets and single-stroke sheets.
+
+A color change is independent of whether endpoints coincide; neither count
+is a command to lift or switch a physical pen. The extra report leaves the
+previous endpoint-gap output byte-identical when not selected.
+
 This is an in-memory dry run of the current unjoined, non-varied flow ink,
 not a PNG pixel-budget test, a calibrated handwriting inspection or a proof
 of visual quality. Explicit placed ink, joins and seeded variation remain

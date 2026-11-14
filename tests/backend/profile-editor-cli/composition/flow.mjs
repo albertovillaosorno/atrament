@@ -8944,6 +8944,70 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             ].join('\n');
             assert.equal(gaps.stdout.slice(verified.stdout.length),
                 expectedGaps);
+            const details = run([
+                '--inspect-flow', '--inspect-flow-inventory',
+                '--inspect-flow-page-inventory',
+                '--inspect-flow-shape-coverage',
+                '--inspect-flow-stroke-demand',
+                '--inspect-flow-ink-validation',
+                '--inspect-flow-ink-gaps',
+                '--inspect-flow-ink-gap-details',
+                '--flow-text', source, ...region, ...shape,
+            ]);
+            assert.equal(details.status, 0, details.stderr);
+            assert.ok(details.stdout.startsWith(gaps.stdout),
+                'detail option must leave original physical report intact');
+            const perPage = new Map();
+            const zeroDetails = () => ({ last: null, contacts: 0,
+                separated: 0, colors: 0, maximum: 0, segments: 0 });
+            for (const line of rows) {
+                const [page, x1, y1, x2, y2, , rgb] = line.split('\t');
+                const state = perPage.get(Number(page)) ?? zeroDetails();
+                if (state.last) {
+                    const distance = Math.round(Math.hypot(
+                        Number(x1) - state.last.x,
+                        Number(y1) - state.last.y));
+                    if (state.last.x === Number(x1)
+                        && state.last.y === Number(y1)) {
+                        state.contacts++;
+                    } else {
+                        state.separated++;
+                    }
+                    if (state.last.rgb !== rgb) state.colors++;
+                    state.maximum = Math.max(state.maximum, distance);
+                }
+                state.segments++;
+                state.last = { x: Number(x2), y: Number(y2), rgb };
+                perPage.set(Number(page), state);
+            }
+            const global = [...perPage.values()].reduce((total, local) => ({
+                contacts: total.contacts + local.contacts,
+                separated: total.separated + local.separated,
+                colors: total.colors + local.colors,
+                maximum: Math.max(total.maximum, local.maximum),
+                segments: total.segments + local.segments,
+            }), zeroDetails());
+            const describe = (name, state) => {
+                if (!state || state.segments === 0) return `${name}: empty`;
+                const contact = state.contacts === 1
+                    ? 'endpoint' : 'endpoints';
+                const separate = state.separated === 1
+                    ? 'endpoint' : 'endpoints';
+                const change = state.colors === 1 ? 'change' : 'changes';
+                return `${name}: ${state.contacts} coincident ${contact}, `
+                    + `${state.separated} separated ${separate}, `
+                    + `${state.colors} RGB ${change}, `
+                    + `largest separation ${state.maximum} um`;
+            };
+            const expectedDetails = [
+                describe('Validated ink gap details', global),
+                ...[1, 2].map((page) => describe(
+                    `Page ${page} validated ink gap details`,
+                    perPage.get(page))),
+                '',
+            ].join('\n');
+            assert.equal(details.stdout.slice(gaps.stdout.length),
+                expectedDetails, 'direct TSV geometry and RGB oracle');
             for (const format of ['pdf', 'png']) {
                 const output = join(dir, `page.${format}`);
                 const exported = run([
@@ -9044,6 +9108,25 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             assert.match(duplicateInkGaps.stderr,
                 /--inspect-flow-ink-gaps may appear only once/);
             assert.doesNotMatch(duplicateInkGaps.stderr,
+                /FileIo\(NotFound\)/);
+            const invalidInkGapDetails = run([
+                '--flow-text-file', join(dir, 'nonexistent.md'),
+                '--inspect-flow-ink-gap-details',
+            ]);
+            assert.notEqual(invalidInkGapDetails.status, 0);
+            assert.match(invalidInkGapDetails.stderr,
+                /--inspect-flow-ink-gap-details requires/);
+            assert.doesNotMatch(invalidInkGapDetails.stderr,
+                /FileIo\(NotFound\)/);
+            const duplicateInkGapDetails = run([
+                '--flow-text-file', join(dir, 'nonexistent.md'),
+                '--inspect-flow-ink-gap-details',
+                '--inspect-flow-ink-gap-details',
+            ]);
+            assert.notEqual(duplicateInkGapDetails.status, 0);
+            assert.match(duplicateInkGapDetails.stderr,
+                /--inspect-flow-ink-gap-details may appear only once/);
+            assert.doesNotMatch(duplicateInkGapDetails.stderr,
                 /FileIo\(NotFound\)/);
             const invalidInkColorLength = run([
                 '--flow-text-file', join(dir, 'nonexistent.md'),

@@ -196,6 +196,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--inspect-flow-ink-length (requires --inspect-flow-ink-validation)] \
     [--inspect-flow-ink-length-by-color (requires --inspect-flow-ink-length)] \
     [--inspect-flow-ink-gaps (requires --inspect-flow-ink-validation)] \
+    [--inspect-flow-ink-gap-details (requires --inspect-flow-ink-gaps)] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--ruler-seed UINT32 --ruler-error-mm 0.001..0.250] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
@@ -335,6 +336,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     selected pen RGB color for the whole notebook and each sheet. \
     --inspect-flow-ink-gaps sums consecutive emitted-segment endpoint \
     distances on each sheet, excluding cross-page and device moves. \
+    --inspect-flow-ink-gap-details separates coincident and displaced \
+    endpoints, RGB changes and the largest per-sheet separation. \
     Shape coverage is opt-in and does not validate physical ink bounds. \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
@@ -482,6 +485,7 @@ struct NotebookRequest {
     inspect_flow_ink_length: bool,
     inspect_flow_ink_length_by_color: bool,
     inspect_flow_ink_gaps: bool,
+    inspect_flow_ink_gap_details: bool,
     output: Option<String>,
     pages: usize,
     pages_explicit: bool,
@@ -649,7 +653,8 @@ impl NotebookFlagPreflight {
             | "--inspect-flow-ink-widths"
             | "--inspect-flow-ink-length"
             | "--inspect-flow-ink-length-by-color"
-            | "--inspect-flow-ink-gaps" => {
+            | "--inspect-flow-ink-gaps"
+            | "--inspect-flow-ink-gap-details" => {
                 self.unique(option, &format!("{option} may appear only once"))?;
                 0
             }
@@ -780,6 +785,13 @@ impl NotebookFlagPreflight {
             return Err(
                 "--inspect-flow-inventory requires --inspect-flow".into()
             );
+        }
+        if has("--inspect-flow-ink-gap-details")
+            && !has("--inspect-flow-ink-gaps") {
+            return Err(concat!(
+                "--inspect-flow-ink-gap-details requires ",
+                "--inspect-flow-ink-gaps",
+            ).into());
         }
         if has("--inspect-flow-ink-gaps")
             && !has("--inspect-flow-ink-validation") {
@@ -3301,6 +3313,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut inspect_flow_ink_length = false;
     let mut inspect_flow_ink_length_by_color = false;
     let mut inspect_flow_ink_gaps = false;
+    let mut inspect_flow_ink_gap_details = false;
     let (mut export, mut ink) = (NotebookExportOptions::default(), Vec::new());
     let (mut glyphs, mut statistics) = (GlyphOverlay::default(), None);
     let (mut flow, mut flow_region) = (None, None);
@@ -3402,6 +3415,13 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                     "--inspect-flow-ink-gaps may appear only once".into()
                 ),
             "--inspect-flow-ink-gaps" => inspect_flow_ink_gaps = true,
+            "--inspect-flow-ink-gap-details"
+                if inspect_flow_ink_gap_details => return Err(
+                    "--inspect-flow-ink-gap-details may appear only once"
+                        .into()
+                ),
+            "--inspect-flow-ink-gap-details" =>
+                inspect_flow_ink_gap_details = true,
             "--handwriting-profile" =>
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
             "--heading-style" | "--heading-align" | "--heading-color"
@@ -3474,6 +3494,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         inspect_flow_ink_length,
         inspect_flow_ink_length_by_color,
         inspect_flow_ink_gaps,
+        inspect_flow_ink_gap_details,
         output,
         pages: export.pages.unwrap_or(1),
         png_page: export.png_page.unwrap_or(1),
@@ -4107,56 +4128,119 @@ fn append_flow_ink_length_by_color(
 // within each physical sheet. A color switch or shared endpoint is still one
 // transition: these are diagnostics, not a device itinerary or an optimized
 // pen-up path. Do not invent any transition across a paper boundary.
+#[derive(Clone, Copy, Default)]
+struct InkEndpointSummary {
+    segments: usize,
+    transitions: usize,
+    distance: u128,
+    coincident: usize,
+    separated: usize,
+    color_changes: usize,
+    maximum: u128,
+}
+
 fn append_flow_ink_gaps(
     report: &mut String, ink: &[NotebookInkLine], pages: usize,
+    details: bool,
 ) -> Result<(), String> {
-    let mut endpoints = vec![None::<(u32, u32)>; pages];
-    let mut lengths = vec![0u128; pages];
-    let mut counts = vec![0usize; pages];
-    let mut global_length = 0u128;
-    let mut global_count = 0usize;
+    let mut endpoints = vec![None::<((u32, u32), [u8; 3])>; pages];
+    let mut summaries = vec![InkEndpointSummary::default(); pages];
     for line in ink {
         let page_index = line.page.checked_sub(1)
             .ok_or("validated ink references nonexistent physical page")?;
         let prior = endpoints.get_mut(page_index)
             .ok_or("validated ink references nonexistent physical page")?;
-        if let Some(end) = *prior {
+        let summary = summaries.get_mut(page_index)
+            .ok_or("validated ink references nonexistent physical page")?;
+        summary.segments = summary.segments.checked_add(1)
+            .ok_or("validated ink segment count overflow")?;
+        if let Some((end, previous_rgb)) = *prior {
             let distance = rounded_coordinate_length_um(end, line.start_um)?;
-            let page_length = lengths.get_mut(page_index)
-                .ok_or("validated ink references nonexistent physical page")?;
-            *page_length = page_length.checked_add(distance)
+            summary.distance = summary.distance.checked_add(distance)
                 .ok_or("validated ink gap length overflow")?;
-            let page_count = counts.get_mut(page_index)
-                .ok_or("validated ink references nonexistent physical page")?;
-            *page_count = page_count.checked_add(1)
+            summary.transitions = summary.transitions.checked_add(1)
                 .ok_or("validated ink gap count overflow")?;
-            global_length = global_length.checked_add(distance)
-                .ok_or("validated ink global gap length overflow")?;
-            global_count = global_count.checked_add(1)
-                .ok_or("validated ink global gap count overflow")?;
+            if end == line.start_um {
+                summary.coincident = summary.coincident.checked_add(1)
+                    .ok_or("validated ink coincident count overflow")?;
+            } else {
+                summary.separated = summary.separated.checked_add(1)
+                    .ok_or("validated ink separated count overflow")?;
+            }
+            if previous_rgb != line.rgb {
+                summary.color_changes = summary.color_changes.checked_add(1)
+                    .ok_or("validated ink color change count overflow")?;
+            }
+            summary.maximum = summary.maximum.max(distance);
         }
-        *prior = Some(line.end_um);
+        *prior = Some((line.end_um, line.rgb));
     }
-    let global_noun = if global_count == 1 { "transition" }
+    // Complete all checked arithmetic before appending any result. A late
+    // invalid segment must not publish a partial inspection report.
+    let mut global = InkEndpointSummary::default();
+    for summary in &summaries {
+        global.segments = global.segments.checked_add(summary.segments)
+            .ok_or("validated ink global segment count overflow")?;
+        global.transitions = global.transitions.checked_add(summary.transitions)
+            .ok_or("validated ink global gap count overflow")?;
+        global.distance = global.distance.checked_add(summary.distance)
+            .ok_or("validated ink global gap length overflow")?;
+        global.coincident = global.coincident.checked_add(summary.coincident)
+            .ok_or("validated ink global coincident count overflow")?;
+        global.separated = global.separated.checked_add(summary.separated)
+            .ok_or("validated ink global separated count overflow")?;
+        global.color_changes = global.color_changes
+            .checked_add(summary.color_changes)
+            .ok_or("validated ink global color change count overflow")?;
+        global.maximum = global.maximum.max(summary.maximum);
+    }
+    let noun = if global.transitions == 1 { "transition" }
         else { "transitions" };
     writeln!(report,
-        "Validated ink emitted endpoint gaps: {global_length} um across \
-         {global_count} {global_noun}",
+        "Validated ink emitted endpoint gaps: {} um across {} {noun}",
+        global.distance, global.transitions,
     ).map_err(|error| format!("flow ink gap report refused: {error}"))?;
-    for (index, ((endpoint, length), count)) in endpoints.iter()
-        .zip(lengths.iter()).zip(counts.iter()).enumerate() {
+    for (index, summary) in summaries.iter().enumerate() {
         let page = index + 1;
-        if endpoint.is_none() {
+        if summary.segments == 0 {
             writeln!(report, "Page {page} validated ink endpoint gaps: empty")
         } else {
-            let noun = if *count == 1 { "transition" }
+            let noun = if summary.transitions == 1 { "transition" }
                 else { "transitions" };
             writeln!(report,
-                "Page {page} validated ink endpoint gaps: {length} um \
-                 across {count} {noun}")
+                "Page {page} validated ink endpoint gaps: {} um \
+                 across {} {noun}", summary.distance, summary.transitions)
         }.map_err(|error| {
             format!("flow ink gap report refused: {error}")
         })?;
+    }
+    if details {
+        let describe = |report: &mut String, label: &str,
+                        summary: &InkEndpointSummary| -> Result<(), String> {
+            if summary.segments == 0 {
+                writeln!(report, "{label}: empty")
+            } else {
+                let coincident = if summary.coincident == 1 {
+                    "endpoint" } else { "endpoints" };
+                let separated = if summary.separated == 1 {
+                    "endpoint" } else { "endpoints" };
+                let change = if summary.color_changes == 1 {
+                    "change" } else { "changes" };
+                writeln!(report,
+                    "{label}: {} coincident {coincident}, \
+                     {} separated {separated}, {} RGB {change}, \
+                     largest separation {} um",
+                    summary.coincident, summary.separated,
+                    summary.color_changes, summary.maximum)
+            }.map_err(|error| format!(
+                "flow ink gap detail report refused: {error}"))
+        };
+        describe(report, "Validated ink gap details", &global)?;
+        for (index, summary) in summaries.iter().enumerate() {
+            describe(report,
+                &format!("Page {} validated ink gap details", index + 1),
+                summary)?;
+        }
     }
     Ok(())
 }
@@ -4233,7 +4317,9 @@ fn append_flow_ink_validation(
         append_flow_ink_length_by_color(report, &ink, pages)?;
     }
     if request.inspect_flow_ink_gaps {
-        append_flow_ink_gaps(report, &ink, pages)?;
+        append_flow_ink_gaps(
+            report, &ink, pages, request.inspect_flow_ink_gap_details,
+        )?;
     }
     Ok(())
 }

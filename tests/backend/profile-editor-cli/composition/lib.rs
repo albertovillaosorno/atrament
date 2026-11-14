@@ -21642,20 +21642,43 @@ fn endpoint_gaps_skip_empty_sheets_and_refuse_invalid_pages_atomically()
     };
     let mut result = String::new();
     append_flow_ink_gaps(&mut result,
-        &[valid, first_on_second, next, touching, next_on_second], 3)?;
+        &[valid, first_on_second, next, touching, next_on_second], 3, false)?;
     assert_eq!(result, concat!(
         "Validated ink emitted endpoint gaps: 10 um across 3 transitions\n",
         "Page 1 validated ink endpoint gaps: 5 um across 2 transitions\n",
         "Page 2 validated ink endpoint gaps: 5 um across 1 transition\n",
         "Page 3 validated ink endpoint gaps: empty\n",
     ));
+    let mut detailed = String::new();
+    append_flow_ink_gaps(&mut detailed,
+        &[valid, first_on_second, next, touching, next_on_second], 3, true)?;
+    assert_eq!(detailed, concat!(
+        "Validated ink emitted endpoint gaps: 10 um across 3 transitions\n",
+        "Page 1 validated ink endpoint gaps: 5 um across 2 transitions\n",
+        "Page 2 validated ink endpoint gaps: 5 um across 1 transition\n",
+        "Page 3 validated ink endpoint gaps: empty\n",
+        "Validated ink gap details: 1 coincident endpoint, \
+         2 separated endpoints, 1 RGB change, largest separation 5 um\n",
+        "Page 1 validated ink gap details: 1 coincident endpoint, \
+         1 separated endpoint, 1 RGB change, largest separation 5 um\n",
+        "Page 2 validated ink gap details: 0 coincident endpoints, \
+         1 separated endpoint, 0 RGB changes, largest separation 5 um\n",
+        "Page 3 validated ink gap details: empty\n",
+    ));
+    assert!(detailed.starts_with(&result),
+        "the opt-in detail must retain original gap report bytes");
     let mut previous = String::from("existing output\n");
     for invalid in [NotebookInkLine { page: 0, ..next },
                     NotebookInkLine { page: 4, ..next }] {
         assert_eq!(append_flow_ink_gaps(&mut previous,
-            &[valid, first_on_second, next, invalid], 3),
+            &[valid, first_on_second, next, invalid], 3, false),
             Err("validated ink references nonexistent physical page".into()));
         assert_eq!(previous, "existing output\n");
+        assert_eq!(append_flow_ink_gaps(&mut previous,
+            &[valid, first_on_second, next, invalid], 3, true),
+            Err("validated ink references nonexistent physical page".into()));
+        assert_eq!(previous, "existing output\n",
+            "an invalid late page cannot publish partial details");
     }
     Ok(())
 }
@@ -21678,24 +21701,48 @@ fn randomized_emitted_endpoint_gaps_preserve_sheet_local_stroke_order()
         let mut lengths = vec![0u128; pages];
         let mut counts = vec![0usize; pages];
         let mut occupied = vec![false; pages];
+        let mut shared = vec![0usize; pages];
+        let mut disjoint = vec![0usize; pages];
+        let mut rgb_changes = vec![0usize; pages];
+        let mut maximum = vec![0u128; pages];
+        let mut last_rgb = vec![None::<[u8; 3]>; pages];
         for _ in 0..count {
             let page_index = (next(&mut seed) % pages as u64) as usize;
-            let x1 = 30000 + (next(&mut seed) % 160000) as u32;
-            let y1 = 30000 + (next(&mut seed) % 200000) as u32;
+            let (x1, y1) = if next(&mut seed) % 3 == 0 {
+                last[page_index].unwrap_or((30_000, 40_000))
+            } else {
+                (30_000 + (next(&mut seed) % 160_000) as u32,
+                 30_000 + (next(&mut seed) % 200_000) as u32)
+            };
             let x2 = 30000 + (next(&mut seed) % 160000) as u32;
             let y2 = 30000 + (next(&mut seed) % 200000) as u32;
             let line = NotebookInkLine {
                 page: page_index + 1, start_um: (x1, y1),
                 end_um: (x2, y2), width_um: 250,
-                rgb: [0, (next(&mut seed) % 256) as u8, 0],
+                rgb: if next(&mut seed) % 4 == 0 {
+                    last_rgb[page_index].unwrap_or([0, 12, 0])
+                } else {
+                    [0, (next(&mut seed) % 256) as u8, 0]
+                },
             };
             occupied[page_index] = true;
             if let Some((prior_x, prior_y)) = last[page_index] {
-                lengths[page_index] += f64::from(prior_x.abs_diff(x1))
+                let distance = f64::from(prior_x.abs_diff(x1))
                     .hypot(f64::from(prior_y.abs_diff(y1)))
                     .round() as u128;
+                lengths[page_index] += distance;
                 counts[page_index] += 1;
+                maximum[page_index] = maximum[page_index].max(distance);
+                if (prior_x, prior_y) == (x1, y1) {
+                    shared[page_index] += 1;
+                } else {
+                    disjoint[page_index] += 1;
+                }
+                if last_rgb[page_index] != Some(line.rgb) {
+                    rgb_changes[page_index] += 1;
+                }
             }
+            last_rgb[page_index] = Some(line.rgb);
             last[page_index] = Some(line.end_um);
             lines.push(line);
         }
@@ -21725,9 +21772,56 @@ fn randomized_emitted_endpoint_gaps_preserve_sheet_local_stroke_order()
             }
         }
         let mut observed = String::new();
-        append_flow_ink_gaps(&mut observed, &lines, pages)?;
+        append_flow_ink_gaps(&mut observed, &lines, pages, false)?;
         assert_eq!(observed, expected,
             "case {case}: page-local emitted order and Euclidean lengths");
+        let mut detailed = String::new();
+        append_flow_ink_gaps(&mut detailed, &lines, pages, true)?;
+        let global_shared = shared.iter().sum::<usize>();
+        let global_disjoint = disjoint.iter().sum::<usize>();
+        let global_color_changes = rgb_changes.iter().sum::<usize>();
+        let global_maximum = maximum.iter().copied().max().unwrap_or(0);
+        let mut expected_details = String::new();
+        let format_details = |text: &mut String, label: &str,
+                              coincident_count: usize, separated_count: usize,
+                              color_changes: usize, max_distance: u128|
+                              -> Result<(), String> {
+            let same_noun = if coincident_count == 1 {
+                "endpoint" } else { "endpoints" };
+            let other_noun = if separated_count == 1 {
+                "endpoint" } else { "endpoints" };
+            let color_noun = if color_changes == 1 {
+                "change" } else { "changes" };
+            writeln!(text,
+                "{label}: {coincident_count} coincident {same_noun}, \
+                 {separated_count} separated {other_noun}, \
+                 {color_changes} RGB {color_noun}, \
+                 largest separation {max_distance} um",
+            ).map_err(|error| error.to_string())
+        };
+        if lines.is_empty() {
+            expected_details.push_str("Validated ink gap details: empty\n");
+        } else {
+            format_details(&mut expected_details,
+                "Validated ink gap details", global_shared, global_disjoint,
+                global_color_changes, global_maximum)?;
+        }
+        for page_index in 0..pages {
+            let label = format!(
+                "Page {} validated ink gap details", page_index + 1,
+            );
+            if occupied[page_index] {
+                format_details(&mut expected_details, &label,
+                    shared[page_index], disjoint[page_index],
+                    rgb_changes[page_index], maximum[page_index])?;
+            } else {
+                writeln!(expected_details, "{label}: empty")
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+        assert_eq!(detailed.strip_prefix(&observed),
+            Some(expected_details.as_str()),
+            "case {case}: independent coincident/displaced/color oracle");
     }
     Ok(())
 }
@@ -21872,7 +21966,7 @@ fn maximum_page_flow_reports_last_sheet_pen_distance_and_color()
         "--inspect-flow", "--inspect-flow-shape-coverage",
         "--inspect-flow-ink-validation", "--inspect-flow-ink-length",
         "--inspect-flow-ink-length-by-color",
-        "--inspect-flow-ink-gaps",
+        "--inspect-flow-ink-gaps", "--inspect-flow-ink-gap-details",
     ]));
     let report = String::from_utf8(execute_notebook(&inspect)?
         .ok_or("missing maximal flow physical ink report")?)
@@ -21890,6 +21984,10 @@ fn maximum_page_flow_reports_last_sheet_pen_distance_and_color()
         "Validated ink emitted endpoint gaps: 0 um across 0 transitions\n",
         "Page 1 validated ink endpoint gaps: 0 um across 0 transitions\n",
     )), "{report}");
+    assert!(report.contains(concat!(
+        "Validated ink gap details: 0 coincident endpoints, \
+         0 separated endpoints, 0 RGB changes, largest separation 0 um\n",
+    )), "{report}");
     for page in 1..=32 {
         assert!(report.contains(&format!(
             "Page {page} validated ink pen-down length: 2147 um\n"
@@ -21897,6 +21995,11 @@ fn maximum_page_flow_reports_last_sheet_pen_distance_and_color()
         assert!(report.contains(&format!(
             "Page {page} validated ink endpoint gaps: 0 um \
              across 0 transitions\n"
+        )), "page {page}: {report}");
+        assert!(report.contains(&format!(
+            "Page {page} validated ink gap details: \
+             0 coincident endpoints, 0 separated endpoints, \
+             0 RGB changes, largest separation 0 um\n"
         )), "page {page}: {report}");
         assert!(report.contains(&format!(
             "Page {page} validated ink length by color: 1 RGB color\n  \
@@ -21921,7 +22024,7 @@ fn maximum_page_flow_reports_last_sheet_pen_distance_and_color()
         "--inspect-flow", "--inspect-flow-shape-coverage",
         "--inspect-flow-ink-validation", "--inspect-flow-ink-length",
         "--inspect-flow-ink-length-by-color",
-        "--inspect-flow-ink-gaps",
+        "--inspect-flow-ink-gaps", "--inspect-flow-ink-gap-details",
     ]));
     let error = execute_notebook(&too_many)
         .expect_err("33 physical sheets must exceed native flow limit");
