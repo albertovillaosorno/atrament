@@ -3279,9 +3279,10 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 ),
             "--inspect-flow-stroke-demand" =>
                 inspect_flow_stroke_demand = true,
-            "--inspect-flow-stroke-breakdown" if inspect_flow_stroke_breakdown =>
-                return Err(
-                    "--inspect-flow-stroke-breakdown may appear only once".into()
+            "--inspect-flow-stroke-breakdown"
+                if inspect_flow_stroke_breakdown => return Err(
+                    "--inspect-flow-stroke-breakdown may appear only once"
+                        .into()
                 ),
             "--inspect-flow-stroke-breakdown" =>
                 inspect_flow_stroke_breakdown = true,
@@ -3657,7 +3658,9 @@ fn append_flow_stroke_breakdown(
         let use_noun = if uses == 1 { "use" } else { "uses" };
         writeln!(out, "{title}: {} {form_noun}, {uses} {use_noun}",
             forms.len())
-            .map_err(|error| format!("flow stroke breakdown refused: {error}"))?;
+            .map_err(|error| {
+                format!("flow stroke breakdown refused: {error}")
+            })?;
         for (form, count) in forms {
             let target = glyphs.fallbacks.iter()
                 .find(|mapping| mapping.missing == *form)
@@ -3694,7 +3697,9 @@ fn append_flow_stroke_breakdown(
                 }
             };
             writeln!(out, "{line}")
-                .map_err(|error| format!("flow stroke breakdown refused: {error}"))?;
+                .map_err(|error| {
+                    format!("flow stroke breakdown refused: {error}")
+                })?;
         }
         Ok(())
     };
@@ -3743,8 +3748,9 @@ fn append_flow_ink_validation(
     drop(request.profile.paper_layer_pdf_with_ink_ruler(pages, &ink, None)?);
     let page_noun = if pages == 1 { "page" } else { "pages" };
     writeln!(report,
-        "Native ink validation: {} segments across {pages} physical {page_noun} \
-         (PDF geometry accepted; no output file written)", ink.len(),
+        "Native ink validation: {} segments across {pages} \
+         physical {page_noun} (PDF geometry accepted; \
+         no output file written)", ink.len(),
     ).map_err(|error| format!("flow ink validation refused: {error}"))?;
     if request.inspect_flow_page_inventory {
         let mut per_page = vec![0usize; pages];

@@ -580,9 +580,10 @@ report prints the validated segment count and physical page count. With
 `--inspect-flow-inventory --inspect-flow-page-inventory`, it also counts the
 **actual validated ink segments on every page**, including Markdown ornaments
 and any blank sheets; these totals sum to the global validated segment count.
+
 The check creates no PDF, PNG or TSV output file. Missing glyphs,
-out-of-bounds ink and
-excess stroke demand produce explicit errors rather than a misleading pass.
+out-of-bounds ink and excess stroke demand refuse rather than reporting
+misleading success.
 
 This is an in-memory dry run of the current unjoined, non-varied flow ink,
 not a PNG pixel-budget test, a calibrated handwriting inspection or a proof
