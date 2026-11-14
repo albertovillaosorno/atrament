@@ -2286,14 +2286,27 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
     let mut joins = vec![false; glyphs.len().saturating_sub(1)];
     let mut cursor = 0usize;
     while let Some(&(grapheme, _, _)) = glyphs.get(cursor) {
-        let unary_sign = matches!(grapheme, "+" | "-" | "\u{2212}")
-            && glyphs.get(cursor.saturating_add(1))
-                .is_some_and(|item| ascii_digit(item.0))
-            && (cursor == 0 || glyphs.get(cursor.saturating_sub(1))
+        // An omitted leading zero is still an authored decimal. Recognize
+        // .5 and ,5 only at a numeric boundary, never after sentence
+        // punctuation in ordinary prose (a.5, 1..5).
+        let numeric_boundary = cursor == 0
+            || glyphs.get(cursor.saturating_sub(1))
                 .is_some_and(|item| matches!(item.0,
                     "(" | "[" | "=" | "$" | "\u{20ac}"
-                    | "\u{a3}" | "\u{a5}")));
-        if !unary_sign && !ascii_digit(grapheme) {
+                    | "\u{a3}" | "\u{a5}"));
+        let decimal_start = |offset: usize| {
+            glyphs.get(offset).is_some_and(|item| {
+                matches!(item.0, "." | ",")
+            }) && glyphs.get(offset.saturating_add(1))
+                .is_some_and(|item| ascii_digit(item.0))
+        };
+        let leading_decimal = numeric_boundary && decimal_start(cursor);
+        let unary_sign = numeric_boundary
+            && matches!(grapheme, "+" | "-" | "\u{2212}")
+            && (glyphs.get(cursor.saturating_add(1))
+                .is_some_and(|item| ascii_digit(item.0))
+                || decimal_start(cursor.saturating_add(1)));
+        if !unary_sign && !leading_decimal && !ascii_digit(grapheme) {
             cursor = cursor.saturating_add(1);
             continue;
         }
@@ -2301,11 +2314,14 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
         if unary_sign {
             cursor = cursor.saturating_add(1);
         }
+        if (unary_sign || leading_decimal) && decimal_start(cursor) {
+            cursor = cursor.saturating_add(1);
+        }
         while glyphs.get(cursor)
             .is_some_and(|item| ascii_digit(item.0)) {
             cursor = cursor.saturating_add(1);
         }
-        let mut has_separator = unary_sign;
+        let mut has_separator = unary_sign || leading_decimal;
         while glyphs.get(cursor).is_some_and(|item| {
             matches!(item.0, "." | "," | ":" | "/" | "⁄"
                 | "-" | "−" | "–")

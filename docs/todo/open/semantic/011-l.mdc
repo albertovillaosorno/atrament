@@ -5127,3 +5127,27 @@ verify authored Unicode, punctuation and numeric row placement.
 This changes only the bounded CLI flow measurement algorithm, not the saved
 semantic notebook model, typography choices or unfinished two-page export
 journey required to close ATR-P2-011.
+
+## Contextual leading-decimal flow grouping (partial) — 2026-11-14
+
+The native physical CLI's single-pass numeric scanner now keeps a leading
+.5 or ,5 with its ASCII mantissa digits when an omitted zero follows
+a numeric boundary: the beginning of a word, (, [, =, or a currency
+prefix. The same advisory group admits -.5, +.5 and −.5, including
+a complete scientific exponent such as -.5e+2. Existing ordinary 1.5
+and signed whole-number layouts remain unchanged.
+
+A decimal mark directly after a letter (a.5), doubled mark (1..5),
+slash (1/.5) or incomplete sign/decimal (-.a) does not become a
+numeric tie. The original punctuation and single-glyph fallback behavior
+remains in force if a connected decimal does not fit the physical row;
+no locale normalization or missing ink is inferred.
+
+Two Rust regressions cover contextual pair ties, negatives and exact
+physical two-row placement in both text modes. A native-process test
+checks four decimal and negative-decimal cases against independently
+positioned PDF and transparent PNG ink, tests inspect-flow, and
+confirms that a missing authored glyph cannot replace accepted output.
+
+This change does not add number parsing, mathematical typography, a saved
+semantic notebook block, or a complete notebook-to-PDF journey.

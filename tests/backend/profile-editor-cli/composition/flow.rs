@@ -8617,6 +8617,112 @@ fn numeric_fraction_and_range_compounds_move_without_ink_loss()
 }
 
 #[test]
+fn leading_decimal_tokens_join_only_in_numeric_context()
+-> Result<(), String> {
+    let measured = |source: &str| -> Vec<super::MeasuredGrapheme<'static>> {
+        source.chars().map(|character| {
+            let form = match character {
+                '0'..='9' => "1",
+                '.' => ".",
+                ',' => ",",
+                '+' => "+",
+                '-' => "-",
+                '−' => "−",
+                '=' => "=",
+                '(' => "(",
+                '$' => "$",
+                '€' => "€",
+                'e' => "e",
+                _ => "x",
+            };
+            (form, 4_000, 4_000)
+        }).collect()
+    };
+    for (source, expected) in [
+        (".5", &[0][..]),
+        (",5", &[0]),
+        ("-.5", &[0, 1]),
+        ("+,5", &[0, 1]),
+        ("−.5", &[0, 1]),
+        ("=.5", &[1]),
+        ("(.5", &[1]),
+        ("€.5", &[1]),
+        ("$-.5", &[1, 2]),
+        ("(-.5", &[1, 2]),
+        ("-.5e+2", &[0, 1, 2, 3, 4]),
+        ("a=.5", &[2]),
+        ("1.5", &[0, 1]),
+        ("a.5", &[]),
+        ("a-.5", &[]),
+        ("1..5", &[]),
+        ("1,.5", &[]),
+        ("1/.5", &[]),
+        (".a", &[]),
+        ("-.a", &[]),
+        (".5e", &[0]),
+    ] {
+        let actual = super::numeric_separator_joins(&measured(source));
+        for (index, joined) in actual.iter().enumerate() {
+            assert_eq!(*joined, expected.contains(&index),
+                "{source} leading decimal tie {index}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn leading_decimal_after_equation_moves_with_mantissa()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 33_000, height: 36_000,
+    };
+    for (source, first, second) in [
+        ("abcde=.5g", "abcde", "=.5g"),
+        ("abcde=,5g", "abcde", "=,5g"),
+        ("abcd(-.5g", "abcd", "(-.5g"),
+        ("abcd(−.5g", "abcd", "(−.5g"),
+    ] {
+        for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            assert_eq!(pages, 1);
+            assert!(marks.is_empty());
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>(), [first, second],
+                "{source} {format:?}");
+            assert_eq!(rows.iter().map(|row| row.origin_um)
+                .collect::<Vec<_>>(), [(32_500, 42_500), (32_500, 51_500)]);
+        }
+    }
+    // The preference is not a new minimum line width. All authored
+    // graphemes still fit one at a time when the full token cannot fit.
+    let narrow = super::FlowRegion {
+        width: 9_000, height: 72_000, ..region
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        for text in [".5", ",5", "-.5", "+,5", "−.5", "-.5e+2"] {
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, text)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(narrow),
+            )?;
+            assert_eq!(pages, 1);
+            assert!(marks.is_empty());
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<String>(), text, "{text} {format:?}");
+            assert_eq!(rows.len(), text.chars().count(),
+                "{text} must degrade to one glyph per row");
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn scientific_exponent_joining_requires_complete_ascii_power()
 -> Result<(), String> {
     let measured = |source: &str| -> Vec<super::MeasuredGrapheme<'static>> {
