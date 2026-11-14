@@ -2426,3 +2426,42 @@ fn explicit_page_starts_use_all_thirty_two_supplied_sheets_without_reuse() {
     assert_eq!(paginate(&pages, &units),
         Err(PaginationError::NoPageAvailable { owner: 33 }));
 }
+
+#[test]
+fn opening_balance_fallback_cannot_erase_explicit_page_boundary() {
+    let pages = [
+        page(19, 100, 100, 60),
+        page(4, 300, 100, 40),
+        page(83, 700, 100, 30),
+    ];
+    let rows = (0..5).map(|index| fragment(index + 1, 30, 10))
+        .collect::<Vec<_>>();
+    let units = [
+        unit(FlowUnitPolicy::Independent, vec![fragment(90, 30, 45)]),
+        unit(FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible,
+            rows.clone()),
+        unit(FlowUnitPolicy::StartOnNewPage, vec![fragment(91, 30, 1)]),
+    ];
+    let plan = paginate(&pages, &units)
+        .expect("tail-only replay preserves mandatory later break");
+    assert_eq!(plan.placements.iter().map(|placed| placed.page)
+        .collect::<Vec<_>>(), [19, 19, 4, 4, 4, 4, 83]);
+    assert_eq!(plan.placements.iter().map(
+        |placed| placed.top.micrometres()).collect::<Vec<_>>(),
+        [100, 145, 300, 310, 320, 330, 700]);
+    assert_eq!(plan.covered_pages, pages);
+    assert_placement_source_bijection(&pages, &units, &plan.placements);
+    assert_eq!(reference_mixed_units(&pages, &units),
+        Ok(plan.placements));
+
+    let preferred_without_break = [
+        unit(FlowUnitPolicy::Independent, vec![fragment(90, 30, 45)]),
+        unit(FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible, rows),
+        unit(FlowUnitPolicy::Independent, vec![fragment(91, 30, 1)]),
+    ];
+    let alternate = paginate(&pages, &preferred_without_break)
+        .expect("advisory opening balance can put tail on last page");
+    assert_eq!(alternate.placements[1].page, 4);
+    assert_eq!(alternate.placements[5].page, 83);
+    assert_eq!(alternate.placements[6].page, 83);
+}

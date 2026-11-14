@@ -204,12 +204,13 @@ A preceding keep-with-next heading cannot reserve across an explicit
 boundary. The result includes any skipped physical pages in `covered_pages`
 without inventing a sheet or silently clipping content.
 
-Seven focused domain tests cover nonsequential page identities, differing page
-widths, empty/initial starts, heading-boundary separation, typed exhaustion,
-advisory recovery and a 2,187-case integer reference sweep. The existing
-10,000-case randomized all-policy oracle exercises this sixth policy as
-well. An accepted-revision application test proves exact page placement,
-source ownership and refusal on genuine page-profile authority.
+Eight focused domain tests cover nonsequential page identities and differing
+page widths, empty or initial starts, heading boundaries, typed exhaustion,
+both independent and tail-only replay recovery, and a 2,187-case integer
+reference sweep. The existing 10,000-case randomized all-policy oracle
+exercises this sixth policy as well. An accepted-revision application test
+proves exact sheet placement, source ownership and typed refusal on actual
+accepted page-profile authority.
 
 This exposes a measured layout policy only. Neither the native CLI Markdown
 parser nor the persisted semantic notebook schema accepts page-break markup,
