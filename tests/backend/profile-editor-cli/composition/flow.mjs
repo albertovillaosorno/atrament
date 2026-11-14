@@ -9793,3 +9793,70 @@ test('standalone Markdown page break matches two-sheet physical PDF/PNG',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('numeric superscript powers retain exact native PDF/PNG ink', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-superscript-'));
+    try {
+        const region = ['--flow-region', '30000', '40000',
+            '33000', '36000'];
+        const cases = [
+            ['abcde10⁻³g', '10⁻³g', '⁻', 'U+207B'],
+            ['abcde10²g', '10²g', '²', 'U+00B2'],
+            ['abcde10⁺⁵g', '10⁺⁵g', '⁺', 'U+207A'],
+        ];
+        const stroke = (glyph) => [
+            '--glyph-stroke', glyph, '600', '500', '1800',
+            '3000', '250', '#123456',
+        ];
+        for (const [source, tail, omitted, codepoint] of cases) {
+            const glyphs = [...new Set([...source].filter(
+                (glyph) => glyph !== 'a'))];
+            const full = glyphs.flatMap(stroke);
+            const missing = glyphs.filter((glyph) => glyph !== omitted)
+                .flatMap(stroke);
+            for (const format of ['pdf', 'png']) {
+                const manualFile = join(dir, `manual-superscript-${format}`);
+                const manual = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    ...base, ...full,
+                    '--place-text', '1', '32500', '42500', 'abcde',
+                    '--place-text', '1', '32500', '51500', tail,
+                    '--export-paper', format,
+                    ...(format === 'png' ? ['--dpi', '72'] : []),
+                    '--output', manualFile, '--replace',
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(manual.status, 0, manual.stderr);
+                const expected = readFileSync(manualFile);
+                for (const flag of ['--flow-text', '--flow-markdown']) {
+                    const inspected = spawnSync(cargo, [
+                        'run', '--offline', '--quiet',
+                        '-p', 'atrament_profile_editor_cli', '--',
+                        'notebook', '--inspect-flow', ...region, flag, source,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(inspected.status, 0, inspected.stderr);
+                    assert.ok(inspected.stdout.includes(
+                        'Page 1 x=32500 um y=42500 um: "abcde"'));
+                    assert.ok(inspected.stdout.includes(
+                        'Page 1 x=32500 um y=51500 um: "' + tail + '"'));
+                    const flowed = render(dir, source, format,
+                        [...region, ...full], flag);
+                    assert.equal(flowed.result.status, 0,
+                        flowed.result.stderr);
+                    assert.deepEqual(readFileSync(flowed.output), expected,
+                        `${source} ${flag} ${format}: exact authored ink`);
+                    const refused = render(dir, source, format,
+                        [...region, ...missing], flag);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.match(refused.result.stderr,
+                        /missing authored glyph|no authored strokes/i);
+                    assert.ok(refused.result.stderr.includes(codepoint));
+                    assert.deepEqual(readFileSync(refused.output), expected,
+                        'missing superscript must not overwrite accepted ink');
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

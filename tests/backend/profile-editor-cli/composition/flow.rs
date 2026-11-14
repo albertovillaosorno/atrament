@@ -8942,6 +8942,84 @@ fn scientific_exponent_joining_requires_complete_ascii_power()
 }
 
 #[test]
+fn superscript_numeric_powers_keep_exact_measured_graphemes()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let measured = |source: &str| -> Vec<super::MeasuredGrapheme<'_>> {
+        source.chars().map(|ch| {
+            let form = match ch {
+                '0'..='9' => "1",
+                '\u{2070}' => "\u{2070}",
+                '\u{b9}' => "\u{b9}",
+                '\u{b2}' => "\u{b2}",
+                '\u{b3}' => "\u{b3}",
+                '\u{2074}' => "\u{2074}",
+                '\u{2075}' => "\u{2075}",
+                '\u{2076}' => "\u{2076}",
+                '\u{2077}' => "\u{2077}",
+                '\u{2078}' => "\u{2078}",
+                '\u{2079}' => "\u{2079}",
+                '\u{207a}' => "\u{207a}",
+                '\u{207b}' => "\u{207b}",
+                '-' => "-", '.' => ".", 'e' => "e",
+                _ => "x",
+            };
+            (form, 4_000, 4_000)
+        }).collect()
+    };
+    for (source, expected) in [
+        ("10\u{207b}\u{b3}", &[0, 1, 2][..]),
+        ("10\u{b2}", &[0, 1]),
+        ("-10\u{207a}\u{2075}", &[0, 1, 2, 3]),
+        (concat!("10\u{2070}\u{b9}\u{b2}\u{b3}\u{2074}",
+            "\u{2075}\u{2076}\u{2077}\u{2078}\u{2079}"),
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        ("10\u{207b}", &[]),
+        ("10\u{207a}x", &[]),
+        ("a10\u{207b}\u{b3}", &[1, 2, 3]),
+        ("10\u{207b}\u{b3}x", &[0, 1, 2]),
+        ("x\u{207b}\u{b3}", &[]),
+        ("10\u{b2}\u{207a}", &[0, 1]),
+        ("1e3\u{2074}", &[0, 1, 2]),
+        ("1.2\u{207b}\u{b3}", &[0, 1, 2, 3, 4]),
+    ] {
+        let joined = super::numeric_separator_joins(&measured(source));
+        for (index, tie) in joined.iter().enumerate() {
+            assert_eq!(*tie, expected.contains(&index),
+                "{source} superscript join {index}");
+        }
+    }
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 33_000, height: 50_000,
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        let source = FlowSource::new(format, "abcde10\u{207b}\u{b3}g")?;
+        let (rows, ornaments, pages) = super::layout_flow_with_region(
+            &source, &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(), Some(region),
+        )?;
+        assert_eq!(pages, 1);
+        assert!(ornaments.is_empty());
+        assert_eq!(rows.iter().map(|row| row.text.as_str())
+            .collect::<Vec<_>>(), ["abcde", "10\u{207b}\u{b3}g"],
+            "{format:?}");
+        let narrow = super::FlowRegion {
+            width: 9_000, height: 128_000, ..region
+        };
+        let (fallback, _, _) = super::layout_flow_with_region(
+            &FlowSource::new(format, "10\u{207b}\u{b3}")?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(), Some(narrow),
+        )?;
+        assert_eq!(fallback.iter().map(|row| row.text.as_str())
+            .collect::<String>(), "10\u{207b}\u{b3}");
+    }
+    Ok(())
+}
+
+#[test]
 fn bounded_numeric_join_scan_handles_full_size_number_once()
 -> Result<(), String> {
     // The 4,096-byte source cap permits a single long numeric word.

@@ -2284,6 +2284,7 @@ fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
 // clock colons, digit fractions/dates and numeric ranges) is one advisory
 // ink cluster when it fits. Numeric comparison prefixes also bind the
 // following number, including leading decimals and complete exponents.
+// Authored Unicode superscript digit powers also bind a preceding number.
 // Only separators surrounded by ASCII digits join a numeric run;
 // terminal punctuation and words stay separate.
 // A leading +, hyphen or mathematical minus also joins following digits;
@@ -2390,6 +2391,28 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
                     .is_some_and(|item| ascii_digit(item.0)) {
                     cursor = cursor.saturating_add(1);
                 }
+            }
+        }
+        // Keep an authored Unicode superscript power with its numeric
+        // base when the complete cluster fits. A lone superscript sign
+        // is not an exponent; letters and missing superscript glyphs
+        // remain ordinary ink. No superscript shape is synthesized.
+        let superscript_digit = |offset: usize| {
+            glyphs.get(offset).is_some_and(|item| matches!(item.0,
+                "\u{2070}" | "\u{b9}" | "\u{b2}" | "\u{b3}" | "\u{2074}"
+                | "\u{2075}" | "\u{2076}" | "\u{2077}" | "\u{2078}" | "\u{2079}"))
+        };
+        let superscript_start = if glyphs.get(cursor)
+            .is_some_and(|item| matches!(item.0, "\u{207a}" | "\u{207b}")) {
+            cursor.saturating_add(1)
+        } else {
+            cursor
+        };
+        if superscript_digit(superscript_start) {
+            has_separator = true;
+            cursor = superscript_start;
+            while superscript_digit(cursor) {
+                cursor = cursor.saturating_add(1);
             }
         }
         // Keep ordinary multi-digit values with their already-supported

@@ -5192,3 +5192,19 @@ an exact required unit glyph is absent.
 The change is an advisory line-break policy, not SI unit parsing, expression
 typography, implicit glyph generation or a saved notebook flow compiler.
 The full ATR-P2-011 semantic journey remains open.
+
+## Unicode superscript powers (partial) — 2026-11-14
+
+CLI-only physical flow now keeps an authored Unicode superscript exponent
+with its preceding number when the complete run fits one measured row.
+It supports the ten superscript digits and an optional superscript plus or
+minus. Incomplete exponents remain literal, and overlong runs retain the
+existing individual-grapheme fallback rather than losing ink or refusing.
+
+A native Rust regression covers both text modes, physical row positions,
+leading signs, complete versus incomplete powers, and narrow-row fallback.
+A real-process acceptance test compares PDF and transparent PNG bytes with
+independently placed authored glyphs for three powers, checks both plain
+text and Markdown, and verifies missing superscript glyphs cannot replace
+previously exported output. No glyph shapes, superscript layout semantics,
+semantic block identities, or saved notebook content are synthesized.
