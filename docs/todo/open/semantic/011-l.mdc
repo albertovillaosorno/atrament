@@ -5208,3 +5208,19 @@ independently placed authored glyphs for three powers, checks both plain
 text and Markdown, and verifies missing superscript glyphs cannot replace
 previously exported output. No glyph shapes, superscript layout semantics,
 semantic block identities, or saved notebook content are synthesized.
+
+## ASCII caret powers (partial) — 2026-11-14
+
+CLI-only physical text flow now keeps explicitly authored ASCII caret powers
+(`10^3`, `2^-4`, `1.5^+2`) with their numeric bases when the complete ink
+fits the measured row. A signed exponent requires at least one ASCII digit;
+bare carets, unfinished signs and symbolic bases remain literal. The
+existing exact-grapheme fallback handles narrower physical rows without
+introducing glyphs or refusing otherwise printable text.
+
+A bounded native Rust regression checks complete and incomplete powers,
+4,096-grapheme scan behavior, actual row grouping and narrow-row fidelity
+in both source formats. Real-process regressions compare exported PDF and
+transparent PNG bytes with independently placed ink and verify that a
+missing caret shape never replaces an accepted export. This is not general
+math expression parsing, superscript geometry or persisted semantic flow.

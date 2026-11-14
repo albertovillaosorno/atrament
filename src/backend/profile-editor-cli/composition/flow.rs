@@ -2284,7 +2284,7 @@ fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
 // clock colons, digit fractions/dates and numeric ranges) is one advisory
 // ink cluster when it fits. Numeric comparison prefixes also bind the
 // following number, including leading decimals and complete exponents.
-// Authored Unicode superscript digit powers also bind a preceding number.
+// Authored numeric caret and Unicode superscript powers also bind a base.
 // Only separators surrounded by ASCII digits join a numeric run;
 // terminal punctuation and words stay separate.
 // A leading +, hyphen or mathematical minus also joins following digits;
@@ -2379,6 +2379,27 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
                 .is_some_and(|item| matches!(
                     item.0, "+" | "-" | "\u{2212}"
                 )) {
+                power_start.saturating_add(1)
+            } else {
+                power_start
+            };
+            if glyphs.get(digit_start)
+                .is_some_and(|item| ascii_digit(item.0)) {
+                has_separator = true;
+                cursor = digit_start;
+                while glyphs.get(cursor)
+                    .is_some_and(|item| ascii_digit(item.0)) {
+                    cursor = cursor.saturating_add(1);
+                }
+            }
+        }
+        // Keep an explicitly authored ASCII caret power with its numeric
+        // base. The exponent must contain digits after its optional sign;
+        // bare ^ or ^- remains ordinary ink. No exponent is synthesized.
+        if glyphs.get(cursor).is_some_and(|item| item.0 == "^") {
+            let power_start = cursor.saturating_add(1);
+            let digit_start = if glyphs.get(power_start)
+                .is_some_and(|item| matches!(item.0, "+" | "-" | "\u{2212}")) {
                 power_start.saturating_add(1)
             } else {
                 power_start

@@ -9860,3 +9860,75 @@ test('numeric superscript powers retain exact native PDF/PNG ink', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+
+test('ASCII caret powers keep exact native PDF/PNG rows and authored ink',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-caret-powers-'));
+    try {
+        const region = ['--flow-region', '30000', '40000',
+            '33000', '36000'];
+        const cases = [
+            ['abcde10^3g', '10^3g'],
+            ['abcde2^-3g', '2^-3g'],
+            ['abcde1.2^+3g', '1.2^+3g'],
+            ['abcde2^−3g', '2^−3g'],
+        ];
+        const stroke = (glyph) => [
+            '--glyph-stroke', glyph, '600', '500', '1800',
+            '3000', '250', '#123456',
+        ];
+        for (const [source, tail] of cases) {
+            const glyphs = [...new Set([...source].filter(
+                (glyph) => glyph !== 'a'))];
+            const full = glyphs.flatMap(stroke);
+            const missingCaret = glyphs.filter((glyph) => glyph !== '^')
+                .flatMap(stroke);
+            for (const flag of ['--flow-text', '--flow-markdown']) {
+                const inspect = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    'notebook', '--inspect-flow', ...region, flag, source,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(inspect.status, 0, inspect.stderr);
+                assert.ok(inspect.stdout.includes(
+                    'Page 1 x=32500 um y=42500 um: "abcde"'));
+                assert.ok(inspect.stdout.includes(
+                    'Page 1 x=32500 um y=51500 um: "' + tail + '"'));
+            }
+            for (const format of ['pdf', 'png']) {
+                const manualFile = join(dir, 'manual-caret-' + format);
+                const manual = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    ...base, ...full,
+                    '--place-text', '1', '32500', '42500', 'abcde',
+                    '--place-text', '1', '32500', '51500', tail,
+                    '--export-paper', format,
+                    ...(format === 'png' ? ['--dpi', '72'] : []),
+                    '--output', manualFile, '--replace',
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(manual.status, 0, manual.stderr);
+                const expected = readFileSync(manualFile);
+                for (const flag of ['--flow-text', '--flow-markdown']) {
+                    const flowed = render(dir, source, format,
+                        [...region, ...full], flag);
+                    assert.equal(flowed.result.status, 0,
+                        flowed.result.stderr);
+                    assert.deepEqual(readFileSync(flowed.output), expected,
+                        `${source} ${flag} ${format}: complete authored ink`);
+                    const refused = render(dir, source, format,
+                        [...region, ...missingCaret], flag);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.match(refused.result.stderr,
+                        /missing authored glyph|no authored strokes/i);
+                    assert.ok(refused.result.stderr.includes('U+005E'));
+                    assert.deepEqual(readFileSync(refused.output), expected,
+                        'missing caret cannot replace accepted PDF/PNG');
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

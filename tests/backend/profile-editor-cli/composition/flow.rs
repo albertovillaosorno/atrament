@@ -9020,6 +9020,88 @@ fn superscript_numeric_powers_keep_exact_measured_graphemes()
 }
 
 #[test]
+fn authored_caret_powers_bind_only_complete_numeric_exponents()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let measured = |source: &str| -> Vec<super::MeasuredGrapheme<'static>> {
+        source.chars().map(|ch| {
+            let form = match ch {
+                '0'..='9' => "1",
+                '^' => "^", '+' => "+", '-' => "-", '−' => "−",
+                '.' => ".", ',' => ",", 'e' => "e", 'E' => "E",
+                _ => "x",
+            };
+            (form, 4_000, 4_000)
+        }).collect()
+    };
+    for (source, expected) in [
+        ("10^3", &[0, 1, 2][..]),
+        ("2^-4", &[0, 1, 2]),
+        ("2^+4", &[0, 1, 2]),
+        ("2^−4", &[0, 1, 2]),
+        ("-2^+4", &[0, 1, 2, 3]),
+        ("1.5^−3", &[0, 1, 2, 3, 4]),
+        ("2e3^4", &[0, 1, 2, 3]),
+        ("2^3x", &[0, 1]),
+        ("2^3.4", &[0, 1]),
+        ("2^", &[]),
+        ("2^-", &[]),
+        ("2^+a", &[]),
+        ("2^^3", &[]),
+        ("x^2", &[]),
+        ("2^a", &[]),
+    ] {
+        let joined = super::numeric_separator_joins(&measured(source));
+        for (index, tie) in joined.iter().enumerate() {
+            assert_eq!(*tie, expected.contains(&index),
+                "{source} caret power join at {index}");
+        }
+    }
+    // A complete 4,096-grapheme power uses a single bounded scan.
+    let mut long = vec![("1", 4_000, 4_000); 4_096];
+    long[2_048] = ("^", 4_000, 4_000);
+    long[2_049] = ("-", 4_000, 4_000);
+    assert!(super::numeric_separator_joins(&long)
+        .iter().all(|joined| *joined));
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 33_000, height: 50_000,
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        for source in ["abcde10^3g", "abcde2^-3g",
+            "abcde1.2^+3g", "abcde2^−3g"] {
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            assert_eq!(pages, 1);
+            assert!(marks.is_empty());
+            let tail = &source[5..];
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>(), ["abcde", tail],
+                "{source} {format:?}");
+        }
+        let narrow = super::FlowRegion {
+            width: 9_000, height: 128_000, ..region
+        };
+        let source = "2^−3";
+        let (rows, _, pages) = super::layout_flow_with_region(
+            &FlowSource::new(format, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(), Some(narrow),
+        )?;
+        assert_eq!(pages, 1);
+        assert_eq!(rows.len(), source.chars().count());
+        assert_eq!(rows.iter().map(|row| row.text.as_str())
+            .collect::<String>(), source,
+            "non-fitting caret must fall back to exact graphemes");
+    }
+    Ok(())
+}
+
+#[test]
 fn bounded_numeric_join_scan_handles_full_size_number_once()
 -> Result<(), String> {
     // The 4,096-byte source cap permits a single long numeric word.
