@@ -190,6 +190,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--inspect-flow-stroke-demand (requires --inspect-flow-shape-coverage)] \
     [--inspect-flow-stroke-breakdown (requires --inspect-flow-stroke-demand)] \
     [--inspect-flow-ink-validation (requires --inspect-flow-shape-coverage)] \
+    [--inspect-flow-ink-bounds (requires --inspect-flow-ink-validation)] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--ruler-seed UINT32 --ruler-error-mm 0.001..0.250] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
@@ -317,6 +318,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     or borrowed shape, globally and optionally per page. \
     --inspect-flow-ink-validation checks expanded native ink geometry \
     with the PDF validator without writing a file. \
+    --inspect-flow-ink-bounds reports conservative pen-inclusive \
+    physical rectangles per page after validation, including blank pages. \
     Shape coverage is opt-in and does not validate physical ink bounds. \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
@@ -458,6 +461,7 @@ struct NotebookRequest {
     inspect_flow_stroke_demand: bool,
     inspect_flow_stroke_breakdown: bool,
     inspect_flow_ink_validation: bool,
+    inspect_flow_ink_bounds: bool,
     output: Option<String>,
     pages: usize,
     pages_explicit: bool,
@@ -619,7 +623,8 @@ impl NotebookFlagPreflight {
             | "--inspect-flow-shape-coverage"
             | "--inspect-flow-stroke-demand"
             | "--inspect-flow-stroke-breakdown"
-            | "--inspect-flow-ink-validation" => {
+            | "--inspect-flow-ink-validation"
+            | "--inspect-flow-ink-bounds" => {
                 self.unique(option, &format!("{option} may appear only once"))?;
                 0
             }
@@ -750,6 +755,13 @@ impl NotebookFlagPreflight {
             return Err(
                 "--inspect-flow-inventory requires --inspect-flow".into()
             );
+        }
+        if has("--inspect-flow-ink-bounds")
+            && !has("--inspect-flow-ink-validation") {
+            return Err(concat!(
+                "--inspect-flow-ink-bounds requires ",
+                "--inspect-flow-ink-validation",
+            ).into());
         }
         if has("--inspect-flow-ink-validation")
             && !has("--inspect-flow-shape-coverage") {
@@ -3223,6 +3235,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut inspect_flow_stroke_demand = false;
     let mut inspect_flow_stroke_breakdown = false;
     let mut inspect_flow_ink_validation = false;
+    let mut inspect_flow_ink_bounds = false;
     let (mut export, mut ink) = (NotebookExportOptions::default(), Vec::new());
     let (mut glyphs, mut statistics) = (GlyphOverlay::default(), None);
     let (mut flow, mut flow_region) = (None, None);
@@ -3292,6 +3305,11 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 ),
             "--inspect-flow-ink-validation" =>
                 inspect_flow_ink_validation = true,
+            "--inspect-flow-ink-bounds" if inspect_flow_ink_bounds =>
+                return Err(
+                    "--inspect-flow-ink-bounds may appear only once".into()
+                ),
+            "--inspect-flow-ink-bounds" => inspect_flow_ink_bounds = true,
             "--handwriting-profile" =>
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
             "--heading-style" | "--heading-align" | "--heading-color"
@@ -3358,6 +3376,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         inspect_flow_stroke_demand,
         inspect_flow_stroke_breakdown,
         inspect_flow_ink_validation,
+        inspect_flow_ink_bounds,
         output,
         pages: export.pages.unwrap_or(1),
         png_page: export.png_page.unwrap_or(1),
@@ -3715,6 +3734,54 @@ fn append_flow_stroke_breakdown(
     Ok(())
 }
 
+// Every page receives the conservative pen-inclusive bounding rectangle of
+// all physical strokes. This deliberately includes half the pen width on
+// both sides, as rounded upward by the actual native PDF clearance rule.
+fn append_flow_ink_bounds(
+    report: &mut String, ink: &[NotebookInkLine], pages: usize,
+) -> Result<(), String> {
+    let mut page_bounds = vec![None::<(u32, u32, u32, u32)>; pages];
+    for line in ink {
+        let radius = line.width_um.div_ceil(2);
+        let (x1, y1) = line.start_um;
+        let (x2, y2) = line.end_um;
+        let left = x1.min(x2).checked_sub(radius)
+            .ok_or("validated ink horizontal bounds underflow")?;
+        let top = y1.min(y2).checked_sub(radius)
+            .ok_or("validated ink vertical bounds underflow")?;
+        let right = x1.max(x2).checked_add(radius)
+            .ok_or("validated ink horizontal bounds overflow")?;
+        let bottom = y1.max(y2).checked_add(radius)
+            .ok_or("validated ink vertical bounds overflow")?;
+        let bounds = line.page.checked_sub(1)
+            .and_then(|index| page_bounds.get_mut(index))
+            .ok_or("validated ink references nonexistent physical page")?;
+        *bounds = Some(match *bounds {
+            Some((prior_left, prior_top, prior_right, prior_bottom)) => (
+                prior_left.min(left), prior_top.min(top),
+                prior_right.max(right), prior_bottom.max(bottom),
+            ),
+            None => (left, top, right, bottom),
+        });
+    }
+    for (index, bounds) in page_bounds.iter().enumerate() {
+        if let Some((left, top, right, bottom)) = bounds {
+            writeln!(report,
+                "Page {} validated ink bounds (um): left={left} \
+                 top={top} right={right} bottom={bottom}",
+                index + 1,
+            )
+        } else {
+            writeln!(report,
+                "Page {} validated ink bounds: empty", index + 1,
+            )
+        }.map_err(|error| {
+            format!("flow ink bounds report refused: {error}")
+        })?;
+    }
+    Ok(())
+}
+
 // Opt-in full native geometry check. The same glyph expansion and physical
 // PDF admission as export run in memory; no file is selected or written.
 // Keep this separate from nominal coverage, which may inspect missing shapes.
@@ -3770,6 +3837,9 @@ fn append_flow_ink_validation(
                 format!("flow ink page validation refused: {error}")
             })?;
         }
+    }
+    if request.inspect_flow_ink_bounds {
+        append_flow_ink_bounds(report, &ink, pages)?;
     }
     Ok(())
 }

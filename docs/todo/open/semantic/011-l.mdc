@@ -4861,3 +4861,27 @@ material simulation, calibrated writer claim, persistent semantic notebook,
 or an alternative to inspecting the final page. Variation, direct overlays
 and text joins remain export-only in the flow-inspection mode. ATR-P2-011
 remains open.
+
+## Read-only page ink envelopes (partial) — 2026-11-13
+
+`--inspect-flow-ink-bounds` extends the already validated native ink dry run
+with the conservative page-local axis-aligned rectangle of every generated
+physical pen segment. The rectangle includes half the full stroke width,
+rounded upward per the shared PDF clearance rule. Every actual page receives
+a result, including `empty` for blank sheets. Exact grapheme and explicitly
+borrowed glyph strokes and Markdown ornaments share this geometry; the
+inspector does not count paper ruling, print annotations, or hypothetical
+missing glyphs.
+
+The option depends on `--inspect-flow-ink-validation` and its shape coverage,
+refuses bad combinations before selecting files, and never saves a PDF, PNG,
+TSV or profile. A red-to-green Rust test checks odd-width physical boundaries
+and an unused first sheet against the independently emitted ink TSV. Native
+option-admission coverage checks duplicate and omitted prerequisite flags.
+
+The real-process Node regression combines imported Unicode and borrowed
+shapes with a separately computed TSV envelope, and confirms unchanged
+earlier report bytes. These checks are explicitly opt-in.
+
+This is useful for geometric diagnostics before export but does not measure
+semantic notebook content or complete the P1 saved two-page notebook journey.

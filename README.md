@@ -585,6 +585,27 @@ The check creates no PDF, PNG or TSV output file. Missing glyphs,
 out-of-bounds ink and excess stroke demand refuse rather than reporting
 misleading success.
 
+Add `--inspect-flow-ink-bounds` to the validated flow inspection for a
+**per-sheet conservative physical ink envelope** in micrometres. Each sheet
+reports `left`, `top`, `right`, and `bottom` after including every generated
+glyph and Markdown ornament pen segment. The rectangle expands each endpoint
+by the native validator's upward-rounded half-pen width, so diagonal and
+odd-width strokes are not understated. Blank sheets report `empty`.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --flow-markdown-file notes.md --glyph-file writer.tsv \
+  --inspect-flow --inspect-flow-shape-coverage \
+  --inspect-flow-ink-validation --inspect-flow-ink-bounds
+```
+
+This opt-in report requires successful native PDF geometry validation and
+cannot run with missing shapes or explicit export effects. It describes the
+generated **ink only**, not ruling, borders, dates, or printed page numbers.
+It is a conservative axis-aligned envelope, not a proof of collision-free
+letterforms or a substitute for inspecting the rendered image. Prior report
+bytes are unchanged without the new option.
+
 This is an in-memory dry run of the current unjoined, non-varied flow ink,
 not a PNG pixel-budget test, a calibrated handwriting inspection or a proof
 of visual quality. Explicit placed ink, joins and seeded variation remain

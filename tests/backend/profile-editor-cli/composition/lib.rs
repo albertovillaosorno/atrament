@@ -20880,8 +20880,118 @@ fn notebook_ink_validation_reports_real_missing_shape_and_budget_errors()
 }
 
 #[test]
+fn notebook_ink_bounds_match_physical_tsv_and_include_blank_pages()
+-> Result<(), String> {
+    let shared = args(&[
+        "--flow-text", "\n\na", "--flow-region", "30000", "40000",
+        "32000", "25000", "--glyph-stroke", "a", "500", "600",
+        "1500", "2500", "251", "#123456",
+    ]);
+    let mut old = shared.clone();
+    old.extend(args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-ink-validation",
+    ]));
+    let original = String::from_utf8(execute_notebook(&old)?
+        .ok_or("missing original report")?)
+        .map_err(|error| error.to_string())?;
+    old.push("--inspect-flow-ink-bounds".into());
+    let bounds = String::from_utf8(execute_notebook(&old)?
+        .ok_or("missing ink envelope report")?)
+        .map_err(|error| error.to_string())?;
+    let mut emitted = shared;
+    emitted.push("--emit-ink-file".into());
+    let tsv = String::from_utf8(execute_notebook(&emitted)?
+        .ok_or("missing ink TSV")?)
+        .map_err(|error| error.to_string())?;
+    let strokes: Vec<Vec<u32>> = tsv.lines().skip(1).map(|line| {
+        line.split('\t').take(6).map(|cell| cell.parse::<u32>()
+            .map_err(|error| error.to_string())).collect()
+    }).collect::<Result<_, _>>()?;
+    assert_eq!(strokes.len(), 1, "{tsv}");
+    let coordinates = &strokes[0];
+    assert_eq!(coordinates[0], 2, "{tsv}");
+    let pen_radius = coordinates[5].div_ceil(2);
+    let (x1, y1, x2, y2) = (
+        coordinates[1], coordinates[2],
+        coordinates[3], coordinates[4],
+    );
+    let expected = format!(concat!(
+        "Page 1 validated ink bounds: empty\n",
+        "Page 2 validated ink bounds (um): left={} top={} ",
+        "right={} bottom={}\n",
+    ), x1.min(x2) - pen_radius, y1.min(y2) - pen_radius,
+        x1.max(x2) + pen_radius, y1.max(y2) + pen_radius);
+    assert_eq!(bounds.strip_prefix(&original), Some(expected.as_str()),
+        "{bounds}");
+    Ok(())
+}
+
+#[test]
+fn notebook_ink_bounds_cover_markdown_marker_and_borrowed_strokes()
+-> Result<(), String> {
+    let shared = args(&[
+        "--flow-markdown", "# a\n- ó\n> a", "--heading-style", "marker",
+        "--flow-region", "30000", "40000", "32000", "25000",
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "251", "#123456", "--glyph-stroke", "a", "600", "700",
+        "1600", "3200", "501", "#123456",
+        "--fallback-glyph", "ó", "a",
+    ]);
+    let mut inspect = shared.clone();
+    inspect.extend(args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-ink-validation", "--inspect-flow-ink-bounds",
+    ]));
+    let report = String::from_utf8(execute_notebook(&inspect)?
+        .ok_or("missing Markdown physical bounds")?)
+        .map_err(|error| error.to_string())?;
+    let mut emission = shared;
+    emission.push("--emit-ink-file".into());
+    let tsv = String::from_utf8(execute_notebook(&emission)?
+        .ok_or("missing Markdown physical ink")?)
+        .map_err(|error| error.to_string())?;
+    let mut bounds = BTreeMap::<usize, (u32, u32, u32, u32)>::new();
+    let mut count = 0usize;
+    for line in tsv.lines().skip(1) {
+        let values = line.split('\t').take(6).map(str::parse::<u32>)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?;
+        let [page, x1, y1, x2, y2, width] = values.as_slice() else {
+            return Err(format!("invalid ink TSV row: {line:?}"));
+        };
+        let clearance = width.div_ceil(2);
+        let rect = (
+            x1.min(x2) - clearance, y1.min(y2) - clearance,
+            x1.max(x2) + clearance, y1.max(y2) + clearance,
+        );
+        let _updated = bounds.entry(*page as usize)
+            .and_modify(|(left, top, right, bottom)| {
+                *left = (*left).min(rect.0);
+                *top = (*top).min(rect.1);
+                *right = (*right).max(rect.2);
+                *bottom = (*bottom).max(rect.3);
+            }).or_insert(rect);
+        count += 1;
+    }
+    assert!(count > 6, "Markdown ornaments must contribute: {tsv}");
+    assert_eq!(bounds.len(), 2, "{tsv}");
+    for (page, (left, top, right, bottom)) in bounds {
+        assert!(report.contains(&format!(
+            "Page {page} validated ink bounds (um): left={left} \
+             top={top} right={right} bottom={bottom}\n",
+        )), "{report}");
+    }
+    Ok(())
+}
+
+#[test]
 fn notebook_ink_validation_flags_refuse_before_selected_file_io() {
     for (extra, expected) in [
+        (vec!["--inspect-flow-ink-bounds"],
+            "--inspect-flow-ink-bounds requires"),
+        (vec!["--inspect-flow", "--inspect-flow-ink-bounds"],
+            "--inspect-flow-ink-bounds requires"),
         (vec!["--inspect-flow-ink-validation"],
             "--inspect-flow-ink-validation requires"),
         (vec!["--inspect-flow", "--inspect-flow-ink-validation"],
@@ -20893,6 +21003,10 @@ fn notebook_ink_validation_flags_refuse_before_selected_file_io() {
             "--inspect-flow-ink-validation",
             "--inspect-flow-ink-validation"],
             "--inspect-flow-ink-validation may appear only once"),
+        (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-ink-validation", "--inspect-flow-ink-bounds",
+            "--inspect-flow-ink-bounds"],
+            "--inspect-flow-ink-bounds may appear only once"),
         (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
             "--inspect-flow-ink-validation", "--output", "bad.pdf"],
             "--inspect-flow is stdout only"),

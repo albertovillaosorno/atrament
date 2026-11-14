@@ -8687,6 +8687,47 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             assert.equal(rows.length, 5);
             assert.deepEqual([1, 2].map((page) => rows.filter((row) =>
                 row.startsWith(`${page}\t`)).length), [4, 1]);
+            const physicalBounds = run([
+                '--inspect-flow', '--inspect-flow-inventory',
+                '--inspect-flow-page-inventory',
+                '--inspect-flow-shape-coverage',
+                '--inspect-flow-stroke-demand',
+                '--inspect-flow-ink-validation',
+                '--inspect-flow-ink-bounds',
+                '--flow-text', source, ...region, ...shape,
+            ]);
+            assert.equal(physicalBounds.status, 0,
+                physicalBounds.stderr);
+            assert.ok(physicalBounds.stdout.startsWith(verified.stdout),
+                'bounds remain an opt-in extension of validated ink');
+            const envelopes = new Map();
+            for (const line of rows) {
+                const [page, x1, y1, x2, y2, width] =
+                    line.split('\t').slice(0, 6).map(Number);
+                const radius = Math.ceil(width / 2);
+                const rectangle = [
+                    Math.min(x1, x2) - radius,
+                    Math.min(y1, y2) - radius,
+                    Math.max(x1, x2) + radius,
+                    Math.max(y1, y2) + radius,
+                ];
+                const previous = envelopes.get(page);
+                envelopes.set(page, previous ? [
+                    Math.min(previous[0], rectangle[0]),
+                    Math.min(previous[1], rectangle[1]),
+                    Math.max(previous[2], rectangle[2]),
+                    Math.max(previous[3], rectangle[3]),
+                ] : rectangle);
+            }
+            const expectedBounds = [1, 2].map((page) => {
+                const rect = envelopes.get(page);
+                return rect ? `Page ${page} validated ink bounds (um): `
+                    + `left=${rect[0]} top=${rect[1]} `
+                    + `right=${rect[2]} bottom=${rect[3]}`
+                    : `Page ${page} validated ink bounds: empty`;
+            }).join('\n') + '\n';
+            assert.equal(physicalBounds.stdout.slice(verified.stdout.length),
+                expectedBounds);
             for (const format of ['pdf', 'png']) {
                 const output = join(dir, `page.${format}`);
                 const exported = run([
@@ -8728,6 +8769,16 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             assert.match(invalidInkCheck.stderr,
                 /--inspect-flow-ink-validation requires/);
             assert.doesNotMatch(invalidInkCheck.stderr,
+                /FileIo\(NotFound\)/);
+            const invalidInkBounds = run([
+                '--flow-text-file', join(dir, 'nonexistent.md'),
+                '--inspect-flow', '--inspect-flow-shape-coverage',
+                '--inspect-flow-ink-bounds',
+            ]);
+            assert.notEqual(invalidInkBounds.status, 0);
+            assert.match(invalidInkBounds.stderr,
+                /--inspect-flow-ink-bounds requires/);
+            assert.doesNotMatch(invalidInkBounds.stderr,
                 /FileIo\(NotFound\)/);
         } finally {
             rmSync(dir, { recursive: true, force: true });
