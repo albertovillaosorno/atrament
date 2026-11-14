@@ -1574,12 +1574,13 @@ anchors, duplicate pair selections and physical 4096-stroke exhaustion.
 The final PDF, PNG and page-ink TSV use the same bounded physical
 segments; explicit file output keeps atomic no-clobber semantics.
 
-The separate six-case production CLI subprocess suite at
+The separate nine-case production CLI subprocess suite at
 `tests/backend/handwriting-curved-text-joins/curved-joins.mjs`
 checks exact integer quadratic samples, two measured text rows,
 composed-vs-decomposed Unicode identities, explicit anchors, seeded
-replay, native vector PDF/transparent PNG, and invalid export sentinel
-preservation. It performs no real printing or remote requests.
+replay, native vector PDF/transparent PNG, exact imported page-ink
+parity, a 128-bend independent numeric oracle, cross-row refusal and
+invalid export sentinel preservation. It performs no real printing or remote requests.
 
 This is a local, export-only join selection. It does not synthesize a
 whole cursive alphabet, persist paths/joins as notebook semantics, infer

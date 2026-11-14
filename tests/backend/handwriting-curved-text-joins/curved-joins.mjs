@@ -161,3 +161,69 @@ test('seeded per-occurrence geometry is joined after native transforms', () => {
         admitted([...source, ...curve, '--emit-ink-file']));
     assert.deepEqual(admitted(withVariation), admitted(withVariation));
 });
+
+test('physical TSV saved from curved text reproduces exact vector and raster pages', () => {
+    const directory = mkdtempSync(join(root, '.temp', 'atrament-curved-ink-parity-'));
+    try {
+        const filename = join(directory, 'joined.page-ink.tsv');
+        const ink = admitted([...source, ...curve, '--emit-ink-file']);
+        writeFileSync(filename, ink);
+        for (const format of ['pdf', 'png']) {
+            const option = ['--export-paper', format,
+                ...(format === 'png' ? ['--dpi', '72'] : [])];
+            const direct = admitted([...source, ...curve, ...option]);
+            const imported = admitted(['--printed-sheet', 'true', '--ink-file',
+                filename, ...option]);
+            assert.deepEqual(imported, direct,
+                format + ' must draw byte-identical native physical pen segments');
+        }
+        assert.deepEqual(readFileSync(filename), ink,
+            'replaying page ink must not modify source bytes');
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
+});
+
+test('128 independent quadratic bends match a whole-um numeric reference oracle', () => {
+    const start = [33200, 47200];
+    const end = [34200, 47200];
+    for (let seed = 0; seed < 128; seed++) {
+        const bx = (seed * 97) % 1201 - 600;
+        const by = (seed * 89) % 1199 - 599;
+        if (by === 0) continue;
+        const command = ['--join-text-curved', 'a', 'o', '1', '1',
+            String(bx), String(by)];
+        const actual = admitted([...source, ...command, '--emit-ink-file'])
+            .toString().trimEnd().split('\n').slice(2, 6)
+            .map((line) => line.split('\t').slice(1, 5).map(Number));
+        let from = start;
+        for (let quarter = 1; quarter <= 4; quarter++) {
+            const t = quarter / 4;
+            const to = start.map((a, axis) => Math.floor(
+                (1 - t) * (1 - t) * a
+                + 2 * t * (1 - t) * ((a + end[axis]) / 2
+                    + [bx, by][axis]) + t * t * end[axis] + 0.5));
+            assert.deepEqual(actual[quarter - 1], [...from, ...to],
+                'seed=' + seed + ', quarter=' + quarter);
+            from = to;
+        }
+    }
+});
+
+test('cross-row, out-of-range gap and incompatible pen links fail closed', () => {
+    const cases = [
+        [...source.slice(0, -5), '--flow-text', 'a\no',
+            ...curve, '--emit-ink-file'],
+        [...source.map((token, index) => index === 6 ? '2999' : token),
+            ...curve, '--emit-ink-file'],
+        [...source.map((token, index) => index === 16 ? '251' : token),
+            ...curve, '--emit-ink-file'],
+        [...source.map((token, index) => index === 17 ? '#304050' : token),
+            ...curve, '--emit-ink-file'],
+    ];
+    for (const flags of cases) {
+        const result = notebook(flags);
+        assert.notEqual(result.status, 0, result.stderr.toString());
+        assert.equal(result.stdout.length, 0);
+    }
+});
