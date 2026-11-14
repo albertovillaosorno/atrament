@@ -4793,3 +4793,22 @@ preexisting output file. Historical reports are unchanged when omitted.
 These are nominal source-shape counts, not final ink clearance, visual
 quality, join-connector estimation, persisted semantic notebook content or
 complete PDF/PNG export readiness. ATR-P2-011 remains open.
+
+## Lower-bound refusal for unfilled shapes (partial) — 2026-11-13
+
+The nominal demand check now also compares known pen segments plus one
+minimum segment for each unresolved visible glyph occurrence against the
+same 4,096-segment native global budget. It reports `minimum over budget`
+when an incomplete library cannot possibly fit even its best-case missing
+shapes. A known count above 4,096 keeps the stronger `over budget` status;
+otherwise missing forms remain `incomplete`. This does not invent contours
+or bypass the missing-shape refusal in actual native exports.
+
+A native regression checks both sides of the inclusive 4,096-segment
+boundary: 4,080 known strokes plus 16 unresolved uses remain incomplete
+and become an accepted vector PDF once a single-stroke shape is authored;
+17 unresolved uses prove minimum overflow and a completed 4,097-stroke
+library refuses actual native export. One independent Node process test also
+compares real CLI reports against native two-sheet TSV, PDF and PNG exports
+with a saved Unicode library and an explicit borrowed shape, confirming
+pre-source-I/O flag refusal and unchanged glyph-library bytes.

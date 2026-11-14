@@ -20481,3 +20481,73 @@ fn notebook_stroke_demand_imported_library_matches_native_pdf_and_png()
     fs::remove_file(path).map_err(|error| error.to_string())?;
     Ok(())
 }
+
+#[test]
+fn notebook_stroke_demand_marks_missing_glyph_lower_bound_over_budget()
+-> Result<(), String> {
+    let mut authored = Vec::new();
+    for index in 0..12u32 {
+        authored.extend(args(&[
+            "--glyph-stroke", "a", &(100 + 100 * index).to_string(),
+            "200", &(200 + 100 * index).to_string(), "3200",
+            "250", "#123456",
+        ]));
+    }
+    let one_stroke_x = args(&[
+        "--glyph-stroke", "x", "500", "600", "1500", "2500",
+        "250", "#123456",
+    ]);
+    // The 4,096-stroke limit is inclusive. An unauthored shape has at
+    // least one stroke, so adding one more unresolved use must prove overflow.
+    for missing in [16usize, 17] {
+        let source = format!("{}\n{}",
+            std::iter::repeat_n("aaaaaaaaaa", 34)
+                .collect::<Vec<_>>().join("\n"),
+            std::iter::repeat_n("x", missing)
+                .collect::<Vec<_>>().join("\n"));
+        let mut inspect = args(&[
+            "--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-stroke-demand", "--flow-text", &source,
+        ]);
+        inspect.extend(authored.iter().cloned());
+        let incomplete = String::from_utf8(execute_notebook(&inspect)?
+            .ok_or("missing lower-bound report")?)
+            .map_err(|error| error.to_string())?;
+        let status = if missing == 17 { "minimum over budget" }
+            else { "incomplete" };
+        assert!(incomplete.contains(&format!(
+            "Nominal stroke demand: 4080 glyph + 0 ornament = \
+             4080 known segments, {missing} unresolved glyph uses \
+             ({status}; native limit 4096)",
+        )), "{incomplete}");
+        let mut completed = inspect;
+        completed.extend(one_stroke_x.iter().cloned());
+        let complete = String::from_utf8(execute_notebook(&completed)?
+            .ok_or("missing complete demand")?)
+            .map_err(|error| error.to_string())?;
+        let status = if missing == 17 { "over budget" }
+            else { "within budget" };
+        assert!(complete.contains(&format!(
+            "Nominal stroke demand: {} glyph + 0 ornament = \
+             {} known segments, 0 unresolved glyph uses \
+             ({status}; native limit 4096)",
+            4080 + missing, 4080 + missing,
+        )), "{complete}");
+        let mut actual = args(&[
+            "--export-paper", "pdf", "--flow-text", &source,
+        ]);
+        actual.extend(authored.iter().cloned());
+        actual.extend(one_stroke_x.iter().cloned());
+        if missing == 17 {
+            let error = execute_notebook(&actual)
+                .expect_err("native exporter must enforce the lower bound");
+            assert!(error.contains("text exceeds 4096 total pen strokes"),
+                "{error}");
+        } else {
+            let pdf = execute_notebook(&actual)?
+                .ok_or("exactly 4096 strokes must remain admissible")?;
+            assert!(pdf.starts_with(b"%PDF-"));
+        }
+    }
+    Ok(())
+}

@@ -537,7 +537,10 @@ The report compares the whole notebook's **known** segments with the native
 4,096-segment export cap.
 
 An unauthored grapheme contributes one unresolved *use*, not a guessed number
-of strokes; the budget is only certified when there are no missing shapes.
+of strokes. Since every visible glyph must have at least one pen segment,
+the inspector can identify a **minimum over budget** result when known
+segments plus these unresolved uses exceed 4,096. Otherwise missing shapes
+keep the result **incomplete**, never an exportability guarantee.
 Add `--inspect-flow-inventory` and
 `--inspect-flow-page-inventory` for breakdowns on every physical sheet,
 including empty ones. The native limit applies **across all pages**, not

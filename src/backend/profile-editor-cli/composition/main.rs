@@ -3555,8 +3555,15 @@ fn append_flow_stroke_demand(
         let (authored_segments, unresolved) = demand(forms)?;
         let total = authored_segments.checked_add(ornament_count)
             .ok_or("flow stroke demand overflow")?;
+        // Every unresolved visible grapheme needs at least one authored
+        // segment. Even without a library for it, that lower bound can prove
+        // that no complete shape selection will fit the native export cap.
+        let minimum = total.checked_add(unresolved)
+            .ok_or("flow stroke demand overflow")?;
         let budget = if total > MAX_NOTEBOOK_INK_LINES {
             "over budget"
+        } else if minimum > MAX_NOTEBOOK_INK_LINES {
+            "minimum over budget"
         } else if unresolved > 0 {
             "incomplete"
         } else {

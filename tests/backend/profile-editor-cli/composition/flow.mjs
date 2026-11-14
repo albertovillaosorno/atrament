@@ -8575,3 +8575,85 @@ test('exact shape coverage predicts missing authored ink across native sheets',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('stroke demand CLI counts borrowed library ink on both native sheets',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-stroke-demand-'));
+        try {
+            const library = join(dir, 'writer.tsv');
+            const original = [
+                'atrament.glyph-strokes.v1',
+                'a\t500\t600\t1500\t2500\t250\t#123456',
+                'a\t1500\t2500\t2500\t600\t250\t#123456',
+                'n\u0303\t500\t600\t1500\t2500\t250\t#123456',
+                '',
+            ].join('\n');
+            writeFileSync(library, original);
+            const region = ['--flow-region', '30000', '40000',
+                '32000', '25000'];
+            const source = 'a\nó\nn\u0303';
+            const shape = [
+                '--glyph-file', library, '--fallback-glyph', 'ó', 'a',
+            ];
+            const run = (options) => spawnSync(cargo, [
+                'run', '--offline', '--quiet',
+                '-p', 'atrament_profile_editor_cli', '--',
+                'notebook', ...options,
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            const inspection = run([
+                '--inspect-flow', '--inspect-flow-inventory',
+                '--inspect-flow-page-inventory',
+                '--inspect-flow-shape-coverage',
+                '--inspect-flow-stroke-demand', '--flow-text', source,
+                ...region, ...shape,
+            ]);
+            assert.equal(inspection.status, 0, inspection.stderr);
+            assert.match(inspection.stdout, /Selected shape coverage: 3\/3/);
+            assert.ok(inspection.stdout.includes([
+                'Nominal stroke demand: 5 glyph + 0 ornament = '
+                    + '5 known segments, 0 unresolved glyph uses '
+                    + '(within budget; native limit 4096)',
+                'Page 1 stroke demand: 4 glyph + 0 ornament = '
+                    + '4 known segments, 0 unresolved glyph uses '
+                    + '(within budget; native limit 4096)',
+                'Page 2 stroke demand: 1 glyph + 0 ornament = '
+                    + '1 known segments, 0 unresolved glyph uses '
+                    + '(within budget; native limit 4096)',
+            ].join('\n')), inspection.stdout);
+            const inkPath = join(dir, 'paper-ink.tsv');
+            const ink = run(['--flow-text', source, ...region, ...shape,
+                '--emit-ink-file', '--output', inkPath]);
+            assert.equal(ink.status, 0, ink.stderr);
+            const rows = readFileSync(inkPath, 'utf8')
+                .trimEnd().split('\n').slice(1);
+            assert.equal(rows.length, 5);
+            assert.deepEqual([1, 2].map((page) => rows.filter((row) =>
+                row.startsWith(`${page}\t`)).length), [4, 1]);
+            for (const format of ['pdf', 'png']) {
+                const output = join(dir, `page.${format}`);
+                const exported = run([
+                    '--flow-text', source, ...region, ...shape,
+                    '--export-paper', format,
+                    ...(format === 'png' ? [
+                        '--dpi', '72', '--png-page', '2',
+                    ] : []), '--output', output,
+                ]);
+                assert.equal(exported.status, 0, exported.stderr);
+                const bytes = readFileSync(output);
+                assert.ok(bytes.subarray(0, format === 'pdf' ? 5 : 8)
+                    .equals(Buffer.from(format === 'pdf'
+                        ? '%PDF-' : '\x89PNG\r\n\x1a\n', 'binary')));
+            }
+            assert.equal(readFileSync(library, 'utf8'), original);
+            const invalid = run([
+                '--flow-text-file', join(dir, 'nonexistent.md'),
+                '--inspect-flow', '--inspect-flow-stroke-demand',
+            ]);
+            assert.notEqual(invalid.status, 0);
+            assert.match(invalid.stderr,
+                /--inspect-flow-stroke-demand requires/);
+            assert.doesNotMatch(invalid.stderr, /FileIo\(NotFound\)/);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
