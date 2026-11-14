@@ -911,6 +911,28 @@ pen contours, final region clearance, semantic identities, fixed-object
 collisions or production PDF/PNG readiness. Those gates still belong to
 explicit output and the unfinished accepted notebook compiler.
 
+### Flow-derived exact glyph inventory (partial) — 2026-11-13
+
+An optional `--inspect-flow-inventory` selection now requires the read-only
+`--inspect-flow` path and appends distinct exact Unicode grapheme keys, with
+occurrence counts, after nominal Markdown/plain flow. It uses the existing
+Rust grapheme boundary authority and collects the actual laid-out rows:
+Markdown syntax-only hashes, bullets, quote bars, thematic rules, task
+boxes and fences do not become false pen-shape requirements. Authored
+ordered numerals, periods, literal code content, NFC versus NFD clusters
+and non-ASCII whitespace remain separate inventory entries. ASCII spaces
+are layout only; the list is sorted and never normalizes grapheme identities.
+
+Four native tests cover a mixed heading/bullet/quote/numbered Markdown
+source, physical two-page Unicode rows, literal fenced content, unchanged
+base inspection and preflight refusal before selected source reads. A real
+Rust CLI acceptance exports the minimally authored inventory as PDF and
+transparent PNG, then removes a required period glyph and verifies that
+both formats refuse without replacing the accepted file. The inventory
+lists **required nominal shape keys**, not whether a glyph library has
+valid ink or whether later pen expansion passes physical clearance. It
+does not persist a notebook or complete the semantic compiler task.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

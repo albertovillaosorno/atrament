@@ -477,6 +477,24 @@ contours, physical ink clearance and PDF/PNG validation are checked only
 when exporting with the selected glyph library. Inspection cannot be
 combined with `--output`, `--inspect`, export or manually supplied ink.
 
+`--inspect-flow-inventory` (with `--inspect-flow`) appends a sorted,
+occurrence-counted list of the **exact grapheme keys** that need authored
+handwriting. For example:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --flow-markdown-file notes.md \
+  --inspect-flow --inspect-flow-inventory
+```
+
+The inventory is computed from laid-out text, not raw Markdown: syntactic
+heading hashes, bullet dashes, quote bars, fence markers and synthetic marks
+are not glyph requirements. Literal ordered-list numerals, punctuation,
+code text, non-ASCII spaces and distinct NFC/NFD graphemes remain counted.
+ASCII spaces and line breaks are spacing, not drawn ink. This option does not
+read a glyph library, change the existing report when absent, or guarantee
+that authored shapes actually fit a printable page.
+
 To add reproducible, bounded pen-like variation to the **printed paper
 ruling** under the authored text, select both export-only options:
 

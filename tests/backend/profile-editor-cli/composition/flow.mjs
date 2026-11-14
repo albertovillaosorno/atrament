@@ -103,6 +103,49 @@ test('stdout nominal flow rows predict independently authored PDF/PNG ink',
         }
     });
 
+test('nominal glyph inventory matches minimally authored PDF/PNG flow',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-glyph-inventory-'));
+        try {
+            const source = '# a\n- a\n> a\n1. a';
+            const inspected = spawnSync(cargo, [
+                'run', '--offline', '--quiet',
+                '-p', 'atrament_profile_editor_cli', '--',
+                'notebook', '--flow-markdown', source,
+                '--inspect-flow-inventory', '--inspect-flow',
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(inspected.status, 0, inspected.stderr);
+            assert.equal(inspected.stdout.split('Glyph inventory: ')[1], [
+                '3 exact forms, 6 uses',
+                '".": 1', '"1": 1', '"a": 4', '',
+            ].join('\n'));
+            const glyphs = [
+                '--glyph-stroke', '1', '600', '500', '1800',
+                '3000', '250', '#123456',
+                '--glyph-stroke', '.', '600', '500', '1800',
+                '3000', '250', '#123456',
+            ];
+            for (const format of ['pdf', 'png']) {
+                const rendered = render(dir, source, format, glyphs);
+                assert.equal(rendered.result.status, 0,
+                    rendered.result.stderr);
+                const original = readFileSync(rendered.output);
+                assert.ok(original.length > 100,
+                    `native ${format} export should contain actual bytes`);
+                // The sole omitted required marker glyph refuses before
+                // touching a previously accepted binary destination.
+                const missing = render(dir, source, format,
+                    glyphs.slice(0, 8));
+                assert.notEqual(missing.result.status, 0);
+                assert.match(missing.result.stderr,
+                    /missing authored glyph shapes.*U\+002E/);
+                assert.deepEqual(readFileSync(missing.output), original);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('compressed numbered label refuses overlap without clobbering PDF/PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-number-clearance-'));

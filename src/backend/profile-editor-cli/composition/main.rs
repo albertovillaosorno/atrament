@@ -36,7 +36,7 @@
 mod flow;
 mod glyph;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::error::Error;
 use std::fmt::Write as _;
@@ -184,6 +184,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--date-text YYYY-MM-DD|NN/NN/YYYY|NN.NN.YYYY] \
     [--border-radius-um INTEGER] [--page-numbers true|false] \
     [--printed-sheet true|false] [--inspect | --inspect-flow] \
+    [--inspect-flow-inventory (requires --inspect-flow)] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--ruler-seed UINT32 --ruler-error-mm 0.001..0.250] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
@@ -300,6 +301,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     --flow-list-quote-right-inset-um reserves 0..12 mm on their right. \
     --inspect-flow prints the nominal measured row positions and page \
     count without requiring glyph strokes or writing any output file. \
+    --inspect-flow-inventory also lists required exact visible graphemes \
+    after Markdown parsing, excluding synthetic ornaments and ASCII spaces. \
     It does not validate authored pen contour or glyph coverage. \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
@@ -421,6 +424,7 @@ struct NotebookRequest {
     ink: Vec<NotebookInkLine>,
     inspect: bool,
     inspect_flow: bool,
+    inspect_flow_inventory: bool,
     output: Option<String>,
     pages: usize,
     pages_explicit: bool,
@@ -577,7 +581,7 @@ impl NotebookFlagPreflight {
         self.imported_ink_count = self.imported_ink_count
             .saturating_add(usize::from(option == "--ink-file"));
         let operands = match option {
-            "--inspect" | "--inspect-flow" => {
+            "--inspect" | "--inspect-flow" | "--inspect-flow-inventory" => {
                 self.unique(option, &format!("{option} may appear only once"))?;
                 0
             }
@@ -704,6 +708,11 @@ impl NotebookFlagPreflight {
     ) -> Result<(), String> {
         let has = |option: &str| self.selected.contains(option);
         let inspect_flow = has("--inspect-flow");
+        if has("--inspect-flow-inventory") && !inspect_flow {
+            return Err(
+                "--inspect-flow-inventory requires --inspect-flow".into()
+            );
+        }
         if inspect_flow && flow_format.is_none() {
             return Err("--inspect-flow requires a text or Markdown flow"
                 .into());
@@ -3124,7 +3133,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     preflight_notebook_sources(args)?;
     let mut profile = NotebookProfile::default();
     let (mut inspect, mut output, mut replace) = (false, None, false);
-    let mut inspect_flow = false;
+    let (mut inspect_flow, mut inspect_flow_inventory) = (false, false);
     let (mut export, mut ink) = (NotebookExportOptions::default(), Vec::new());
     let (mut glyphs, mut statistics) = (GlyphOverlay::default(), None);
     let (mut flow, mut flow_region) = (None, None);
@@ -3158,6 +3167,11 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--inspect-flow" if inspect_flow =>
                 return Err("--inspect-flow may appear only once".into()),
             "--inspect-flow" => inspect_flow = true,
+            "--inspect-flow-inventory" if inspect_flow_inventory =>
+                return Err(
+                    "--inspect-flow-inventory may appear only once".into()
+                ),
+            "--inspect-flow-inventory" => inspect_flow_inventory = true,
             "--handwriting-profile" =>
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
             "--heading-style" | "--heading-align" | "--heading-color"
@@ -3217,6 +3231,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         ink,
         inspect,
         inspect_flow,
+        inspect_flow_inventory,
         output,
         pages: export.pages.unwrap_or(1),
         png_page: export.png_page.unwrap_or(1),
@@ -3308,28 +3323,59 @@ fn admit_flow_page_selection(
     Ok(())
 }
 
+// Inspect nominal physical rows before drawing any authored glyph shapes.
+fn inspect_notebook_flow(request: &NotebookRequest)
+-> Result<Vec<u8>, String> {
+    let source = request.flow.as_ref()
+        .ok_or("--inspect-flow requires a text or Markdown flow")?;
+    let (runs, ornaments, pages) = layout_flow_with_typography(
+        source, &request.profile, request.statistics.as_ref(),
+        request.heading, request.flow_region, request.flow_typography,
+    )?;
+    let mut report = format!(
+        "Nominal flow (glyph coverage and ink clearance unchecked)\n\
+         Pages: {pages}\nRows: {}\nOrnaments: {}\n",
+        runs.len(), ornaments.len(),
+    );
+    let mut inventory = BTreeMap::<String, usize>::new();
+    for row in runs {
+        write!(report,
+            "Page {} x={} um y={} um: {:?}\n",
+            row.page, row.origin_um.0, row.origin_um.1, row.text,
+        ).map_err(|error| format!("flow report refused: {error}"))?;
+        if request.inspect_flow_inventory {
+            let mut remaining = row.text.as_str();
+            while !remaining.is_empty() {
+                let (grapheme, rest) = first_grapheme(remaining)?;
+                if !is_non_ink_audit_grapheme(grapheme) {
+                    let count = inventory.entry(grapheme.to_owned())
+                        .or_default();
+                    *count = count.checked_add(1)
+                        .ok_or("flow inventory occurrence overflow")?;
+                }
+                remaining = rest;
+            }
+        }
+    }
+    if request.inspect_flow_inventory {
+        let total: usize = inventory.values().sum();
+        write!(report,
+            "Glyph inventory: {} exact forms, {total} uses\n",
+            inventory.len(),
+        ).map_err(|error| format!("flow inventory refused: {error}"))?;
+        for (grapheme, uses) in inventory {
+            write!(report, "{grapheme:?}: {uses}\n")
+                .map_err(|error| format!("flow inventory refused: {error}"))?;
+        }
+    }
+    Ok(report.into_bytes())
+}
+
 fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     let mut request = parse_notebook_options(args)?;
     let canonical = request.profile.canonical_json()?;
     if request.inspect_flow {
-        let source = request.flow.as_ref()
-            .ok_or("--inspect-flow requires a text or Markdown flow")?;
-        let (runs, ornaments, pages) = layout_flow_with_typography(
-            source, &request.profile, request.statistics.as_ref(),
-            request.heading, request.flow_region, request.flow_typography,
-        )?;
-        let mut report = format!(
-            "Nominal flow (glyph coverage and ink clearance unchecked)\n\
-             Pages: {pages}\nRows: {}\nOrnaments: {}\n",
-            runs.len(), ornaments.len(),
-        );
-        for row in runs {
-            report.push_str(&format!(
-                "Page {} x={} um y={} um: {:?}\n",
-                row.page, row.origin_um.0, row.origin_um.1, row.text,
-            ));
-        }
-        return Ok(Some(report.into_bytes()));
+        return Ok(Some(inspect_notebook_flow(&request)?));
     }
     if request.inspect {
         return Ok(Some(

@@ -19503,3 +19503,111 @@ fn notebook_inspect_flow_keeps_unicode_identity_across_physical_pages() {
         source.as_bytes());
     fs::remove_file(input).expect("remove test-owned input");
 }
+
+#[test]
+fn notebook_inspect_flow_inventory_counts_only_authored_visible_graphemes()
+-> Result<(), String> {
+    let source = "# a\n\n- a\n> ó n\u{303}\n1. a";
+    let report = execute_notebook(&args(&[
+        "--inspect-flow", "--inspect-flow-inventory",
+        "--flow-markdown", source,
+    ]))?.ok_or("missing read-only inventory report")?;
+    let report = String::from_utf8(report)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains("Pages: 1\nRows: 4\n"), "{report}");
+    let entries = report.split("Glyph inventory: ").nth(1)
+        .ok_or("missing inventory section")?;
+    assert_eq!(entries, concat!(
+        "5 exact forms, 7 uses\n",
+        "\".\": 1\n",
+        "\"1\": 1\n",
+        "\"a\": 3\n",
+        "\"n\\u{303}\": 1\n",
+        "\"ó\": 1\n",
+    ));
+    assert!(!entries.contains("\"#\""));
+    assert!(!entries.contains("\"-\""));
+    assert!(!entries.contains("\">\""));
+
+    // The opt-in report must not change the initial inspection contract.
+    let original = execute_notebook(&args(&[
+        "--inspect-flow", "--flow-markdown", source,
+    ]))?.ok_or("missing ordinary inspection")?;
+    assert_eq!(report.split("Glyph inventory: ").next()
+        .ok_or("missing report prefix")?.as_bytes(), original);
+    Ok(())
+}
+
+#[test]
+fn notebook_inspect_flow_inventory_preserves_exact_unicode_and_physical_wraps()
+-> Result<(), String> {
+    // A literal no-break space is not an implicit ASCII gap,
+    // while grapheme-level NFD and NFC keys remain distinct across sheets.
+    let source = "a\u{a0}ó\no\u{301}\nó";
+    let report = execute_notebook(&args(&[
+        "--inspect-flow-inventory", "--inspect-flow", "--flow-text",
+        source, "--flow-region", "30000", "40000", "32000", "25000",
+    ]))?.ok_or("missing Unicode inventory")?;
+    let report = String::from_utf8(report)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains("Pages: 2\nRows: 3\n"), "{report}");
+    let entries = report.split("Glyph inventory: ").nth(1)
+        .ok_or("missing inventory section")?;
+    assert!(entries.starts_with("4 exact forms, 5 uses\n"), "{entries}");
+    for item in ["\"a\": 1", "\"o\\u{301}\": 1", "\"ó\": 2"] {
+        assert!(entries.contains(item), "missing {item}: {entries}");
+    }
+    assert!(entries.contains("\\u{a0}"), "{entries}");
+    Ok(())
+}
+
+#[test]
+fn notebook_inspect_flow_inventory_refuses_conflicts_before_source_reads() {
+    for (extra, expected) in [
+        (vec!["--inspect-flow-inventory"],
+            "--inspect-flow-inventory requires --inspect-flow"),
+        (vec!["--inspect-flow-inventory", "--inspect-flow-inventory"],
+            "--inspect-flow-inventory may appear only once"),
+        (vec!["--inspect-flow-inventory", "--inspect-flow",
+            "--output", "unwanted.tsv"],
+            "--inspect-flow is stdout only"),
+        (vec!["--inspect-flow-inventory", "--inspect-flow",
+            "--glyph-file", "missing-glyphs.tsv"],
+            "--inspect-flow cannot include authored ink"),
+    ] {
+        let mut command = args(&[
+            "--profile", "missing-inspect-inventory-notebook.json",
+            "--flow-text", "a",
+        ]);
+        command.extend(extra.into_iter().map(str::to_owned));
+        let error = execute_notebook(&command)
+            .expect_err("inventory conflict must refuse before source IO");
+        assert!(error.contains(expected), "{error:?}");
+    }
+}
+
+#[test]
+fn notebook_inspect_flow_inventory_preserves_literal_fence_ink()
+-> Result<(), String> {
+    let source = "# a\n```txt\n# a\n```\n";
+    let report = execute_notebook(&args(&[
+        "--inspect-flow", "--inspect-flow-inventory",
+        "--flow-markdown", source,
+    ]))?.ok_or("missing read-only fenced-code inventory")?;
+    let report = String::from_utf8(report)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains("Pages: 1\nRows: 2\nOrnaments: 1\n"),
+        "{report}");
+    let entries = report.split("Glyph inventory: ").nth(1)
+        .ok_or("missing inventory section")?;
+    assert_eq!(entries, concat!(
+        "2 exact forms, 3 uses\n",
+        "\"#\": 1\n",
+        "\"a\": 2\n",
+    ));
+    // The fence itself and its metadata are syntax, but the identical
+    // hash inside literal content is an authored pen-shape obligation.
+    assert!(!entries.contains("\"`\""), "{entries}");
+    assert!(!entries.contains("\"t\""), "{entries}");
+    Ok(())
+}
