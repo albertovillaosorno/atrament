@@ -4885,3 +4885,23 @@ earlier report bytes. These checks are explicitly opt-in.
 
 This is useful for geometric diagnostics before export but does not measure
 semantic notebook content or complete the P1 saved two-page notebook journey.
+
+## Read-only validated physical ink palette (partial) — 2026-11-13
+
+`--inspect-flow-ink-palette` augments the in-memory physical geometry check
+with a sorted RGB-color and segment-count inventory for the complete notebook
+and each generated sheet, including `empty` for a page without pen strokes.
+It uses the exact expanded native ink from selected authored or explicitly
+borrowed glyphs plus Markdown ornaments, including heading marker color.
+Physical paper marks, printed dates and page numbers are not included.
+
+A new Rust test independently counts native TSV colors on two Markdown
+sheets with selected marker ink and fallback glyphs, and verifies unchanged
+older inspection bytes. Another test proves no-color sheets and pairing with
+ink bounds. Source-independent preflight refuses missing validation and
+duplicate palette options before selected file reads.
+
+The real-process Node flow case separately totals imported-library TSV
+colors and compares exact global and per-sheet reports. This is read-only
+physical ink diagnostics, not palette editing, visual blending analysis,
+semantic notebook persistence or completion of the open two-page journey.

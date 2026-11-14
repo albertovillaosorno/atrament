@@ -20986,8 +20986,112 @@ fn notebook_ink_bounds_cover_markdown_marker_and_borrowed_strokes()
 }
 
 #[test]
+fn notebook_ink_palette_counts_actual_marker_and_borrowed_colors()
+-> Result<(), String> {
+    let shared = args(&[
+        "--flow-markdown", "# a\n- ó\n> a", "--heading-style", "marker",
+        "--heading-color", "#F8DE91", "--flow-region", "30000",
+        "40000", "32000", "25000", "--glyph-stroke", "a",
+        "500", "600", "1500", "2500", "251", "#123456",
+        "--fallback-glyph", "ó", "a",
+    ]);
+    let mut inspect = shared.clone();
+    inspect.extend(args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-ink-validation", "--inspect-flow-ink-bounds",
+    ]));
+    let base = String::from_utf8(execute_notebook(&inspect)?
+        .ok_or("missing baseline ink report")?)
+        .map_err(|error| error.to_string())?;
+    inspect.push("--inspect-flow-ink-palette".into());
+    let report = String::from_utf8(execute_notebook(&inspect)?
+        .ok_or("missing physical palette report")?)
+        .map_err(|error| error.to_string())?;
+    let mut emission = shared;
+    emission.push("--emit-ink-file".into());
+    let tsv = String::from_utf8(execute_notebook(&emission)?
+        .ok_or("missing ink TSV")?)
+        .map_err(|error| error.to_string())?;
+    let mut global = BTreeMap::<String, usize>::new();
+    let mut per_page = BTreeMap::<usize, BTreeMap<String, usize>>::new();
+    for line in tsv.lines().skip(1) {
+        let cells: Vec<_> = line.split('\t').collect();
+        let [page, _, _, _, _, _, color] = cells.as_slice() else {
+            return Err(format!("invalid ink TSV row: {line:?}"));
+        };
+        let page = page.parse::<usize>()
+            .map_err(|error| error.to_string())?;
+        let color = color.to_uppercase();
+        *global.entry(color.clone()).or_default() += 1;
+        *per_page.entry(page).or_default().entry(color).or_default() += 1;
+    }
+    assert!(global.contains_key("#F8DE91"), "{tsv}");
+    assert!(global.contains_key("#123456"), "{tsv}");
+    let mut expected = String::new();
+    let empty_palette = BTreeMap::new();
+    for (title, palette) in std::iter::once((
+        "Validated ink palette".to_owned(), &global,
+    )).chain((1..=2).map(|page| (
+        format!("Page {page} validated ink palette"),
+        per_page.get(&page).unwrap_or(&empty_palette),
+    ))) {
+        let count = palette.len();
+        use std::fmt::Write as _;
+        let noun = if count == 1 { "color" } else { "colors" };
+        writeln!(expected, "{title}: {count} RGB {noun}")
+            .map_err(|error| error.to_string())?;
+        for (color, segments) in palette {
+            let noun = if *segments == 1 { "segment" }
+                else { "segments" };
+            writeln!(expected, "  {color}: {segments} {noun}")
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    assert_eq!(report.strip_prefix(&base), Some(expected.as_str()),
+        "{report}");
+    Ok(())
+}
+
+#[test]
+fn notebook_ink_palette_includes_empty_sheets()
+-> Result<(), String> {
+    let mut inspect = args(&[
+        "--flow-text", "\n\na", "--flow-region", "30000", "40000",
+        "32000", "25000", "--inspect-flow",
+        "--inspect-flow-shape-coverage", "--inspect-flow-ink-validation",
+        "--inspect-flow-ink-palette", "--glyph-stroke", "a",
+        "500", "600", "1500", "2500", "251", "#12ab34",
+    ]);
+    let report = String::from_utf8(execute_notebook(&inspect)?
+        .ok_or("missing color palette")?)
+        .map_err(|error| error.to_string())?;
+    assert!(report.ends_with(concat!(
+        "Validated ink palette: 1 RGB color\n",
+        "  #12AB34: 1 segment\n",
+        "Page 1 validated ink palette: empty\n",
+        "Page 2 validated ink palette: 1 RGB color\n",
+        "  #12AB34: 1 segment\n",
+    )), "{report}");
+    inspect.push("--inspect-flow-ink-bounds".into());
+    let both = String::from_utf8(execute_notebook(&inspect)?
+        .ok_or("missing combined inspection")?)
+        .map_err(|error| error.to_string())?;
+    assert!(both.contains("Page 1 validated ink bounds: empty"));
+    assert!(both.ends_with(concat!(
+        "Validated ink palette: 1 RGB color\n",
+        "  #12AB34: 1 segment\n",
+        "Page 1 validated ink palette: empty\n",
+        "Page 2 validated ink palette: 1 RGB color\n",
+        "  #12AB34: 1 segment\n",
+    )), "{both}");
+    Ok(())
+}
+
+#[test]
 fn notebook_ink_validation_flags_refuse_before_selected_file_io() {
     for (extra, expected) in [
+        (vec!["--inspect-flow-ink-palette"],
+            "--inspect-flow-ink-palette requires"),
         (vec!["--inspect-flow-ink-bounds"],
             "--inspect-flow-ink-bounds requires"),
         (vec!["--inspect-flow", "--inspect-flow-ink-bounds"],
@@ -21003,6 +21107,10 @@ fn notebook_ink_validation_flags_refuse_before_selected_file_io() {
             "--inspect-flow-ink-validation",
             "--inspect-flow-ink-validation"],
             "--inspect-flow-ink-validation may appear only once"),
+        (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-ink-validation", "--inspect-flow-ink-palette",
+            "--inspect-flow-ink-palette"],
+            "--inspect-flow-ink-palette may appear only once"),
         (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
             "--inspect-flow-ink-validation", "--inspect-flow-ink-bounds",
             "--inspect-flow-ink-bounds"],

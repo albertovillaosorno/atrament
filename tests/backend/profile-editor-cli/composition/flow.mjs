@@ -8728,6 +8728,48 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             }).join('\n') + '\n';
             assert.equal(physicalBounds.stdout.slice(verified.stdout.length),
                 expectedBounds);
+            const palette = run([
+                '--inspect-flow', '--inspect-flow-inventory',
+                '--inspect-flow-page-inventory',
+                '--inspect-flow-shape-coverage',
+                '--inspect-flow-stroke-demand',
+                '--inspect-flow-ink-validation',
+                '--inspect-flow-ink-palette',
+                '--flow-text', source, ...region, ...shape,
+            ]);
+            assert.equal(palette.status, 0, palette.stderr);
+            assert.ok(palette.stdout.startsWith(verified.stdout),
+                'palette is an opt-in extension of validated ink');
+            const counts = new Map();
+            const pageCounts = new Map();
+            for (const line of rows) {
+                const cells = line.split('\t');
+                const page = Number(cells[0]);
+                const rgb = cells[6].toUpperCase();
+                counts.set(rgb, (counts.get(rgb) ?? 0) + 1);
+                const local = pageCounts.get(page) ?? new Map();
+                local.set(rgb, (local.get(rgb) ?? 0) + 1);
+                pageCounts.set(page, local);
+            }
+            const description = (label, colorCounts) => {
+                if (!colorCounts || colorCounts.size === 0) {
+                    return `${label}: empty\n`;
+                }
+                const noun = colorCounts.size === 1 ? 'color' : 'colors';
+                return `${label}: ${colorCounts.size} RGB ${noun}\n`
+                    + [...colorCounts].sort(([a], [b]) =>
+                        a.localeCompare(b)).map(([rgb, count]) => {
+                            const segmentNoun = count === 1
+                                ? 'segment' : 'segments';
+                            return `  ${rgb}: ${count} ${segmentNoun}\n`;
+                        }).join('');
+            };
+            const expectedPalette = description('Validated ink palette',
+                counts) + [1, 2].map((page) => description(
+                `Page ${page} validated ink palette`, pageCounts.get(page),
+            )).join('');
+            assert.equal(palette.stdout.slice(verified.stdout.length),
+                expectedPalette);
             for (const format of ['pdf', 'png']) {
                 const output = join(dir, `page.${format}`);
                 const exported = run([
@@ -8779,6 +8821,16 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             assert.match(invalidInkBounds.stderr,
                 /--inspect-flow-ink-bounds requires/);
             assert.doesNotMatch(invalidInkBounds.stderr,
+                /FileIo\(NotFound\)/);
+            const invalidInkPalette = run([
+                '--flow-text-file', join(dir, 'nonexistent.md'),
+                '--inspect-flow', '--inspect-flow-shape-coverage',
+                '--inspect-flow-ink-palette',
+            ]);
+            assert.notEqual(invalidInkPalette.status, 0);
+            assert.match(invalidInkPalette.stderr,
+                /--inspect-flow-ink-palette requires/);
+            assert.doesNotMatch(invalidInkPalette.stderr,
                 /FileIo\(NotFound\)/);
         } finally {
             rmSync(dir, { recursive: true, force: true });

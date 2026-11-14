@@ -606,6 +606,27 @@ It is a conservative axis-aligned envelope, not a proof of collision-free
 letterforms or a substitute for inspecting the rendered image. Prior report
 bytes are unchanged without the new option.
 
+For an **actual ink-color inventory** in the same read-only validation,
+select `--inspect-flow-ink-palette` after the required
+`--inspect-flow --inspect-flow-shape-coverage`
+and `--inspect-flow-ink-validation` flags. The report prints sorted RGB hex
+colors with native stroke counts for the complete notebook and every sheet.
+It reflects selected glyph inks (including explicit fallback shapes),
+heading marker bands, bullets and other generated Markdown ornaments.
+Blank pages report `empty`, even if the printable paper has ruling or a date.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --flow-markdown-file notes.md --glyph-file writer.tsv \
+  --inspect-flow --inspect-flow-shape-coverage \
+  --inspect-flow-ink-validation --inspect-flow-ink-palette
+```
+
+The palette is drawn from fully expanded, printable physical pen segments,
+not a suggested color scheme or a rendering of paper annotations. It does
+not assign colors to semantic blocks or predict visual blending and changes
+no saved profile fields. Previous reports are byte-identical when omitted.
+
 This is an in-memory dry run of the current unjoined, non-varied flow ink,
 not a PNG pixel-budget test, a calibrated handwriting inspection or a proof
 of visual quality. Explicit placed ink, joins and seeded variation remain
