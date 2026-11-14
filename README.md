@@ -673,6 +673,29 @@ report `empty`. It is a read-only physical inventory, not a prediction of
 ink volume, print time, color blending or plotter travel. The previous
 length report stays byte-identical without this additional flag.
 
+Add `--inspect-flow-ink-gaps` to the normal physical validation flags to
+inspect **as-emitted endpoint displacement** between successive physical ink
+segments. The report counts each consecutive pair on the same paper sheet
+and sums the rounded Euclidean gap between the earlier segment's end and the
+later segment's start, globally and per page. A single-segment sheet has
+zero transitions; a sheet with no ink reports `empty`. The CLI reads the
+same expanded ink as PDF/PNG and never reorders its pen segments.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --flow-markdown-file notes.md --glyph-file writer.tsv \
+  --inspect-flow --inspect-flow-shape-coverage \
+  --inspect-flow-ink-validation --inspect-flow-ink-gaps
+```
+
+These are geometric gaps in the **emitted order**, not a plotter's actual
+pen-up travel, optimized route, printing time or device movement plan.
+Different pen colors still have consecutive endpoints; no hypothetical
+motion between separate sheets is counted. The validator runs before the
+read-only report, and a missing library, invalid page or bad option refuses
+without writing anything. Previously available report bytes remain unchanged
+when this option is omitted.
+
 This is an in-memory dry run of the current unjoined, non-varied flow ink,
 not a PNG pixel-budget test, a calibrated handwriting inspection or a proof
 of visual quality. Explicit placed ink, joins and seeded variation remain

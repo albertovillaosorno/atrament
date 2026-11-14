@@ -21544,6 +21544,195 @@ fn notebook_ink_length_by_color_matches_native_tsv()
 }
 
 #[test]
+fn emitted_endpoint_gaps_match_native_two_page_tsv_oracle()
+-> Result<(), String> {
+    let shared = args(&[
+        "--flow-markdown", "# a\n- ó\n> a", "--heading-style", "marker",
+        "--flow-region", "30000", "40000", "32000", "25000",
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "251", "#123456", "--glyph-stroke", "a", "600", "700",
+        "1600", "3200", "501", "#123456",
+        "--fallback-glyph", "ó", "a",
+    ]);
+    let mut flags = shared.clone();
+    flags.extend(args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-ink-validation", "--inspect-flow-ink-length",
+    ]));
+    let before = String::from_utf8(execute_notebook(&flags)?
+        .ok_or("missing baseline physical geometry report")?)
+        .map_err(|error| error.to_string())?;
+    flags.push("--inspect-flow-ink-gaps".into());
+    let after = String::from_utf8(execute_notebook(&flags)?
+        .ok_or("missing endpoint displacement report")?)
+        .map_err(|error| error.to_string())?;
+    let mut emit = shared;
+    emit.push("--emit-ink-file".into());
+    let tsv = String::from_utf8(execute_notebook(&emit)?
+        .ok_or("missing physical ink TSV")?)
+        .map_err(|error| error.to_string())?;
+    let mut last = [None::<(u32, u32)>; 2];
+    let mut totals = [0u128; 2];
+    let mut counts = [0usize; 2];
+    for row in tsv.lines().skip(1) {
+        let cells: Vec<_> = row.split('\t').collect();
+        let [page, x1, y1, x2, y2, _, _] = cells.as_slice() else {
+            return Err(format!("bad physical TSV: {row:?}"));
+        };
+        let page = page.parse::<usize>()
+            .map_err(|error| error.to_string())?;
+        let [x1, y1, x2, y2] = [x1, y1, x2, y2]
+            .map(|value| value.parse::<u32>()
+                .map_err(|error| error.to_string()))
+            .into_iter().collect::<Result<Vec<_>, _>>()?
+            .try_into().map_err(|_| "unexpected coordinates")?;
+        let Some(prior) = last.get_mut(page - 1) else {
+            return Err(format!("unexpected physical page: {page}"));
+        };
+        if let Some((x, y)) = *prior {
+            totals[page - 1] += f64::from(x.abs_diff(x1))
+                .hypot(f64::from(y.abs_diff(y1))).round() as u128;
+            counts[page - 1] += 1;
+        }
+        *prior = Some((x2, y2));
+    }
+    assert!(counts.iter().all(|count| *count > 0), "{tsv}");
+    let expected = format!(
+        "Validated ink emitted endpoint gaps: {} um across {} transitions\n\
+         Page 1 validated ink endpoint gaps: {} um across {} transitions\n\
+         Page 2 validated ink endpoint gaps: {} um across {} transitions\n",
+        totals.iter().sum::<u128>(), counts.iter().sum::<usize>(),
+        totals[0], counts[0], totals[1], counts[1],
+    );
+    assert_eq!(after.strip_prefix(&before), Some(expected.as_str()));
+    Ok(())
+}
+
+#[test]
+fn endpoint_gaps_skip_empty_sheets_and_refuse_invalid_pages_atomically()
+-> Result<(), String> {
+    let blank = args(&[
+        "--flow-text", "\n\na", "--flow-region", "30000", "40000",
+        "32000", "25000", "--inspect-flow",
+        "--inspect-flow-shape-coverage", "--inspect-flow-ink-validation",
+        "--inspect-flow-ink-gaps", "--glyph-stroke", "a",
+        "500", "600", "1500", "2500", "251", "#123456",
+    ]);
+    let report = String::from_utf8(execute_notebook(&blank)?
+        .ok_or("missing blank-sheet gap inspection")?)
+        .map_err(|error| error.to_string())?;
+    assert!(report.ends_with(concat!(
+        "Validated ink emitted endpoint gaps: 0 um across 0 transitions\n",
+        "Page 1 validated ink endpoint gaps: empty\n",
+        "Page 2 validated ink endpoint gaps: 0 um across 0 transitions\n",
+    )), "{report}");
+    let valid = NotebookInkLine {
+        page: 1, start_um: (200, 100), end_um: (200, 250),
+        width_um: 250, rgb: [0, 0, 0],
+    };
+    let next = NotebookInkLine {
+        page: 1, start_um: (203, 254), end_um: (203, 304), ..valid
+    };
+    let first_on_second = NotebookInkLine { page: 2, ..valid };
+    let next_on_second = NotebookInkLine { page: 2, ..next };
+    // A zero-distance color change is still one consecutive-segment pair.
+    let touching = NotebookInkLine {
+        start_um: next.end_um, end_um: (203, 354),
+        rgb: [255, 0, 0], ..next
+    };
+    let mut result = String::new();
+    append_flow_ink_gaps(&mut result,
+        &[valid, first_on_second, next, touching, next_on_second], 3)?;
+    assert_eq!(result, concat!(
+        "Validated ink emitted endpoint gaps: 10 um across 3 transitions\n",
+        "Page 1 validated ink endpoint gaps: 5 um across 2 transitions\n",
+        "Page 2 validated ink endpoint gaps: 5 um across 1 transition\n",
+        "Page 3 validated ink endpoint gaps: empty\n",
+    ));
+    let mut previous = String::from("existing output\n");
+    for invalid in [NotebookInkLine { page: 0, ..next },
+                    NotebookInkLine { page: 4, ..next }] {
+        assert_eq!(append_flow_ink_gaps(&mut previous,
+            &[valid, first_on_second, next, invalid], 3),
+            Err("validated ink references nonexistent physical page".into()));
+        assert_eq!(previous, "existing output\n");
+    }
+    Ok(())
+}
+
+#[test]
+fn randomized_emitted_endpoint_gaps_preserve_sheet_local_stroke_order()
+-> Result<(), String> {
+    use std::fmt::Write as _;
+    let mut seed = 0xF123_4567_89AB_CDEFu64;
+    let next = |value: &mut u64| {
+        *value = value.wrapping_mul(2862933555777941757)
+            .wrapping_add(3037000493);
+        *value >> 16
+    };
+    for case in 0..1024 {
+        let pages = 1 + (next(&mut seed) % 32) as usize;
+        let count = (next(&mut seed) % 100) as usize;
+        let mut lines = Vec::new();
+        let mut last = vec![None::<(u32, u32)>; pages];
+        let mut lengths = vec![0u128; pages];
+        let mut counts = vec![0usize; pages];
+        let mut occupied = vec![false; pages];
+        for _ in 0..count {
+            let page_index = (next(&mut seed) % pages as u64) as usize;
+            let x1 = 30000 + (next(&mut seed) % 160000) as u32;
+            let y1 = 30000 + (next(&mut seed) % 200000) as u32;
+            let x2 = 30000 + (next(&mut seed) % 160000) as u32;
+            let y2 = 30000 + (next(&mut seed) % 200000) as u32;
+            let line = NotebookInkLine {
+                page: page_index + 1, start_um: (x1, y1),
+                end_um: (x2, y2), width_um: 250,
+                rgb: [0, (next(&mut seed) % 256) as u8, 0],
+            };
+            occupied[page_index] = true;
+            if let Some((prior_x, prior_y)) = last[page_index] {
+                lengths[page_index] += f64::from(prior_x.abs_diff(x1))
+                    .hypot(f64::from(prior_y.abs_diff(y1)))
+                    .round() as u128;
+                counts[page_index] += 1;
+            }
+            last[page_index] = Some(line.end_um);
+            lines.push(line);
+        }
+        let total_length = lengths.iter().sum::<u128>();
+        let total_count = counts.iter().sum::<usize>();
+        let noun = if total_count == 1 { "transition" }
+            else { "transitions" };
+        let mut expected = format!(
+            "Validated ink emitted endpoint gaps: {total_length} um \
+             across {total_count} {noun}\n"
+        );
+        for page_index in 0..pages {
+            let page = page_index + 1;
+            if occupied[page_index] {
+                let count = counts[page_index];
+                let length = lengths[page_index];
+                let noun = if count == 1 { "transition" }
+                    else { "transitions" };
+                writeln!(expected,
+                    "Page {page} validated ink endpoint gaps: {length} um \
+                     across {count} {noun}")
+                    .map_err(|error| error.to_string())?;
+            } else {
+                writeln!(expected,
+                    "Page {page} validated ink endpoint gaps: empty")
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+        let mut observed = String::new();
+        append_flow_ink_gaps(&mut observed, &lines, pages)?;
+        assert_eq!(observed, expected,
+            "case {case}: page-local emitted order and Euclidean lengths");
+    }
+    Ok(())
+}
+
+#[test]
 fn randomized_ink_distance_reports_match_independent_color_oracle()
 -> Result<(), String> {
     use std::fmt::Write as _;
@@ -21683,6 +21872,7 @@ fn maximum_page_flow_reports_last_sheet_pen_distance_and_color()
         "--inspect-flow", "--inspect-flow-shape-coverage",
         "--inspect-flow-ink-validation", "--inspect-flow-ink-length",
         "--inspect-flow-ink-length-by-color",
+        "--inspect-flow-ink-gaps",
     ]));
     let report = String::from_utf8(execute_notebook(&inspect)?
         .ok_or("missing maximal flow physical ink report")?)
@@ -21696,9 +21886,17 @@ fn maximum_page_flow_reports_last_sheet_pen_distance_and_color()
         "Validated ink length by color: 1 RGB color\n",
         "  #123456: 68704 um across 32 segments\n",
     )), "{report}");
+    assert!(report.contains(concat!(
+        "Validated ink emitted endpoint gaps: 0 um across 0 transitions\n",
+        "Page 1 validated ink endpoint gaps: 0 um across 0 transitions\n",
+    )), "{report}");
     for page in 1..=32 {
         assert!(report.contains(&format!(
             "Page {page} validated ink pen-down length: 2147 um\n"
+        )), "page {page}: {report}");
+        assert!(report.contains(&format!(
+            "Page {page} validated ink endpoint gaps: 0 um \
+             across 0 transitions\n"
         )), "page {page}: {report}");
         assert!(report.contains(&format!(
             "Page {page} validated ink length by color: 1 RGB color\n  \
@@ -21723,6 +21921,7 @@ fn maximum_page_flow_reports_last_sheet_pen_distance_and_color()
         "--inspect-flow", "--inspect-flow-shape-coverage",
         "--inspect-flow-ink-validation", "--inspect-flow-ink-length",
         "--inspect-flow-ink-length-by-color",
+        "--inspect-flow-ink-gaps",
     ]));
     let error = execute_notebook(&too_many)
         .expect_err("33 physical sheets must exceed native flow limit");

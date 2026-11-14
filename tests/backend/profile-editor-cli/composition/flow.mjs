@@ -8897,6 +8897,53 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             )).join('');
             assert.equal(byColor.stdout.slice(lengths.stdout.length),
                 expectedByColor);
+            const gaps = run([
+                '--inspect-flow', '--inspect-flow-inventory',
+                '--inspect-flow-page-inventory',
+                '--inspect-flow-shape-coverage',
+                '--inspect-flow-stroke-demand',
+                '--inspect-flow-ink-validation',
+                '--inspect-flow-ink-gaps',
+                '--flow-text', source, ...region, ...shape,
+            ]);
+            assert.equal(gaps.status, 0, gaps.stderr);
+            assert.ok(gaps.stdout.startsWith(verified.stdout));
+            const endpoints = new Map();
+            const gapDistances = new Map();
+            const gapCounts = new Map();
+            for (const row of rows) {
+                const [page, x1, y1, x2, y2] = row.split('\t')
+                    .slice(0, 5).map(Number);
+                const prior = endpoints.get(page);
+                if (prior) {
+                    const distance = Math.round(Math.hypot(
+                        x1 - prior[0], y1 - prior[1]));
+                    gapDistances.set(page,
+                        (gapDistances.get(page) ?? 0) + distance);
+                    gapCounts.set(page, (gapCounts.get(page) ?? 0) + 1);
+                }
+                endpoints.set(page, [x2, y2]);
+            }
+            const totalGaps = [...gapDistances.values()]
+                .reduce((sum, value) => sum + value, 0);
+            const totalTransitions = [...gapCounts.values()]
+                .reduce((sum, value) => sum + value, 0);
+            const expectedGaps = [
+                `Validated ink emitted endpoint gaps: ${totalGaps} um `
+                    + `across ${totalTransitions} `
+                    + `${totalTransitions === 1
+                        ? 'transition' : 'transitions'}`,
+                ...[1, 2].map((page) => endpoints.has(page)
+                    ? `Page ${page} validated ink endpoint gaps: `
+                        + `${gapDistances.get(page) ?? 0} um across `
+                        + `${gapCounts.get(page) ?? 0} `
+                        + `${gapCounts.get(page) === 1
+                            ? 'transition' : 'transitions'}`
+                    : `Page ${page} validated ink endpoint gaps: empty`),
+                '',
+            ].join('\n');
+            assert.equal(gaps.stdout.slice(verified.stdout.length),
+                expectedGaps);
             for (const format of ['pdf', 'png']) {
                 const output = join(dir, `page.${format}`);
                 const exported = run([
@@ -8978,6 +9025,25 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             assert.match(invalidInkLength.stderr,
                 /--inspect-flow-ink-length requires/);
             assert.doesNotMatch(invalidInkLength.stderr,
+                /FileIo\(NotFound\)/);
+            const invalidInkGaps = run([
+                '--flow-text-file', join(dir, 'nonexistent.md'),
+                '--inspect-flow', '--inspect-flow-shape-coverage',
+                '--inspect-flow-ink-gaps',
+            ]);
+            assert.notEqual(invalidInkGaps.status, 0);
+            assert.match(invalidInkGaps.stderr,
+                /--inspect-flow-ink-gaps requires/);
+            assert.doesNotMatch(invalidInkGaps.stderr,
+                /FileIo\(NotFound\)/);
+            const duplicateInkGaps = run([
+                '--flow-text-file', join(dir, 'nonexistent.md'),
+                '--inspect-flow-ink-gaps', '--inspect-flow-ink-gaps',
+            ]);
+            assert.notEqual(duplicateInkGaps.status, 0);
+            assert.match(duplicateInkGaps.stderr,
+                /--inspect-flow-ink-gaps may appear only once/);
+            assert.doesNotMatch(duplicateInkGaps.stderr,
                 /FileIo\(NotFound\)/);
             const invalidInkColorLength = run([
                 '--flow-text-file', join(dir, 'nonexistent.md'),

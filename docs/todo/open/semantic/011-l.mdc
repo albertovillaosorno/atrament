@@ -4985,3 +4985,31 @@ contributes the same rounded micrometre distance; their sum matches the
 global report. A 33rd flow row requiring a new sheet refuses instead of
 silently omitting its ink from the aggregate. This preserves the existing
 native page-count ceiling without promising plotter travel semantics.
+
+## Read-only emitted endpoint displacement (partial) — 2026-11-13
+
+The optional `--inspect-flow-ink-gaps` extends the all-page native ink dry run
+with the straight-line distance between consecutive emitted stroke endpoints
+on each physical sheet. Distances are independently rounded in micrometres
+using the same checked integer root as pen-down length, then summed without
+cross-sheet transitions.
+
+All generated ornaments, authored or explicitly borrowed glyphs and ink color
+switches retain the real expansion order. Pages with a single ink segment
+report zero transitions; blank sheets report
+`empty`. The output includes total transitions and lengths globally and for
+every physical sheet.
+
+A native TSV oracle compares actual two-page colored and borrowed Markdown
+strokes against independent real-valued geometry, preserving earlier report
+bytes. A separate native regression proves interleaved physical sheets are
+tracked independently, blank sheets and single strokes, and atomic refusal
+for invalid first or late page indices. The real-process Node test confirms
+TSV-derived gaps from imported Unicode glyphs, previous byte prefixes and
+source-independent missing-prerequisite/duplicate-option refusals. All
+checks run without selecting any PDF, PNG, TSV or saved-profile output.
+
+These measurements describe endpoint separations in emitted segment order,
+not an actual pen-up itinerary, optimized device route, travel time, ink
+material usage or completion of persisted semantic notebook compilation.
+ATR-P2-011 remains open.

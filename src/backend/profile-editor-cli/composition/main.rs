@@ -195,6 +195,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--inspect-flow-ink-widths (requires --inspect-flow-ink-validation)] \
     [--inspect-flow-ink-length (requires --inspect-flow-ink-validation)] \
     [--inspect-flow-ink-length-by-color (requires --inspect-flow-ink-length)] \
+    [--inspect-flow-ink-gaps (requires --inspect-flow-ink-validation)] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--ruler-seed UINT32 --ruler-error-mm 0.001..0.250] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
@@ -332,6 +333,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     lengths in micrometres per page, excluding pen-up moves and paper. \
     --inspect-flow-ink-length-by-color groups those physical lengths by \
     selected pen RGB color for the whole notebook and each sheet. \
+    --inspect-flow-ink-gaps sums consecutive emitted-segment endpoint \
+    distances on each sheet, excluding cross-page and device moves. \
     Shape coverage is opt-in and does not validate physical ink bounds. \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
@@ -478,6 +481,7 @@ struct NotebookRequest {
     inspect_flow_ink_widths: bool,
     inspect_flow_ink_length: bool,
     inspect_flow_ink_length_by_color: bool,
+    inspect_flow_ink_gaps: bool,
     output: Option<String>,
     pages: usize,
     pages_explicit: bool,
@@ -644,7 +648,8 @@ impl NotebookFlagPreflight {
             | "--inspect-flow-ink-palette"
             | "--inspect-flow-ink-widths"
             | "--inspect-flow-ink-length"
-            | "--inspect-flow-ink-length-by-color" => {
+            | "--inspect-flow-ink-length-by-color"
+            | "--inspect-flow-ink-gaps" => {
                 self.unique(option, &format!("{option} may appear only once"))?;
                 0
             }
@@ -775,6 +780,13 @@ impl NotebookFlagPreflight {
             return Err(
                 "--inspect-flow-inventory requires --inspect-flow".into()
             );
+        }
+        if has("--inspect-flow-ink-gaps")
+            && !has("--inspect-flow-ink-validation") {
+            return Err(concat!(
+                "--inspect-flow-ink-gaps requires ",
+                "--inspect-flow-ink-validation",
+            ).into());
         }
         if has("--inspect-flow-ink-length-by-color")
             && !has("--inspect-flow-ink-length") {
@@ -3288,6 +3300,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut inspect_flow_ink_widths = false;
     let mut inspect_flow_ink_length = false;
     let mut inspect_flow_ink_length_by_color = false;
+    let mut inspect_flow_ink_gaps = false;
     let (mut export, mut ink) = (NotebookExportOptions::default(), Vec::new());
     let (mut glyphs, mut statistics) = (GlyphOverlay::default(), None);
     let (mut flow, mut flow_region) = (None, None);
@@ -3384,6 +3397,11 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 ),
             "--inspect-flow-ink-length-by-color" =>
                 inspect_flow_ink_length_by_color = true,
+            "--inspect-flow-ink-gaps" if inspect_flow_ink_gaps =>
+                return Err(
+                    "--inspect-flow-ink-gaps may appear only once".into()
+                ),
+            "--inspect-flow-ink-gaps" => inspect_flow_ink_gaps = true,
             "--handwriting-profile" =>
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
             "--heading-style" | "--heading-align" | "--heading-color"
@@ -3455,6 +3473,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         inspect_flow_ink_widths,
         inspect_flow_ink_length,
         inspect_flow_ink_length_by_color,
+        inspect_flow_ink_gaps,
         output,
         pages: export.pages.unwrap_or(1),
         png_page: export.png_page.unwrap_or(1),
@@ -3968,11 +3987,11 @@ fn append_flow_ink_widths(
 // Sum the centerline distances of already validated physical segments.
 // Round each square root to the nearest micrometre using integers only:
 // neither floating-point drift nor a pen-up travel assumption is admitted.
-fn rounded_ink_segment_length_um(
-    line: &NotebookInkLine,
+fn rounded_coordinate_length_um(
+    start: (u32, u32), end: (u32, u32),
 ) -> Result<u128, &'static str> {
-    let dx = u128::from(line.start_um.0.abs_diff(line.end_um.0));
-    let dy = u128::from(line.start_um.1.abs_diff(line.end_um.1));
+    let dx = u128::from(start.0.abs_diff(end.0));
+    let dy = u128::from(start.1.abs_diff(end.1));
     let squared = dx.checked_mul(dx)
         .and_then(|x| dy.checked_mul(dy)
             .and_then(|y| x.checked_add(y)))
@@ -3989,6 +4008,12 @@ fn rounded_ink_segment_length_um(
     let upper_error = upper_sq.checked_sub(squared)
         .ok_or("validated ink ceiling distance underflow")?;
     Ok(if lower_error >= upper_error { upper } else { floor })
+}
+
+fn rounded_ink_segment_length_um(
+    line: &NotebookInkLine,
+) -> Result<u128, &'static str> {
+    rounded_coordinate_length_um(line.start_um, line.end_um)
 }
 
 fn append_flow_ink_length(
@@ -4078,6 +4103,64 @@ fn append_flow_ink_length_by_color(
     Ok(())
 }
 
+// Report straight-line separations between consecutive segments as emitted
+// within each physical sheet. A color switch or shared endpoint is still one
+// transition: these are diagnostics, not a device itinerary or an optimized
+// pen-up path. Do not invent any transition across a paper boundary.
+fn append_flow_ink_gaps(
+    report: &mut String, ink: &[NotebookInkLine], pages: usize,
+) -> Result<(), String> {
+    let mut endpoints = vec![None::<(u32, u32)>; pages];
+    let mut lengths = vec![0u128; pages];
+    let mut counts = vec![0usize; pages];
+    let mut global_length = 0u128;
+    let mut global_count = 0usize;
+    for line in ink {
+        let page_index = line.page.checked_sub(1)
+            .ok_or("validated ink references nonexistent physical page")?;
+        let prior = endpoints.get_mut(page_index)
+            .ok_or("validated ink references nonexistent physical page")?;
+        if let Some(end) = *prior {
+            let distance = rounded_coordinate_length_um(end, line.start_um)?;
+            let page_length = lengths.get_mut(page_index)
+                .ok_or("validated ink references nonexistent physical page")?;
+            *page_length = page_length.checked_add(distance)
+                .ok_or("validated ink gap length overflow")?;
+            let page_count = counts.get_mut(page_index)
+                .ok_or("validated ink references nonexistent physical page")?;
+            *page_count = page_count.checked_add(1)
+                .ok_or("validated ink gap count overflow")?;
+            global_length = global_length.checked_add(distance)
+                .ok_or("validated ink global gap length overflow")?;
+            global_count = global_count.checked_add(1)
+                .ok_or("validated ink global gap count overflow")?;
+        }
+        *prior = Some(line.end_um);
+    }
+    let global_noun = if global_count == 1 { "transition" }
+        else { "transitions" };
+    writeln!(report,
+        "Validated ink emitted endpoint gaps: {global_length} um across \
+         {global_count} {global_noun}",
+    ).map_err(|error| format!("flow ink gap report refused: {error}"))?;
+    for (index, ((endpoint, length), count)) in endpoints.iter()
+        .zip(lengths.iter()).zip(counts.iter()).enumerate() {
+        let page = index + 1;
+        if endpoint.is_none() {
+            writeln!(report, "Page {page} validated ink endpoint gaps: empty")
+        } else {
+            let noun = if *count == 1 { "transition" }
+                else { "transitions" };
+            writeln!(report,
+                "Page {page} validated ink endpoint gaps: {length} um \
+                 across {count} {noun}")
+        }.map_err(|error| {
+            format!("flow ink gap report refused: {error}")
+        })?;
+    }
+    Ok(())
+}
+
 // Opt-in full native geometry check. The same glyph expansion and physical
 // PDF admission as export run in memory; no file is selected or written.
 // Keep this separate from nominal coverage, which may inspect missing shapes.
@@ -4148,6 +4231,9 @@ fn append_flow_ink_validation(
     }
     if request.inspect_flow_ink_length_by_color {
         append_flow_ink_length_by_color(report, &ink, pages)?;
+    }
+    if request.inspect_flow_ink_gaps {
+        append_flow_ink_gaps(report, &ink, pages)?;
     }
     Ok(())
 }
