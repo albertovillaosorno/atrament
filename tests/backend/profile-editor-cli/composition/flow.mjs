@@ -10018,6 +10018,10 @@ test('parenthesized authored powers have exact native PDF/PNG row parity',
             ['abcdeX^(-2)g', 'X^(-2)g', '(', 'U+0028'],
             ['abcdeX⁽⁻²⁾g', 'X⁽⁻²⁾g', '⁽', 'U+207D'],
             ['abcdeX₍₋₂₎g', 'X₍₋₂₎g', '₍', 'U+208D'],
+            ['abcde12^(2)g', '12^(2)g', '(', 'U+0028'],
+            ['abcde12^(-2)', '12^(-2)', '(', 'U+0028'],
+            ['abcde12⁽⁻²⁾', '12⁽⁻²⁾', '⁽', 'U+207D'],
+            ['abcde12₍₋₂₎', '12₍₋₂₎', '₍', 'U+208D'],
         ];
         const stroke = (glyph) => [
             '--glyph-stroke', glyph, '600', '500', '1800',

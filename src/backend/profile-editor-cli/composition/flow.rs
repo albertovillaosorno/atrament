@@ -2458,6 +2458,29 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
     joins
 }
 
+// An authored parenthesized script may use the entire preceding integer
+// as its base. The scan stops at the first non-ASCII digit and never
+// performs unchecked index arithmetic on an untrusted source.
+fn parenthesized_numeric_base_start(
+    glyphs: &[MeasuredGrapheme<'_>], end: usize,
+    completed: bool, base: &str,
+) -> usize {
+    if !completed || !matches!(base.as_bytes(), [b'0'..=b'9']) {
+        return end;
+    }
+    let mut start = end;
+    while let Some(previous) = start.checked_sub(1) {
+        if !glyphs.get(previous)
+            .is_some_and(|item| matches!(
+                item.0.as_bytes(), [b'0'..=b'9']
+            )) {
+            break;
+        }
+        start = previous;
+    }
+    start
+}
+
 // Only attach a complete explicitly authored exponent or numeric subscript
 // to its immediately preceding letter or digit. Unlike a semantic math shaper,
 // this does not invent script forms or bind an entire chemical expression.
@@ -2484,6 +2507,7 @@ fn mark_authored_script_joins(
             continue;
         }
         let mut end = index.saturating_add(1);
+        let mut parenthesized_complete = false;
         loop {
             let (script, parenthesized) = match glyphs.get(end)
                 .map(|item| item.0) {
@@ -2557,9 +2581,18 @@ fn mark_authored_script_joins(
                 }
                 after_digits = after_digits.saturating_add(1);
             }
+            parenthesized_complete |= closing.is_some();
             end = after_digits;
         }
-        if let Some(ties) = joins.get_mut(index..end.saturating_sub(1)) {
+        // The final digit of a multi-digit ASCII base is not a separate
+        // numeric value. Extend a *complete* script cluster back through
+        // its authored adjacent digits, but never bind a bare number when
+        // the following script is incomplete. Other numeric separators
+        // retain their own measured grouping rules.
+        let start = parenthesized_numeric_base_start(
+            glyphs, index, parenthesized_complete, base,
+        );
+        if let Some(ties) = joins.get_mut(start..end.saturating_sub(1)) {
             ties.fill(true);
         }
         index = end;

@@ -9299,6 +9299,94 @@ fn authored_parenthesized_powers_bind_only_closed_digit_groups()
 }
 
 #[test]
+fn authored_multidigit_bases_keep_complete_parenthesized_scripts()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    for source in [
+        "123^(-2)", "123^(+12)",
+        "123\u{207d}\u{207b}\u{b2}\u{207e}",
+        "123\u{208d}\u{208b}\u{2082}\u{208e}",
+        "123^2", "123\u{b2}", "1.5^(2)",
+    ] {
+        let glyphs = super::measured_word(source, None)?.0;
+        let joins = super::numeric_separator_joins(&glyphs);
+        if joins.iter().any(|joined| !*joined) {
+            return Err(format!("{source:?}: numeric base split from script"));
+        }
+    }
+    // Bare Unicode numeric subscripts still attach only to the final
+    // base digit; complete parenthesized groups admit the whole base.
+    let bare = super::measured_word("10\u{2082}", None)?.0;
+    if super::numeric_separator_joins(&bare) != [false, true] {
+        return Err("bare numeric subscript acquired an extra tie".into());
+    }
+    for source in [
+        "123^(2", "123\u{207d}\u{b2}",
+        "123\u{208d}\u{2082}",
+    ] {
+        let glyphs = super::measured_word(source, None)?.0;
+        if super::numeric_separator_joins(&glyphs)
+            .iter().any(|joined| *joined) {
+            return Err(format!("{source:?}: incomplete script tied digits"));
+        }
+    }
+    // The longest admitted ASCII source is still scanned linearly.
+    let complete = format!("{}^(-2)", "1".repeat(4_091));
+    let glyphs = super::measured_word(&complete, None)?.0;
+    if super::numeric_separator_joins(&glyphs)
+        .iter().any(|joined| !*joined) {
+        return Err("full-size numeric script was split".into());
+    }
+    let incomplete = format!("{}^(2", "1".repeat(4_092));
+    let incomplete_glyphs = super::measured_word(&incomplete, None)?.0;
+    if super::numeric_separator_joins(&incomplete_glyphs)
+        .iter().any(|joined| *joined) {
+        return Err("full-size incomplete script unexpectedly bound".into());
+    }
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 36_000, height: 36_000,
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        for (source, tail) in [
+            ("abcde12^(2)g", "12^(2)g"),
+            ("abcde12^(-2)", "12^(-2)"),
+            ("abcde12\u{207d}\u{207b}\u{b2}\u{207e}",
+                "12\u{207d}\u{207b}\u{b2}\u{207e}"),
+            ("abcde12\u{208d}\u{208b}\u{2082}\u{208e}",
+                "12\u{208d}\u{208b}\u{2082}\u{208e}"),
+        ] {
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            let texts = rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>();
+            if pages != 1 || !marks.is_empty()
+                || texts != ["abcde", tail] {
+                return Err(format!("{source:?} {format:?}: {texts:?}"));
+            }
+        }
+        let narrow = super::FlowRegion {
+            width: 9_000, height: 128_000, ..region
+        };
+        let source = "12^(2)";
+        let (rows, _, _) = super::layout_flow_with_region(
+            &FlowSource::new(format, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(), Some(narrow),
+        )?;
+        if rows.iter().map(|row| row.text.as_str())
+            .collect::<String>() != source {
+            return Err("narrow numeric base fallback lost ink".into());
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn bounded_numeric_join_scan_handles_full_size_number_once()
 -> Result<(), String> {
     // The 4,096-byte source cap permits a single long numeric word.

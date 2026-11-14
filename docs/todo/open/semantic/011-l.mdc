@@ -5263,3 +5263,21 @@ physical rows against exported PDF and transparent PNG bytes, and confirms
 that an omitted parenthesis cannot overwrite an existing accepted export.
 This changes advisory CLI line breaking only; it does not parse expressions,
 add positioned glyphs, persist notebook semantics or finish notebook export.
+
+## Multi-digit authored numeric script bases (partial) — 2026-11-14
+
+The CLI measured-flow pass now keeps a complete authored parenthesized
+exponent or subscript with the entire immediately preceding ASCII digit run
+when its physical row fits. Previously, `12^(2)` could break as `1` and
+`2^(2)` because script suffixes only tied to the last digit. Decimal
+separators retain their existing numeric ties; a missing closing mark never
+turns an incomplete suffix into a tied number. Narrow rows still fall back
+to exact authored graphemes without clipping or synthesizing glyph shapes.
+
+A failing-before-fix Rust test covers unsigned multi-digit bases, signed
+parenthesized scripts, Unicode subscripts, incomplete groups and physical
+row fallback in both text source modes. Native CLI tests compare physical
+vector PDF and transparent PNG output with independently placed ink, and
+check missing authored glyphs cannot overwrite accepted output. This only
+changes advisory line breaking, not mathematical typography, semantic
+notebook persistence or the full notebook-to-PDF journey.
