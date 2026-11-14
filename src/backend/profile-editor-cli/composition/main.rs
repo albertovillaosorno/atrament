@@ -188,6 +188,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--inspect-flow-page-inventory (requires --inspect-flow-inventory)] \
     [--inspect-flow-shape-coverage (requires --inspect-flow)] \
     [--inspect-flow-stroke-demand (requires --inspect-flow-shape-coverage)] \
+    [--inspect-flow-stroke-breakdown (requires --inspect-flow-stroke-demand)] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--ruler-seed UINT32 --ruler-error-mm 0.001..0.250] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
@@ -311,6 +312,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     and explicit --fallback-glyph mappings without rendering ink. \
     --inspect-flow-stroke-demand counts known nominal pen segments and \
     unresolved glyph uses against the native 4096-segment export budget. \
+    --inspect-flow-stroke-breakdown attributes this demand to each exact \
+    or borrowed shape, globally and optionally per page. \
     Shape coverage is opt-in and does not validate physical ink bounds. \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
@@ -450,6 +453,7 @@ struct NotebookRequest {
     inspect_flow_page_inventory: bool,
     inspect_flow_shape_coverage: bool,
     inspect_flow_stroke_demand: bool,
+    inspect_flow_stroke_breakdown: bool,
     output: Option<String>,
     pages: usize,
     pages_explicit: bool,
@@ -609,7 +613,8 @@ impl NotebookFlagPreflight {
             "--inspect" | "--inspect-flow" | "--inspect-flow-inventory"
             | "--inspect-flow-page-inventory"
             | "--inspect-flow-shape-coverage"
-            | "--inspect-flow-stroke-demand" => {
+            | "--inspect-flow-stroke-demand"
+            | "--inspect-flow-stroke-breakdown" => {
                 self.unique(option, &format!("{option} may appear only once"))?;
                 0
             }
@@ -740,6 +745,13 @@ impl NotebookFlagPreflight {
             return Err(
                 "--inspect-flow-inventory requires --inspect-flow".into()
             );
+        }
+        if has("--inspect-flow-stroke-breakdown")
+            && !has("--inspect-flow-stroke-demand") {
+            return Err(concat!(
+                "--inspect-flow-stroke-breakdown requires ",
+                "--inspect-flow-stroke-demand",
+            ).into());
         }
         if has("--inspect-flow-stroke-demand")
             && !has("--inspect-flow-shape-coverage") {
@@ -3197,6 +3209,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut inspect_flow_page_inventory = false;
     let mut inspect_flow_shape_coverage = false;
     let mut inspect_flow_stroke_demand = false;
+    let mut inspect_flow_stroke_breakdown = false;
     let (mut export, mut ink) = (NotebookExportOptions::default(), Vec::new());
     let (mut glyphs, mut statistics) = (GlyphOverlay::default(), None);
     let (mut flow, mut flow_region) = (None, None);
@@ -3253,6 +3266,12 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 ),
             "--inspect-flow-stroke-demand" =>
                 inspect_flow_stroke_demand = true,
+            "--inspect-flow-stroke-breakdown" if inspect_flow_stroke_breakdown =>
+                return Err(
+                    "--inspect-flow-stroke-breakdown may appear only once".into()
+                ),
+            "--inspect-flow-stroke-breakdown" =>
+                inspect_flow_stroke_breakdown = true,
             "--handwriting-profile" =>
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
             "--heading-style" | "--heading-align" | "--heading-color"
@@ -3317,6 +3336,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         inspect_flow_page_inventory,
         inspect_flow_shape_coverage,
         inspect_flow_stroke_demand,
+        inspect_flow_stroke_breakdown,
         output,
         pages: export.pages.unwrap_or(1),
         png_page: export.png_page.unwrap_or(1),
@@ -3589,6 +3609,87 @@ fn append_flow_stroke_demand(
     Ok(())
 }
 
+// Attribute the nominal stroke count to the exact visible grapheme, not to
+// the borrowed source glyph. This stays read-only and preserves the previous
+// report bytes whenever the caller does not opt into the breakdown.
+#[expect(clippy::use_debug, reason =
+    "preserve escaped exact Unicode grapheme-key report spelling")]
+fn append_flow_stroke_breakdown(
+    report: &mut String, glyphs: &GlyphOverlay,
+    inventory: &BTreeMap<String, usize>,
+    page_inventories: &BTreeMap<usize, BTreeMap<String, usize>>,
+    pages: usize, show_page_detail: bool,
+) -> Result<(), String> {
+    let mut strokes = BTreeMap::<&str, usize>::new();
+    for stroke in &glyphs.strokes {
+        let count = strokes.entry(stroke.grapheme.as_str()).or_default();
+        *count = count.checked_add(1)
+            .ok_or("flow stroke breakdown overflow")?;
+    }
+    let describe = |out: &mut String, title: &str,
+                    forms: &BTreeMap<String, usize>|
+                    -> Result<(), String> {
+        let uses = forms.values().try_fold(0usize, |sum, count| {
+            sum.checked_add(*count)
+                .ok_or("flow stroke breakdown overflow")
+        })?;
+        let form_noun = if forms.len() == 1 { "form" } else { "forms" };
+        let use_noun = if uses == 1 { "use" } else { "uses" };
+        writeln!(out, "{title}: {} {form_noun}, {uses} {use_noun}",
+            forms.len())
+            .map_err(|error| format!("flow stroke breakdown refused: {error}"))?;
+        for (form, count) in forms {
+            let target = glyphs.fallbacks.iter()
+                .find(|mapping| mapping.missing == *form)
+                .map(|mapping| mapping.authored.as_str());
+            let selected = target.unwrap_or(form.as_str());
+            let use_noun = if *count == 1 { "use" } else { "uses" };
+            let line = match strokes.get(selected) {
+                Some(per_use) => {
+                    let segments = per_use.checked_mul(*count)
+                        .ok_or("flow stroke breakdown overflow")?;
+                    let stroke_noun = if *per_use == 1 {
+                        "stroke"
+                    } else { "strokes" };
+                    let segment_noun = if segments == 1 {
+                        "segment"
+                    } else { "segments" };
+                    let label = if let Some(source) = target {
+                        format!("Borrowed {form:?} from {source:?}")
+                    } else {
+                        format!("Authored {form:?}")
+                    };
+                    format!(
+                        "  {label}: {count} {use_noun} x {per_use} \
+                         {stroke_noun} = {segments} {segment_noun}"
+                    )
+                }
+                None => {
+                    let noun = if *count == 1 { "segment" }
+                        else { "segments" };
+                    format!(
+                        "  Missing {form:?}: {count} {use_noun} \
+                         (at least {count} {noun})"
+                    )
+                }
+            };
+            writeln!(out, "{line}")
+                .map_err(|error| format!("flow stroke breakdown refused: {error}"))?;
+        }
+        Ok(())
+    };
+    describe(report, "Stroke demand by form", inventory)?;
+    if show_page_detail {
+        for page in 1..=pages {
+            let empty = BTreeMap::new();
+            let forms = page_inventories.get(&page).unwrap_or(&empty);
+            describe(report, &format!("Page {page} stroke demand by form"),
+                forms)?;
+        }
+    }
+    Ok(())
+}
+
 // Inspect nominal physical rows before drawing any authored glyph shapes.
 fn inspect_notebook_flow(request: &NotebookRequest)
 -> Result<Vec<u8>, String> {
@@ -3677,6 +3778,12 @@ fn inspect_notebook_flow(request: &NotebookRequest)
         append_flow_stroke_demand(
             &mut report, &request.glyphs, &inventory, &page_inventories,
             &ornaments, pages, request.inspect_flow_page_inventory,
+        )?;
+    }
+    if request.inspect_flow_stroke_breakdown {
+        append_flow_stroke_breakdown(
+            &mut report, &request.glyphs, &inventory, &page_inventories,
+            pages, request.inspect_flow_page_inventory,
         )?;
     }
     Ok(report.into_bytes())

@@ -4812,3 +4812,25 @@ library refuses actual native export. One independent Node process test also
 compares real CLI reports against native two-sheet TSV, PDF and PNG exports
 with a saved Unicode library and an explicit borrowed shape, confirming
 pre-source-I/O flag refusal and unchanged glyph-library bytes.
+
+## Per-form nominal stroke attribution (partial) — 2026-11-13
+
+The CLI's optional `--inspect-flow-stroke-breakdown` requires the nominal
+stroke-demand check and appends one sorted row for each exact placed Unicode
+grapheme. It reports direct and one-hop borrowed shape stroke counts times
+occurrences, and marks missing forms with their minimum one segment per use.
+The optional existing per-sheet inventory includes corresponding page-local
+rows, even for sheets without visible graphemes; otherwise only the global
+form costs appear. Synthetic Markdown ornaments are counted in the prior
+stroke-demand totals, not mislabeled as handwriting forms.
+
+Three Rust regressions cover exact NFC/NFD attribution and selected fallbacks,
+missing-shape lower bounds, isolated sheet totals, 256 independent seeded
+usage sets, unchanged earlier report bytes and invalid option refusal before
+selected file reads. The existing real-process Node PDF/PNG/TSV acceptance
+also verifies opt-in report preservation, Unicode and fallback attribution,
+missing forms and source-independent refusal with an imported library.
+
+The result is advisory known-stroke budgeting, not a claim about ink geometry,
+calibrated handwriting, physical clearance, aesthetic quality, or persistent
+semantic notebook editing. ATR-P2-011 remains open.

@@ -20551,3 +20551,183 @@ fn notebook_stroke_demand_marks_missing_glyph_lower_bound_over_budget()
     }
     Ok(())
 }
+
+#[test]
+fn notebook_stroke_breakdown_attributes_exact_borrowed_and_missing_forms()
+-> Result<(), String> {
+    let source = "a\nó\nn\u{303}\nx";
+    let base = args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-stroke-demand", "--inspect-flow-inventory",
+        "--inspect-flow-page-inventory", "--flow-text", source,
+        "--flow-region", "30000", "40000", "32000", "25000",
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "250", "#123456",
+        "--glyph-stroke", "a", "1500", "2500", "2500", "600",
+        "250", "#123456",
+        "--glyph-stroke", "n\u{303}", "500", "600", "1500", "2500",
+        "250", "#123456",
+        "--glyph-stroke", "n\u{303}", "500", "700", "1500", "3000",
+        "250", "#123456",
+        "--glyph-stroke", "n\u{303}", "500", "800", "1500", "3500",
+        "250", "#123456",
+        "--fallback-glyph", "ó", "a",
+    ]);
+    let previous = String::from_utf8(execute_notebook(&base)?
+        .ok_or("missing previous stroke report")?)
+        .map_err(|error| error.to_string())?;
+    let mut selected = base;
+    selected.push("--inspect-flow-stroke-breakdown".to_owned());
+    let report = String::from_utf8(execute_notebook(&selected)?
+        .ok_or("missing stroke breakdown")?)
+        .map_err(|error| error.to_string())?;
+    let prefix = report.split("Stroke demand by form:").next()
+        .ok_or("missing earlier sections")?;
+    assert_eq!(prefix, previous,
+        "opt-in detailed planning cannot alter previous inspection bytes");
+    let details = report.strip_prefix(&previous)
+        .ok_or("breakdown must be appended")?;
+    assert_eq!(details, concat!(
+        "Stroke demand by form: 4 forms, 4 uses\n",
+        "  Authored \"a\": 1 use x 2 strokes = 2 segments\n",
+        "  Authored \"n\\u{303}\": 1 use x 3 strokes = 3 segments\n",
+        "  Missing \"x\": 1 use (at least 1 segment)\n",
+        "  Borrowed \"ó\" from \"a\": 1 use x 2 strokes = 2 segments\n",
+        "Page 1 stroke demand by form: 2 forms, 2 uses\n",
+        "  Authored \"a\": 1 use x 2 strokes = 2 segments\n",
+        "  Borrowed \"ó\" from \"a\": 1 use x 2 strokes = 2 segments\n",
+        "Page 2 stroke demand by form: 2 forms, 2 uses\n",
+        "  Authored \"n\\u{303}\": 1 use x 3 strokes = 3 segments\n",
+        "  Missing \"x\": 1 use (at least 1 segment)\n",
+    ));
+    Ok(())
+}
+
+#[test]
+fn notebook_stroke_breakdown_refuses_invalid_flags_before_file_io() {
+    for (extra, expected) in [
+        (vec!["--inspect-flow-stroke-breakdown"],
+            "--inspect-flow-stroke-breakdown requires"),
+        (vec!["--inspect-flow", "--inspect-flow-stroke-breakdown"],
+            "--inspect-flow-stroke-breakdown requires"),
+        (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-stroke-breakdown"],
+            "--inspect-flow-stroke-breakdown requires"),
+        (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-stroke-demand",
+            "--inspect-flow-stroke-breakdown",
+            "--inspect-flow-stroke-breakdown"],
+            "--inspect-flow-stroke-breakdown may appear only once"),
+        (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-stroke-demand",
+            "--inspect-flow-stroke-breakdown", "--output", "bad.pdf"],
+            "--inspect-flow is stdout only"),
+        (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-stroke-demand",
+            "--inspect-flow-stroke-breakdown", "--join-text-pair", "a", "b"],
+            "--inspect-flow cannot include authored ink"),
+    ] {
+        let mut selected = args(&[
+            "--profile", "missing-stroke-breakdown-notebook.json",
+            "--flow-text-file", "missing-stroke-breakdown-source.txt",
+        ]);
+        selected.extend(extra.into_iter().map(str::to_owned));
+        let error = execute_notebook(&selected)
+            .expect_err("invalid breakdown flags must precede file IO");
+        assert!(error.contains(expected), "{selected:?}: {error}");
+    }
+}
+
+#[test]
+fn notebook_stroke_breakdown_randomized_matches_independent_usage_oracle()
+-> Result<(), String> {
+    let keys = ["a", "ó", "n\u{303}", "x"];
+    let shapes = args(&[
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "250", "#123456",
+        "--glyph-stroke", "a", "1500", "2500", "2500", "600",
+        "250", "#123456",
+        "--glyph-stroke", "n\u{303}", "500", "600", "1500", "2500",
+        "250", "#123456",
+        "--glyph-stroke", "n\u{303}", "500", "700", "1500", "3000",
+        "250", "#123456",
+        "--glyph-stroke", "n\u{303}", "500", "800", "1500", "3500",
+        "250", "#123456",
+        "--fallback-glyph", "ó", "a",
+    ]);
+    let mut seed = 0x9b6e_a9d4_e5f0_3529u64;
+    for case in 0..256 {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        let length = 1 + (seed as usize % 64);
+        let mut lines = Vec::new();
+        for _ in 0..length {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            lines.push(keys[seed as usize % keys.len()]);
+        }
+        let source = lines.join("\n");
+        let mut selected = args(&[
+            "--flow-text", &source, "--flow-region", "30000", "40000",
+            "32000", "25000", "--inspect-flow",
+            "--inspect-flow-inventory", "--inspect-flow-page-inventory",
+            "--inspect-flow-shape-coverage", "--inspect-flow-stroke-demand",
+            "--inspect-flow-stroke-breakdown",
+        ]);
+        selected.extend(shapes.iter().cloned());
+        let report = String::from_utf8(execute_notebook(&selected)?
+            .ok_or("missing seeded breakdown")?)
+            .map_err(|error| error.to_string())?;
+        let check = |title: &str, group: &[&str]| {
+            let forms = keys.iter().filter(|&&key| group.contains(&key))
+                .count();
+            let form_noun = if forms == 1 { "form" } else { "forms" };
+            let use_noun = if group.len() == 1 { "use" }
+                else { "uses" };
+            let heading = format!(
+                "{title}: {forms} {form_noun}, {} {use_noun}\n",
+                group.len()
+            );
+            let section = report.split(&heading).nth(1)
+                .ok_or_else(|| format!("case {case}: missing {heading:?}"))?;
+            for key in keys {
+                let count = group.iter().filter(|&&item| item == key)
+                    .count();
+                if count == 0 { continue; }
+                let use_noun = if count == 1 { "use" } else { "uses" };
+                let row = match key {
+                    "a" | "ó" | "n\u{303}" => {
+                        let per_use = if key == "n\u{303}" { 3 } else { 2 };
+                        let total = count * per_use;
+                        let detail = if key == "ó" {
+                            format!("Borrowed {key:?} from \"a\"")
+                        } else { format!("Authored {key:?}") };
+                        format!(
+                            "  {detail}: {count} {use_noun} x {per_use} \
+                             strokes = {total} segments\n"
+                        )
+                    }
+                    _ => {
+                        let noun = if count == 1 { "segment" }
+                            else { "segments" };
+                        format!(
+                            "  Missing {key:?}: {count} {use_noun} \
+                             (at least {count} {noun})\n"
+                        )
+                    }
+                };
+                assert!(section.contains(&row),
+                    "case {case}, {title}, key {key:?}: {report}");
+            }
+            Ok::<(), String>(())
+        };
+        check("Stroke demand by form", &lines)?;
+        for (page, group) in lines.chunks(2).enumerate() {
+            check(&format!("Page {} stroke demand by form", page + 1),
+                group)?;
+        }
+    }
+    Ok(())
+}

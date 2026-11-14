@@ -554,6 +554,21 @@ cargo run -q -p atrament_profile_editor_cli -- \
   --glyph-file writer.tsv
 ```
 
+For attribution by exact Unicode key, add
+`--inspect-flow-stroke-breakdown` to the same stroke-demand options. The
+additional sorted report separates directly authored glyphs, explicitly
+borrowed fallback forms and unresolved uses, listing strokes per selected
+form and the corresponding total segment contribution. When per-sheet
+inventory is enabled, the same breakdown appears on each physical page,
+including pages without any visible glyphs.
+
+This answers which missing shape needs authoring and which high-stroke
+form drives the nominal segment budget. The borrowed shape remains attributed
+to the *requested* Unicode form, never renamed to its source. The status of
+an unresolved form gives a one-segment-per-use lower bound, not an estimate
+of its actual eventual strokes. Prior reports are byte-identical when the
+flag is absent, and no versioned notebook profile field changes.
+
 This is read-only, does not connect or project pen strokes, and cannot prove
 physical ink clearance, acceptable appearance or a successful PDF/PNG export.
 Unselected reports remain byte-identical.

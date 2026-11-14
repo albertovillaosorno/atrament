@@ -8620,6 +8620,38 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
                     + '1 known segments, 0 unresolved glyph uses '
                     + '(within budget; native limit 4096)',
             ].join('\n')), inspection.stdout);
+            const breakdown = run([
+                '--inspect-flow', '--inspect-flow-inventory',
+                '--inspect-flow-page-inventory',
+                '--inspect-flow-shape-coverage',
+                '--inspect-flow-stroke-demand',
+                '--inspect-flow-stroke-breakdown', '--flow-text', source,
+                ...region, ...shape,
+            ]);
+            assert.equal(breakdown.status, 0, breakdown.stderr);
+            assert.ok(breakdown.stdout.startsWith(inspection.stdout),
+                'opt-in attribution preserves prior inspection bytes');
+            assert.equal(breakdown.stdout.slice(inspection.stdout.length), [
+                'Stroke demand by form: 3 forms, 3 uses',
+                '  Authored "a": 1 use x 2 strokes = 2 segments',
+                '  Authored "n\\u{303}": 1 use x 1 stroke = 1 segment',
+                '  Borrowed "ó" from "a": 1 use x 2 strokes = 2 segments',
+                'Page 1 stroke demand by form: 2 forms, 2 uses',
+                '  Authored "a": 1 use x 2 strokes = 2 segments',
+                '  Borrowed "ó" from "a": 1 use x 2 strokes = 2 segments',
+                'Page 2 stroke demand by form: 1 form, 1 use',
+                '  Authored "n\\u{303}": 1 use x 1 stroke = 1 segment',
+                '',
+            ].join('\n'));
+            const incomplete = run([
+                '--inspect-flow', '--inspect-flow-shape-coverage',
+                '--inspect-flow-stroke-demand',
+                '--inspect-flow-stroke-breakdown',
+                '--flow-text', source + '\nx', ...region, ...shape,
+            ]);
+            assert.equal(incomplete.status, 0, incomplete.stderr);
+            assert.match(incomplete.stdout,
+                /Missing "x": 1 use \(at least 1 segment\)/);
             const inkPath = join(dir, 'paper-ink.tsv');
             const ink = run(['--flow-text', source, ...region, ...shape,
                 '--emit-ink-file', '--output', inkPath]);
@@ -8653,6 +8685,15 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             assert.match(invalid.stderr,
                 /--inspect-flow-stroke-demand requires/);
             assert.doesNotMatch(invalid.stderr, /FileIo\(NotFound\)/);
+            const invalidDetail = run([
+                '--flow-text-file', join(dir, 'nonexistent.md'),
+                '--inspect-flow', '--inspect-flow-shape-coverage',
+                '--inspect-flow-stroke-breakdown',
+            ]);
+            assert.notEqual(invalidDetail.status, 0);
+            assert.match(invalidDetail.stderr,
+                /--inspect-flow-stroke-breakdown requires/);
+            assert.doesNotMatch(invalidDetail.stderr, /FileIo\(NotFound\)/);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
