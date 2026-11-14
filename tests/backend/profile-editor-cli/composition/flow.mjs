@@ -8770,6 +8770,49 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             )).join('');
             assert.equal(palette.stdout.slice(verified.stdout.length),
                 expectedPalette);
+            const widths = run([
+                '--inspect-flow', '--inspect-flow-inventory',
+                '--inspect-flow-page-inventory',
+                '--inspect-flow-shape-coverage',
+                '--inspect-flow-stroke-demand',
+                '--inspect-flow-ink-validation',
+                '--inspect-flow-ink-widths',
+                '--flow-text', source, ...region, ...shape,
+            ]);
+            assert.equal(widths.status, 0, widths.stderr);
+            assert.ok(widths.stdout.startsWith(verified.stdout),
+                'widths are opt-in and preserve validated ink output');
+            const globalWidths = new Map();
+            const perPageWidths = new Map();
+            for (const line of rows) {
+                const cells = line.split('\t');
+                const page = Number(cells[0]);
+                const width = Number(cells[5]);
+                globalWidths.set(width,
+                    (globalWidths.get(width) ?? 0) + 1);
+                const local = perPageWidths.get(page) ?? new Map();
+                local.set(width, (local.get(width) ?? 0) + 1);
+                perPageWidths.set(page, local);
+            }
+            const describeWidths = (label, widthCounts) => {
+                if (!widthCounts || widthCounts.size === 0) {
+                    return `${label}: empty\n`;
+                }
+                const noun = widthCounts.size === 1 ? 'width' : 'widths';
+                return `${label}: ${widthCounts.size} physical pen ${noun}\n`
+                    + [...widthCounts].sort(([a], [b]) => a - b)
+                        .map(([width, count]) =>
+                            `  ${width} um: ${count} `
+                            + `${count === 1 ? 'segment' : 'segments'}\n`)
+                        .join('');
+            };
+            const expectedWidths = describeWidths('Validated ink widths',
+                globalWidths) + [1, 2].map((page) => describeWidths(
+                `Page ${page} validated ink widths`,
+                perPageWidths.get(page),
+            )).join('');
+            assert.equal(widths.stdout.slice(verified.stdout.length),
+                expectedWidths);
             for (const format of ['pdf', 'png']) {
                 const output = join(dir, `page.${format}`);
                 const exported = run([
@@ -8831,6 +8874,16 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             assert.match(invalidInkPalette.stderr,
                 /--inspect-flow-ink-palette requires/);
             assert.doesNotMatch(invalidInkPalette.stderr,
+                /FileIo\(NotFound\)/);
+            const invalidInkWidths = run([
+                '--flow-text-file', join(dir, 'nonexistent.md'),
+                '--inspect-flow', '--inspect-flow-shape-coverage',
+                '--inspect-flow-ink-widths',
+            ]);
+            assert.notEqual(invalidInkWidths.status, 0);
+            assert.match(invalidInkWidths.stderr,
+                /--inspect-flow-ink-widths requires/);
+            assert.doesNotMatch(invalidInkWidths.stderr,
                 /FileIo\(NotFound\)/);
         } finally {
             rmSync(dir, { recursive: true, force: true });

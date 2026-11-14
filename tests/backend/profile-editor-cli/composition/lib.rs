@@ -21088,8 +21088,97 @@ fn notebook_ink_palette_includes_empty_sheets()
 }
 
 #[test]
+fn notebook_ink_widths_match_native_tsv_and_blank_physical_pages()
+-> Result<(), String> {
+    let shared = args(&[
+        "--flow-markdown", "# a\n- ó\n> a", "--heading-style", "marker",
+        "--heading-marker-scale", "95",
+        "--flow-region", "30000", "40000", "32000", "25000",
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "251", "#123456", "--glyph-stroke", "a", "600", "700",
+        "1600", "3200", "501", "#123456",
+        "--fallback-glyph", "ó", "a",
+    ]);
+    let mut inspect = shared.clone();
+    inspect.extend(args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-ink-validation", "--inspect-flow-ink-bounds",
+        "--inspect-flow-ink-palette",
+    ]));
+    let baseline = String::from_utf8(execute_notebook(&inspect)?
+        .ok_or("missing old inspection")?)
+        .map_err(|error| error.to_string())?;
+    inspect.push("--inspect-flow-ink-widths".into());
+    let report = String::from_utf8(execute_notebook(&inspect)?
+        .ok_or("missing width inspection")?)
+        .map_err(|error| error.to_string())?;
+    let mut emission = shared;
+    emission.push("--emit-ink-file".into());
+    let tsv = String::from_utf8(execute_notebook(&emission)?
+        .ok_or("missing physical TSV")?)
+        .map_err(|error| error.to_string())?;
+    let mut global = BTreeMap::<u32, usize>::new();
+    let mut per_page = BTreeMap::<usize, BTreeMap<u32, usize>>::new();
+    for line in tsv.lines().skip(1) {
+        let cells: Vec<_> = line.split('\t').collect();
+        let [page, _, _, _, _, width, _] = cells.as_slice() else {
+            return Err(format!("invalid ink TSV row: {line:?}"));
+        };
+        let page = page.parse::<usize>()
+            .map_err(|error| error.to_string())?;
+        let width = width.parse::<u32>()
+            .map_err(|error| error.to_string())?;
+        *global.entry(width).or_default() += 1;
+        *per_page.entry(page).or_default().entry(width).or_default() += 1;
+    }
+    assert!(global.len() >= 3, "{tsv}");
+    let mut expected = String::new();
+    let empty_widths = BTreeMap::new();
+    use std::fmt::Write as _;
+    for (title, counts) in std::iter::once((
+        "Validated ink widths".to_owned(), &global,
+    )).chain((1..=2).map(|page| (
+        format!("Page {page} validated ink widths"),
+        per_page.get(&page).unwrap_or(&empty_widths),
+    ))) {
+        let noun = if counts.len() == 1 { "width" } else { "widths" };
+        writeln!(expected,
+            "{title}: {} physical pen {noun}", counts.len(),
+        ).map_err(|error| error.to_string())?;
+        for (width, count) in counts {
+            let noun = if *count == 1 { "segment" } else { "segments" };
+            writeln!(expected, "  {width} um: {count} {noun}")
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    assert_eq!(report.strip_prefix(&baseline), Some(expected.as_str()),
+        "{report}");
+
+    let blank = args(&[
+        "--flow-text", "\n\na", "--flow-region", "30000", "40000",
+        "32000", "25000", "--inspect-flow",
+        "--inspect-flow-shape-coverage", "--inspect-flow-ink-validation",
+        "--inspect-flow-ink-widths", "--glyph-stroke", "a",
+        "500", "600", "1500", "2500", "251", "#123456",
+    ]);
+    let blank_report = String::from_utf8(execute_notebook(&blank)?
+        .ok_or("missing blank-sheet widths")?)
+        .map_err(|error| error.to_string())?;
+    assert!(blank_report.ends_with(concat!(
+        "Validated ink widths: 1 physical pen width\n",
+        "  251 um: 1 segment\n",
+        "Page 1 validated ink widths: empty\n",
+        "Page 2 validated ink widths: 1 physical pen width\n",
+        "  251 um: 1 segment\n",
+    )), "{blank_report}");
+    Ok(())
+}
+
+#[test]
 fn notebook_ink_validation_flags_refuse_before_selected_file_io() {
     for (extra, expected) in [
+        (vec!["--inspect-flow-ink-widths"],
+            "--inspect-flow-ink-widths requires"),
         (vec!["--inspect-flow-ink-palette"],
             "--inspect-flow-ink-palette requires"),
         (vec!["--inspect-flow-ink-bounds"],
@@ -21107,6 +21196,10 @@ fn notebook_ink_validation_flags_refuse_before_selected_file_io() {
             "--inspect-flow-ink-validation",
             "--inspect-flow-ink-validation"],
             "--inspect-flow-ink-validation may appear only once"),
+        (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-ink-validation", "--inspect-flow-ink-widths",
+            "--inspect-flow-ink-widths"],
+            "--inspect-flow-ink-widths may appear only once"),
         (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
             "--inspect-flow-ink-validation", "--inspect-flow-ink-palette",
             "--inspect-flow-ink-palette"],

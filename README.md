@@ -627,6 +627,23 @@ not a suggested color scheme or a rendering of paper annotations. It does
 not assign colors to semantic blocks or predict visual blending and changes
 no saved profile fields. Previous reports are byte-identical when omitted.
 
+Select `--inspect-flow-ink-widths` with the same native validation flags to
+inventory **actual pen thicknesses in micrometres**. The output groups native
+segment counts by measured width, globally and for each physical sheet,
+including `empty` sheets. Unlike glyph statistics or a nominal count, this
+reflects expanded glyph strokes and decorated Markdown heading/list ink.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --flow-markdown-file notes.md --glyph-file writer.tsv \
+  --inspect-flow --inspect-flow-shape-coverage \
+  --inspect-flow-ink-validation --inspect-flow-ink-widths
+```
+
+These are physical straight-segment widths, not line-height measurements or
+an estimate of stroke area, ink consumption or optical contrast. They do not
+include printed paper decorations. The report is opt-in and read-only.
+
 This is an in-memory dry run of the current unjoined, non-varied flow ink,
 not a PNG pixel-budget test, a calibrated handwriting inspection or a proof
 of visual quality. Explicit placed ink, joins and seeded variation remain

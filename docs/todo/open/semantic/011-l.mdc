@@ -4905,3 +4905,21 @@ The real-process Node flow case separately totals imported-library TSV
 colors and compares exact global and per-sheet reports. This is read-only
 physical ink diagnostics, not palette editing, visual blending analysis,
 semantic notebook persistence or completion of the open two-page journey.
+
+## Read-only actual pen-width inventory (partial) — 2026-11-13
+
+`--inspect-flow-ink-widths` appends a sorted histogram of native pen thickness
+in micrometres for the entire measured output and every physical sheet.
+Expanded authored and explicitly borrowed glyph segments and Markdown
+ornaments contribute their actual pen widths, including marker scaling.
+Blank physical sheets are labeled `empty`; paper ruling and printed dates
+are not included.
+
+Native Rust tests compare multi-width Markdown and borrowed-glyph output
+against independently emitted physical ink TSV, including blank sheets and
+unchanged previous report bytes. The process-level Node test verifies
+imported-library TSV counts with prerequisite refusal before file access.
+
+This is a read-only physical diagnostic requiring complete geometry
+validation, not a prediction of stroke area or optical density. It adds no
+saved notebook semantics or graphical notebook editing.

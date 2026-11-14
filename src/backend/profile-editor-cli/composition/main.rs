@@ -192,6 +192,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--inspect-flow-ink-validation (requires --inspect-flow-shape-coverage)] \
     [--inspect-flow-ink-bounds (requires --inspect-flow-ink-validation)] \
     [--inspect-flow-ink-palette (requires --inspect-flow-ink-validation)] \
+    [--inspect-flow-ink-widths (requires --inspect-flow-ink-validation)] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--ruler-seed UINT32 --ruler-error-mm 0.001..0.250] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
@@ -323,6 +324,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     physical rectangles per page after validation, including blank pages. \
     --inspect-flow-ink-palette lists actual RGB ink colors and physical \
     segment counts per page, excluding paper marks. \
+    --inspect-flow-ink-widths lists actual physical pen thicknesses in \
+    micrometres and segment counts per page, excluding paper marks. \
     Shape coverage is opt-in and does not validate physical ink bounds. \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
@@ -466,6 +469,7 @@ struct NotebookRequest {
     inspect_flow_ink_validation: bool,
     inspect_flow_ink_bounds: bool,
     inspect_flow_ink_palette: bool,
+    inspect_flow_ink_widths: bool,
     output: Option<String>,
     pages: usize,
     pages_explicit: bool,
@@ -629,7 +633,8 @@ impl NotebookFlagPreflight {
             | "--inspect-flow-stroke-breakdown"
             | "--inspect-flow-ink-validation"
             | "--inspect-flow-ink-bounds"
-            | "--inspect-flow-ink-palette" => {
+            | "--inspect-flow-ink-palette"
+            | "--inspect-flow-ink-widths" => {
                 self.unique(option, &format!("{option} may appear only once"))?;
                 0
             }
@@ -760,6 +765,13 @@ impl NotebookFlagPreflight {
             return Err(
                 "--inspect-flow-inventory requires --inspect-flow".into()
             );
+        }
+        if has("--inspect-flow-ink-widths")
+            && !has("--inspect-flow-ink-validation") {
+            return Err(concat!(
+                "--inspect-flow-ink-widths requires ",
+                "--inspect-flow-ink-validation",
+            ).into());
         }
         if has("--inspect-flow-ink-palette")
             && !has("--inspect-flow-ink-validation") {
@@ -3249,6 +3261,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut inspect_flow_ink_validation = false;
     let mut inspect_flow_ink_bounds = false;
     let mut inspect_flow_ink_palette = false;
+    let mut inspect_flow_ink_widths = false;
     let (mut export, mut ink) = (NotebookExportOptions::default(), Vec::new());
     let (mut glyphs, mut statistics) = (GlyphOverlay::default(), None);
     let (mut flow, mut flow_region) = (None, None);
@@ -3328,6 +3341,11 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                     "--inspect-flow-ink-palette may appear only once".into()
                 ),
             "--inspect-flow-ink-palette" => inspect_flow_ink_palette = true,
+            "--inspect-flow-ink-widths" if inspect_flow_ink_widths =>
+                return Err(
+                    "--inspect-flow-ink-widths may appear only once".into()
+                ),
+            "--inspect-flow-ink-widths" => inspect_flow_ink_widths = true,
             "--handwriting-profile" =>
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
             "--heading-style" | "--heading-align" | "--heading-color"
@@ -3396,6 +3414,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         inspect_flow_ink_validation,
         inspect_flow_ink_bounds,
         inspect_flow_ink_palette,
+        inspect_flow_ink_widths,
         output,
         pages: export.pages.unwrap_or(1),
         png_page: export.png_page.unwrap_or(1),
@@ -3855,6 +3874,57 @@ fn append_flow_ink_palette(
     Ok(())
 }
 
+// Inspect actual output pen thickness instead of nominal glyph statistics.
+// This captures heading and ornament widths separately from authored ink.
+fn append_flow_ink_widths(
+    report: &mut String, ink: &[NotebookInkLine], pages: usize,
+) -> Result<(), String> {
+    let mut global = BTreeMap::<u32, usize>::new();
+    let mut per_page = vec![BTreeMap::<u32, usize>::new(); pages];
+    for line in ink {
+        let local = line.page.checked_sub(1)
+            .and_then(|index| per_page.get_mut(index))
+            .ok_or("validated ink references nonexistent physical page")?;
+        for counts in [&mut *local, &mut global] {
+            let count = counts.entry(line.width_um).or_default();
+            *count = count.checked_add(1)
+                .ok_or("validated ink width count overflow")?;
+        }
+    }
+    let describe = |out: &mut String, title: &str,
+                    widths: &BTreeMap<u32, usize>|
+                    -> Result<(), String> {
+        if widths.is_empty() {
+            writeln!(out, "{title}: empty")
+                .map_err(|error| {
+                    format!("flow ink widths report refused: {error}")
+                })?;
+        } else {
+            let noun = if widths.len() == 1 { "width" }
+                else { "widths" };
+            writeln!(out,
+                "{title}: {} physical pen {noun}", widths.len(),
+            ).map_err(|error| {
+                format!("flow ink widths report refused: {error}")
+            })?;
+            for (width, count) in widths {
+                let noun = if *count == 1 { "segment" } else { "segments" };
+                writeln!(out, "  {width} um: {count} {noun}")
+                    .map_err(|error| {
+                        format!("flow ink widths report refused: {error}")
+                    })?;
+            }
+        }
+        Ok(())
+    };
+    describe(report, "Validated ink widths", &global)?;
+    for (index, widths) in per_page.iter().enumerate() {
+        describe(report, &format!("Page {} validated ink widths", index + 1),
+            widths)?;
+    }
+    Ok(())
+}
+
 // Opt-in full native geometry check. The same glyph expansion and physical
 // PDF admission as export run in memory; no file is selected or written.
 // Keep this separate from nominal coverage, which may inspect missing shapes.
@@ -3916,6 +3986,9 @@ fn append_flow_ink_validation(
     }
     if request.inspect_flow_ink_palette {
         append_flow_ink_palette(report, &ink, pages)?;
+    }
+    if request.inspect_flow_ink_widths {
+        append_flow_ink_widths(report, &ink, pages)?;
     }
     Ok(())
 }
