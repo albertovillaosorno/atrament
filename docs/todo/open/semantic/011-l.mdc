@@ -44,6 +44,33 @@ records remain accepted theoretical deliverables and are not reopened:
 - ATR-P2-004 — archived semantic design
 - ATR-P2-005 — archived semantic design
 
+## Explicit Markdown physical page breaks (partial) — 2026-11-14
+
+The export-only Rust `atrament-profiles notebook --flow-markdown` compiler
+now recognizes the standalone source line `<!-- atrament:page-break -->` as
+a mandatory start of a new physical sheet before the next printed block.
+The directive admits up to three leading ASCII spaces and trailing ASCII
+spaces. Consecutive breaks collapse into one; a leading or trailing break
+cannot invent a blank physical page. A later printed row after page 32
+still refuses before any export file replacement.
+
+This directive ends a preceding Markdown paragraph, heading or list item,
+and prevents the existing keep-with-next heading or thematic-rule reservation
+from crossing the boundary. It is not authored ink or a glyph-coverage
+requirement. Inside a fenced code block, a four-space-indented literal row,
+or plain-text mode, the same source remains literal and needs authored glyphs.
+Normal Markdown rules and Setext titles retain their established meaning.
+
+Four native Rust regressions cover source syntax, ink/page identity,
+plain-text/fence preservation and 32-sheet refusal. A real-process test
+compares exact two-sheet PDF/PNG bytes with manual authored placements,
+verifies file/inline parity and confirms that too-small `--pages` refuses
+without clobbering an existing file.
+
+This is a CLI-only Markdown layout directive. It does not persist a semantic
+notebook page break, create editable blocks, resolve fixed obstacles, or
+complete the end-to-end saved-notebook Export journey.
+
 ## Native CLI plain-text and Markdown flow (partial) — 2026-11-03
 
 The Rust `atrament-profiles notebook` CLI now accepts an explicitly supplied

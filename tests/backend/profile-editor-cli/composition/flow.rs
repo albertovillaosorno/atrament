@@ -8536,3 +8536,127 @@ fn seeded_bilingual_long_words_keep_punctuation_inside_physical_rows()
     }
     Ok(())
 }
+
+#[test]
+fn page_start_directive_is_exact_and_only_markdown_syntax() {
+    for valid in [
+        "<!-- atrament:page-break -->",
+        " <!-- atrament:page-break -->",
+        "   <!-- atrament:page-break -->   ",
+    ] {
+        assert!(super::markdown_page_start(valid), "{valid:?}");
+    }
+    for literal in [
+        "    <!-- atrament:page-break -->",
+        "<!-- atrament:page-break --> x",
+        "<!-- atrament:page-break-->",
+        "<!-- pagebreak -->",
+        "\t<!-- atrament:page-break -->",
+        "<!-- atrament:page-break -->\t",
+        "<!-- atrament:page-break -->\u{00a0}",
+    ] {
+        assert!(!super::markdown_page_start(literal), "{literal:?}");
+    }
+}
+
+#[test]
+fn page_start_directive_separates_markdown_paragraphs_and_heading_ink()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (_, top, _, _) = paper.printable_rect_um()?;
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "a\n<!-- atrament:page-break -->\n# a\na")?;
+    let (runs, marks, pages) = super::layout_flow(
+        &source, &paper, None, super::HeadingDecoration::default(),
+    )?;
+    assert_eq!(pages, 2);
+    assert_eq!(runs.iter().map(|row| (row.text.as_str(), row.page))
+        .collect::<Vec<_>>(), [("a", 1), ("a", 2), ("a", 2)]);
+    assert_eq!(runs[1].origin_um.1, top + 2_500);
+    assert!(runs[2].origin_um.1 > runs[1].origin_um.1);
+    assert_eq!(marks.len(), 1);
+    assert_eq!(marks[0].page, 2);
+
+    // The following body starts at its own new sheet even when its
+    // predecessor was an orphaned heading. No keep reservation crosses it.
+    let heading = FlowSource::new(FlowFormat::Markdown,
+        "# a\n<!-- atrament:page-break -->\na")?;
+    let (runs, rules, count) = super::layout_flow(
+        &heading, &paper, None, super::HeadingDecoration::default(),
+    )?;
+    assert_eq!(count, 2);
+    assert_eq!(runs.iter().map(|row| row.page).collect::<Vec<_>>(), [1, 2]);
+    assert!(rules.iter().all(|rule| rule.page == 1));
+    Ok(())
+}
+
+#[test]
+fn page_start_directive_collapses_without_blank_initial_or_terminal_sheets()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (left, top, _, _) = paper.printable_rect_um()?;
+    let region = super::FlowRegion {
+        left, top, width: 70_000, height: 23_000,
+    };
+    let directive = "<!-- atrament:page-break -->";
+    let source = FlowSource::new(FlowFormat::Markdown,
+        &format!("{directive}\na\n{directive}\n{directive}\na\n{directive}"))?;
+    let (runs, marks, pages) = super::layout_flow_with_region(
+        &source, &paper, None, super::HeadingDecoration::default(),
+        Some(region),
+    )?;
+    assert_eq!(pages, 2);
+    assert_eq!(runs.iter().map(|row| (row.page, row.origin_um.1))
+        .collect::<Vec<_>>(), [(1, top + 2_500), (2, top + 2_500)]);
+    assert!(marks.is_empty());
+
+    // At the 32-sheet boundary a terminal directive consumes no page,
+    // whereas a real following ink row refuses rather than disappearing.
+    let mut full = String::from("a");
+    for _ in 1..32 {
+        full.push_str(&format!("\n{directive}\na"));
+    }
+    let last = FlowSource::new(FlowFormat::Markdown,
+        &format!("{full}\n{directive}"))?;
+    let (rows, _, count) = super::layout_flow_with_region(
+        &last, &paper, None, super::HeadingDecoration::default(),
+        Some(region),
+    )?;
+    assert_eq!(count, 32);
+    assert_eq!(rows.len(), 32);
+    assert_eq!(rows.last().map(|row| row.page), Some(32));
+    let overflow = FlowSource::new(FlowFormat::Markdown,
+        &format!("{full}\n{directive}\na"))?;
+    assert_eq!(super::layout_flow_with_region(
+        &overflow, &paper, None, super::HeadingDecoration::default(),
+        Some(region),
+    ).unwrap_err(), "flow exceeds 32 physical pages");
+    Ok(())
+}
+
+#[test]
+fn page_start_directive_is_literal_inside_fences_and_plain_text()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let directive = "<!-- atrament:page-break -->";
+    for (format, text) in [
+        (FlowFormat::Markdown, format!("a\n```txt\n{directive}\n```\na")),
+        (FlowFormat::Markdown, format!("a\n    {directive}\na")),
+        (FlowFormat::Plain, format!("a\n{directive}\na")),
+    ] {
+        let source = FlowSource::new(format, &text)?;
+        let (rows, _, pages) = super::layout_flow(
+            &source, &paper, None, super::HeadingDecoration::default(),
+        )?;
+        assert_eq!(pages, 1, "{format:?}");
+        assert_eq!(rows.len(), 3, "{format:?}");
+        assert!(rows[1].text.contains(directive), "{format:?}");
+    }
+    Ok(())
+}

@@ -628,6 +628,7 @@ struct Layout<'model> {
     ordered_align: Option<BodyAlign>,
     ornaments: Vec<NotebookInkLine>,
     page: usize,
+    pending_page_start: bool,
     paragraph_gap_um: u32,
     pending_blank_rows: usize,
     pitch: u32,
@@ -645,6 +646,36 @@ struct Layout<'model> {
 }
 
 impl Layout<'_> {
+    // A page break is a boundary before *following printable ink*, not a
+    // blank sheet at EOF. Repeated directives between ink collapse.
+    fn apply_pending_page_start(&mut self) -> Result<(), String> {
+        if !take(&mut self.pending_page_start) {
+            return Ok(());
+        }
+        let current_has_ink = self.lines.iter().any(|row| row.page == self.page)
+            || self.ornaments.iter().any(|mark| mark.page == self.page);
+        if current_has_ink {
+            self.page = self.page.checked_add(1)
+                .ok_or("flow page count overflow")?;
+            if self.page > MAX_PAGES {
+                return Err("flow exceeds 32 physical pages".into());
+            }
+        }
+        self.y = self.top.checked_add(INSET_UM)
+            .ok_or("flow top inset overflow")?;
+        Ok(())
+    }
+
+    fn request_page_start(&mut self) {
+        self.pending_page_start = true;
+        self.pending_blank_rows = 0;
+        self.heading_chain = None;
+        self.rule_chain = None;
+        self.heading_attached_to_prior = false;
+        self.last_visible_heading = false;
+        self.last_visible_rule = false;
+    }
+
     fn add_gap(&mut self) -> Result<(), String> {
         self.flush_blank_rows()?;
         self.y = self
@@ -905,6 +936,7 @@ impl Layout<'_> {
     }
 
     fn consume_row(&mut self) -> Result<u32, String> {
+        self.apply_pending_page_start()?;
         if self.row_count == MAX_FLOW_LINES {
             return Err("flow exceeds 128 measured lines".into());
         }
@@ -1148,6 +1180,7 @@ impl Layout<'_> {
     fn keep_first_row_with_next(
         &mut self, following: FollowingInkSpacing,
     ) -> Result<bool, String> {
+        self.apply_pending_page_start()?;
         self.flush_blank_rows()?;
         let top = self.top.checked_add(INSET_UM)
             .ok_or("flow keep-row top inset overflow")?;
@@ -2374,6 +2407,16 @@ fn markdown_fence_transition(
     }
 }
 
+// Only this exact standalone directive requests a physical page boundary.
+// Fenced code and indented rows retain literal text semantics; thematic rules
+// keep their existing visible ink treatment.
+fn markdown_page_start(line: &str) -> bool {
+    let indent = line.bytes().take_while(|&byte| byte == b' ').count();
+    indent <= 3 && line.get(indent..)
+        .is_some_and(|content| content.trim_end_matches(' ')
+            == "<!-- atrament:page-break -->")
+}
+
 // A Setext underline is structural only directly after a nonempty
 // unquoted Markdown paragraph. With no paragraph, "==" stays authored
 // text and "---" retains the existing thematic-separator meaning.
@@ -2586,6 +2629,9 @@ fn take_following_setext<'text>(
         return false;
     }
     while let Some(&next) = lookahead.peek() {
+        if markdown_page_start(next) {
+            return false;
+        }
         if markdown_setext_level(next).is_some() {
             let _: Option<&str> = lookahead.next();
             return true;
@@ -2633,6 +2679,9 @@ fn following_gap<'text>(
         if markdown_fence_transition(&mut fence, line) {
             // Fence delimiters themselves have no physical row.
             continue;
+        }
+        if fence.is_none() && markdown_page_start(line) {
+            return None;
         }
         if fence.is_some() && line.trim_matches(' ').is_empty() {
             pending_blank_rows = pending_blank_rows.saturating_add(1);
@@ -2763,6 +2812,9 @@ fn terminal_rule_chain<'text>(
     let mut rules = 0usize;
     let mut lookahead = following.peekable();
     while let Some(line) = lookahead.next() {
+        if markdown_page_start(line) {
+            return false;
+        }
         if line.trim_end_matches(' ').is_empty() {
             continue;
         }
@@ -2988,6 +3040,12 @@ fn measured_pitch(
                 pending_quote = false;
                 continue;
             }
+            if fence.is_none() && markdown_page_start(raw) {
+                pending_setext = false;
+                pending_list = false;
+                pending_quote = false;
+                continue;
+            }
             if fence.is_some() {
                 pending_setext = false;
                 pending_list = false;
@@ -3115,6 +3173,7 @@ fn initialize_layout<'model>(
         lines: Vec::new(),
         ornaments: Vec::new(),
         page: 1,
+        pending_page_start: false,
         pending_blank_rows: 0,
         y: top.checked_add(INSET_UM)
             .ok_or("flow top margin overflow")?,
@@ -3398,6 +3457,14 @@ fn compose_flow_rows(
             && handle_markdown_code_line(&mut layout, &mut paragraph,
                 &mut paragraph_style, &mut pending_gap, &mut fence,
                 input_line)? {
+            continue;
+        }
+        if source.format == FlowFormat::Markdown
+            && markdown_page_start(input_line) {
+            flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
+            layout.request_page_start();
+            pending_gap = false;
+            paragraph_style = LineStyle::Body;
             continue;
         }
         if source.format == FlowFormat::Markdown

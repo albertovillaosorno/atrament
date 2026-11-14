@@ -9142,3 +9142,69 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('standalone Markdown page break matches two-sheet physical PDF/PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-page-directive-'));
+        try {
+            const source = 'a\n<!-- atrament:page-break -->\na';
+            const region = ['--flow-region', '30000', '40000',
+                '32000', '36000'];
+            const inspect = spawnSync(cargo, [
+                'run', '--offline', '--quiet',
+                '-p', 'atrament_profile_editor_cli', '--',
+                'notebook', ...region, '--inspect-flow',
+                '--inspect-flow-inventory',
+                '--inspect-flow-page-inventory',
+                '--flow-markdown', source,
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(inspect.status, 0, inspect.stderr);
+            assert.match(inspect.stdout, /Pages: 2\nRows: 2\nOrnaments: 0/);
+            assert.match(inspect.stdout,
+                /Page 1 x=32500 um y=42500 um: "a"/);
+            assert.match(inspect.stdout,
+                /Page 2 x=32500 um y=42500 um: "a"/);
+            assert.match(inspect.stdout,
+                /Page 2: 1 exact forms, 1 uses/);
+            const file = join(dir, 'source.md');
+            writeFileSync(file, source);
+            for (const format of ['pdf', 'png']) {
+                const actual = render(dir, source, format, region,
+                    '--flow-markdown', 2);
+                assert.equal(actual.result.status, 0,
+                    actual.result.stderr);
+                const original = readFileSync(actual.output);
+                const fromFile = render(dir, file, format, region,
+                    '--flow-markdown-file', 2);
+                assert.equal(fromFile.result.status, 0,
+                    fromFile.result.stderr);
+                assert.deepEqual(readFileSync(fromFile.output), original);
+                const manual = join(dir, `manual-page-break-${format}`);
+                const explicit = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    ...base,
+                    '--place-text', '1', '32500', '42500', 'a',
+                    '--place-text', '2', '32500', '42500', 'a',
+                    '--export-paper', format,
+                    ...(format === 'pdf' ? ['--pages', '2']
+                        : ['--png-page', '2', '--dpi', '72']),
+                    '--output', manual,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(explicit.status, 0, explicit.stderr);
+                assert.deepEqual(original, readFileSync(manual),
+                    `flow and manual ${format} share physical geometry`);
+                if (format === 'pdf') {
+                    const insufficient = render(dir, source, format,
+                        [...region, '--pages', '1']);
+                    assert.notEqual(insufficient.result.status, 0);
+                    assert.match(insufficient.result.stderr,
+                        /more than the explicit --pages count/);
+                    assert.deepEqual(readFileSync(insufficient.output),
+                        original, 'a refused page budget cannot clobber PDF');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
