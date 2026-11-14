@@ -4677,3 +4677,22 @@ physical sheets, source/page/revision identities, exact physical positions,
 non-regression of successful preferences and genuine recovery outcomes.
 This does not infer actual Markdown measurements or complete the saved
 notebook-to-PDF/PNG workflow; ATR-P2-011 remains open.
+
+## Per-sheet exact glyph inventory inspection (partial) — 2026-11-13
+
+`atrament-profiles notebook --inspect-flow --inspect-flow-inventory
+--inspect-flow-page-inventory` now adds a deterministic per-physical-page
+breakdown of the actual placed exact Unicode graphemes. Unlike raw source
+line counting, it follows Markdown syntax removal, native nominal wrapping,
+selected paper bounds and explicit row pitch. It preserves original report
+bytes when omitted, includes even a sheet with no authored glyphs, and
+never counts synthetic heading/list/quote ornaments as required pen shapes.
+
+Five native regressions cover NFC/NFD, nonbreaking whitespace, two-page
+placement, blank physical sheets, 256 independent seeded row-oracle cases,
+syntax-only decorations, aggregation and invalid selections before source
+reads. An independent Node integration compares the
+same nominal pages against the native vector PDF and second-page PNG with
+explicit caller-authored ink. This is a read-only inspection, not saved
+semantic notebook persistence, available-shape verification or full Export.
+ATR-P2-011 remains open.

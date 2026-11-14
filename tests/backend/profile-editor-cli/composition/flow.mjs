@@ -146,6 +146,58 @@ test('nominal glyph inventory matches minimally authored PDF/PNG flow',
         }
     });
 
+test('page-specific exact inventory agrees with two-sheet native ink', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-page-inventory-'));
+    try {
+        const source = 'a\nó\na\nn\u0303';
+        const region = ['--flow-region', '30000', '40000',
+            '32000', '25000'];
+        const inspected = spawnSync(cargo, [
+            'run', '--offline', '--quiet',
+            '-p', 'atrament_profile_editor_cli', '--',
+            'notebook', '--inspect-flow', '--inspect-flow-inventory',
+            '--inspect-flow-page-inventory', ...region,
+            '--flow-text', source,
+        ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+        assert.equal(inspected.status, 0, inspected.stderr);
+        const report = inspected.stdout;
+        assert.match(report, /Pages: 2\nRows: 4\nOrnaments: 0/);
+        assert.deepEqual(report.split('Page glyph inventory: ')[1], [
+            '2 physical pages',
+            'Page 1: 2 exact forms, 2 uses',
+            '  "a": 1', '  "ó": 1',
+            'Page 2: 2 exact forms, 2 uses',
+            '  "a": 1', '  "n\\u{303}": 1', '',
+        ].join('\n'));
+        const nfdStroke = ['--glyph-stroke', 'n\u0303', '600', '500',
+            '1800', '3000', '250', '#123456'];
+        for (const format of ['pdf', 'png']) {
+            const flowed = render(dir, source, format,
+                [...region, ...nfdStroke], '--flow-text', 2);
+            assert.equal(flowed.result.status, 0, flowed.result.stderr);
+            const manual = join(dir, `page-inventory-manual-${format}`);
+            const result = spawnSync(cargo, [
+                'run', '--offline', '--quiet',
+                '-p', 'atrament_profile_editor_cli', '--',
+                ...base, ...nfdStroke,
+                '--place-text', '1', '32500', '42500', 'a',
+                '--place-text', '1', '32500', '51500', 'ó',
+                '--place-text', '2', '32500', '42500', 'a',
+                '--place-text', '2', '32500', '51500', 'n\u0303',
+                '--export-paper', format,
+                ...(format === 'pdf' ? ['--pages', '2']
+                    : ['--png-page', '2', '--dpi', '72']),
+                '--output', manual,
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(result.status, 0, result.stderr);
+            assert.deepEqual(readFileSync(flowed.output), readFileSync(manual),
+                `page inventory and authored ${format} physical rows agree`);
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 test('compressed numbered label refuses overlap without clobbering PDF/PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-number-clearance-'));

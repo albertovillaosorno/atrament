@@ -19611,3 +19611,179 @@ fn notebook_inspect_flow_inventory_preserves_literal_fence_ink()
     assert!(!entries.contains("\"t\""), "{entries}");
     Ok(())
 }
+
+#[test]
+fn notebook_inspect_flow_page_inventory_reports_exact_sheet_membership()
+-> Result<(), String> {
+    let source = "a\u{a0}ó\r\nn\u{303}\r\nó\r\na";
+    let flags = args(&[
+        "--inspect-flow", "--inspect-flow-inventory",
+        "--inspect-flow-page-inventory", "--flow-text", source,
+        "--flow-region", "30000", "40000", "32000", "25000",
+    ]);
+    let report = execute_notebook(&flags)?
+        .ok_or("missing read-only page inventory")?;
+    let report = String::from_utf8(report)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains("Pages: 2\nRows: 4\nOrnaments: 0\n"),
+        "{report}");
+    let pages = report.split("Page glyph inventory: ").nth(1)
+        .ok_or("missing page inventory section")?;
+    assert_eq!(pages, concat!(
+        "2 physical pages\n",
+        "Page 1: 4 exact forms, 4 uses\n",
+        "  \"a\": 1\n",
+               "  \"n\\u{303}\": 1\n",
+        "  \"\\u{a0}\": 1\n",
+        "  \"ó\": 1\n",
+        "Page 2: 2 exact forms, 2 uses\n",
+        "  \"a\": 1\n",
+        "  \"ó\": 1\n",
+    ));
+    let global = report.split("Glyph inventory: ").nth(1)
+        .ok_or("missing global inventory")?;
+    assert!(global.starts_with("4 exact forms, 6 uses\n"),
+        "{global}");
+
+    let global_only = execute_notebook(&args(&[
+        "--inspect-flow", "--inspect-flow-inventory", "--flow-text",
+        source, "--flow-region", "30000", "40000", "32000", "25000",
+    ]))?.ok_or("missing existing inventory")?;
+    assert!(report.as_bytes().starts_with(&global_only),
+        "page option must extend, not alter, existing reports");
+    Ok(())
+}
+
+#[test]
+fn notebook_inspect_flow_page_inventory_excludes_synthetic_markers()
+-> Result<(), String> {
+    let report = execute_notebook(&args(&[
+        "--inspect-flow-page-inventory", "--inspect-flow-inventory",
+        "--inspect-flow", "--flow-markdown",
+        "# ó\n- ó\n> n\u{303}\n1. ó",
+    ]))?.ok_or("missing synthetic-free page inventory")?;
+    let report = String::from_utf8(report)
+        .map_err(|error| error.to_string())?;
+    let pages = report.split("Page glyph inventory: ").nth(1)
+        .ok_or("missing page section")?;
+    assert_eq!(pages, concat!(
+        "1 physical page\n",
+        "Page 1: 4 exact forms, 6 uses\n",
+        "  \".\": 1\n",
+        "  \"1\": 1\n",
+        "  \"n\\u{303}\": 1\n",
+        "  \"ó\": 3\n",
+    ));
+    Ok(())
+}
+
+#[test]
+fn notebook_inspect_flow_page_inventory_preflights_before_source_io() {
+    for (extra, expected) in [
+        (vec!["--inspect-flow-page-inventory"],
+            "--inspect-flow-page-inventory requires"),
+        (vec!["--inspect-flow", "--inspect-flow-page-inventory"],
+            "--inspect-flow-page-inventory requires"),
+        (vec!["--inspect-flow", "--inspect-flow-inventory",
+            "--inspect-flow-page-inventory", "--inspect-flow-page-inventory"],
+            "--inspect-flow-page-inventory may appear only once"),
+        (vec!["--inspect-flow", "--inspect-flow-inventory",
+            "--inspect-flow-page-inventory", "--export-paper", "pdf"],
+            "--inspect-flow is stdout only"),
+    ] {
+        let mut command = args(&[
+            "--profile", "missing-flow-page-inventory-notebook.json",
+            "--flow-text-file", "missing-flow-page-inventory-source.txt",
+        ]);
+        command.extend(extra.into_iter().map(str::to_owned));
+        let error = execute_notebook(&command)
+            .expect_err("invalid report must refuse before selected IO");
+        assert!(error.contains(expected), "{error:?}");
+    }
+}
+
+#[test]
+fn notebook_inspect_flow_page_inventory_includes_blank_physical_sheets()
+-> Result<(), String> {
+    let report = execute_notebook(&args(&[
+        "--inspect-flow-page-inventory", "--inspect-flow-inventory",
+        "--inspect-flow", "--flow-text", "\n\na",
+        "--flow-region", "30000", "40000", "32000", "25000",
+    ]))?.ok_or("missing read-only page report")?;
+    let report = String::from_utf8(report)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains("Pages: 2\nRows: 1\nOrnaments: 0\n"),
+        "{report}");
+    assert!(report.ends_with(concat!(
+        "Page glyph inventory: 2 physical pages\n",
+        "Page 1: 0 exact forms, 0 uses\n",
+        "Page 2: 1 exact forms, 1 uses\n",
+        "  \"a\": 1\n",
+    )), "{report}");
+    Ok(())
+}
+
+#[test]
+fn notebook_inspect_flow_page_inventory_matches_independent_row_oracle()
+-> Result<(), String> {
+    // Each source row consumes one physical 9-mm slot. The selected
+    // 25-mm region holds exactly two slots on a sheet, including blanks.
+    // Avoid reusing the implementation's grapheme indexer or page maps.
+    let forms = ["a", "n\u{303}", "ó", "…", ""];
+    let mut seed = 0x1f02_573c_8a4b_d129_u64;
+    for case in 0..256 {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        let count = 1 + (seed as usize % 60);
+        let mut lines = Vec::with_capacity(count);
+        for line in 0..count {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            lines.push(if line + 1 == count {
+                "a"
+            } else {
+                forms[(seed as usize) % forms.len()]
+            });
+        }
+        let source = lines.join("\n");
+        let report = execute_notebook(&args(&[
+            "--inspect-flow-page-inventory", "--inspect-flow-inventory",
+            "--inspect-flow", "--flow-text", &source,
+            "--flow-region", "30000", "40000", "32000", "25000",
+        ]))?.ok_or("missing seeded page inventory")?;
+        let report = String::from_utf8(report)
+            .map_err(|error| error.to_string())?;
+        let pages = count.div_ceil(2);
+        let noun = if pages == 1 { "page" } else { "pages" };
+        let mut expected = format!("{pages} physical {noun}\n");
+        for page in 0..pages {
+            let chunk = &lines[page * 2..(page * 2 + 2).min(count)];
+            let matches = |s| chunk.iter().filter(|&&item| item == s).count();
+            let uses = chunk.iter().filter(|&&item| !item.is_empty()).count();
+            let distinct = forms[..4].iter().filter(|&&s| matches(s) > 0)
+                .count();
+            expected.push_str(&format!(
+                "Page {}: {distinct} exact forms, {uses} uses\n",
+                page + 1,
+            ));
+            for form in &forms[..4] {
+                let quantity = matches(form);
+                if quantity != 0 {
+                    expected.push_str(&format!(
+                        "  {form:?}: {quantity}\n",
+                    ));
+                }
+            }
+        }
+        let observed = report.split("Page glyph inventory: ").nth(1)
+            .ok_or("missing per-sheet seeded inventory")?;
+        if observed != expected {
+            return Err(format!(
+                "case {case} ({source:?}): {observed:?} != {expected:?}",
+            ));
+        }
+    }
+    Ok(())
+}

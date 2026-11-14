@@ -495,6 +495,13 @@ ASCII spaces and line breaks are spacing, not drawn ink. This option does not
 read a glyph library, change the existing report when absent, or guarantee
 that authored shapes actually fit a printable page.
 
+For long notebooks, add `--inspect-flow-page-inventory` to both flags above
+to append a **per-physical-page** exact grapheme count, sorted within each
+sheet, without modifying the existing global inventory. Repeated glyphs
+appear on each sheet where they are used; their per-page counts sum to the
+global count. An ornament-only sheet has zero authored glyph requirements.
+This remains nominal, read-only planning rather than actual ink clearance.
+
 To add reproducible, bounded pen-like variation to the **printed paper
 ruling** under the authored text, select both export-only options:
 

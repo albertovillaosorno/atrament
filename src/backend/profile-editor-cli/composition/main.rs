@@ -185,6 +185,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--border-radius-um INTEGER] [--page-numbers true|false] \
     [--printed-sheet true|false] [--inspect | --inspect-flow] \
     [--inspect-flow-inventory (requires --inspect-flow)] \
+    [--inspect-flow-page-inventory (requires --inspect-flow-inventory)] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--ruler-seed UINT32 --ruler-error-mm 0.001..0.250] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
@@ -301,8 +302,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     --flow-list-quote-right-inset-um reserves 0..12 mm on their right. \
     --inspect-flow prints the nominal measured row positions and page \
     count without requiring glyph strokes or writing any output file. \
-    --inspect-flow-inventory also lists required exact visible graphemes \
-    after Markdown parsing, excluding synthetic ornaments and ASCII spaces. \
+    --inspect-flow-inventory lists exact visible graphemes after Markdown \
+    parsing, excluding synthetic ornaments and ASCII spaces. \
+    --inspect-flow-page-inventory splits those requirements per sheet. \
     It does not validate authored pen contour or glyph coverage. \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
@@ -425,6 +427,7 @@ struct NotebookRequest {
     inspect: bool,
     inspect_flow: bool,
     inspect_flow_inventory: bool,
+    inspect_flow_page_inventory: bool,
     output: Option<String>,
     pages: usize,
     pages_explicit: bool,
@@ -581,7 +584,8 @@ impl NotebookFlagPreflight {
         self.imported_ink_count = self.imported_ink_count
             .saturating_add(usize::from(option == "--ink-file"));
         let operands = match option {
-            "--inspect" | "--inspect-flow" | "--inspect-flow-inventory" => {
+            "--inspect" | "--inspect-flow" | "--inspect-flow-inventory"
+            | "--inspect-flow-page-inventory" => {
                 self.unique(option, &format!("{option} may appear only once"))?;
                 0
             }
@@ -712,6 +716,13 @@ impl NotebookFlagPreflight {
             return Err(
                 "--inspect-flow-inventory requires --inspect-flow".into()
             );
+        }
+        if has("--inspect-flow-page-inventory")
+            && !has("--inspect-flow-inventory") {
+            return Err(concat!(
+                "--inspect-flow-page-inventory requires ",
+                "--inspect-flow-inventory",
+            ).into());
         }
         if inspect_flow && flow_format.is_none() {
             return Err("--inspect-flow requires a text or Markdown flow"
@@ -3134,6 +3145,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut profile = NotebookProfile::default();
     let (mut inspect, mut output, mut replace) = (false, None, false);
     let (mut inspect_flow, mut inspect_flow_inventory) = (false, false);
+    let mut inspect_flow_page_inventory = false;
     let (mut export, mut ink) = (NotebookExportOptions::default(), Vec::new());
     let (mut glyphs, mut statistics) = (GlyphOverlay::default(), None);
     let (mut flow, mut flow_region) = (None, None);
@@ -3172,6 +3184,12 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                     "--inspect-flow-inventory may appear only once".into()
                 ),
             "--inspect-flow-inventory" => inspect_flow_inventory = true,
+            "--inspect-flow-page-inventory" if inspect_flow_page_inventory =>
+                return Err(
+                    "--inspect-flow-page-inventory may appear only once".into()
+                ),
+            "--inspect-flow-page-inventory" =>
+                inspect_flow_page_inventory = true,
             "--handwriting-profile" =>
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
             "--heading-style" | "--heading-align" | "--heading-color"
@@ -3232,6 +3250,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         inspect,
         inspect_flow,
         inspect_flow_inventory,
+        inspect_flow_page_inventory,
         output,
         pages: export.pages.unwrap_or(1),
         png_page: export.png_page.unwrap_or(1),
@@ -3338,6 +3357,8 @@ fn inspect_notebook_flow(request: &NotebookRequest)
         runs.len(), ornaments.len(),
     );
     let mut inventory = BTreeMap::<String, usize>::new();
+    let mut page_inventories =
+        BTreeMap::<usize, BTreeMap<String, usize>>::new();
     for row in runs {
         write!(report,
             "Page {} x={} um y={} um: {:?}\n",
@@ -3352,6 +3373,13 @@ fn inspect_notebook_flow(request: &NotebookRequest)
                         .or_default();
                     *count = count.checked_add(1)
                         .ok_or("flow inventory occurrence overflow")?;
+                    if request.inspect_flow_page_inventory {
+                        let page_count = page_inventories
+                            .entry(row.page).or_default()
+                            .entry(grapheme.to_owned()).or_default();
+                        *page_count = page_count.checked_add(1)
+                            .ok_or("flow page inventory occurrence overflow")?;
+                    }
                 }
                 remaining = rest;
             }
@@ -3366,6 +3394,29 @@ fn inspect_notebook_flow(request: &NotebookRequest)
         for (grapheme, uses) in inventory {
             write!(report, "{grapheme:?}: {uses}\n")
                 .map_err(|error| format!("flow inventory refused: {error}"))?;
+        }
+    }
+    if request.inspect_flow_page_inventory {
+        let page_noun = if pages == 1 { "page" } else { "pages" };
+        write!(report, "Page glyph inventory: {pages} physical {page_noun}\n")
+            .map_err(|error| format!("flow inventory refused: {error}"))?;
+        for page in 1..=pages {
+            let page_inventory = page_inventories.get(&page);
+            let forms = page_inventory.map_or(0, BTreeMap::len);
+            let uses: usize = page_inventory.map_or(0, |forms| {
+                forms.values().sum()
+            });
+            write!(report,
+                "Page {page}: {forms} exact forms, {uses} uses\n",
+            ).map_err(|error| format!("flow inventory refused: {error}"))?;
+            if let Some(forms) = page_inventory {
+                for (grapheme, count) in forms {
+                    write!(report, "  {grapheme:?}: {count}\n")
+                        .map_err(|error| {
+                            format!("flow inventory refused: {error}")
+                        })?;
+                }
+            }
         }
     }
     Ok(report.into_bytes())
