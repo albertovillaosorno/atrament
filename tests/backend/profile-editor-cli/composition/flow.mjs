@@ -10081,3 +10081,83 @@ test('parenthesized authored powers have exact native PDF/PNG row parity',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+
+test('scientific power-of-ten products retain exact native PDF/PNG ink',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-products-'));
+    try {
+        const region = ['--flow-region', '30000', '40000',
+            '47000', '36000'];
+        const prefix = 'abcdefghij';
+        const cases = [
+            ['1×10³g', '×', 'U+00D7'],
+            ['1×10^-3g', '^', 'U+005E'],
+            ['1×10⁻²g', '⁻', 'U+207B'],
+            ['1×10^(2)g', '(', 'U+0028'],
+            ['1×10⁽²⁾g', '⁽', 'U+207D'],
+            ['6.02×10³g', '.', 'U+002E'],
+            ['-0.5×10⁻³g', '×', 'U+00D7', ' '],
+            ['1e3×10³g', 'e', 'U+0065'],
+        ];
+        const stroke = (glyph) => [
+            '--glyph-stroke', glyph, '600', '500', '1800',
+            '3000', '250', '#123456',
+        ];
+        for (const [tail, omitted, codepoint, separator = ''] of cases) {
+            const source = prefix + separator + tail;
+            const glyphs = [...new Set([...source].filter(
+                (glyph) => glyph !== 'a' && glyph !== ' '))];
+            const authored = glyphs.flatMap(stroke);
+            const incomplete = glyphs.filter(
+                (glyph) => glyph !== omitted).flatMap(stroke);
+            for (const flag of ['--flow-text', '--flow-markdown']) {
+                const inspected = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    'notebook', '--inspect-flow', ...region, flag, source,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(inspected.status, 0, inspected.stderr);
+                assert.ok(inspected.stdout.includes(
+                    'Page 1 x=32500 um y=42500 um: "' + prefix + '"'),
+                source + ': expected intact preceding row');
+                assert.ok(inspected.stdout.includes(
+                    'Page 1 x=32500 um y=51500 um: "' + tail + '"'),
+                source + ': expected intact scientific row');
+            }
+            for (const format of ['pdf', 'png']) {
+                const manualFile = join(dir, `manual-products-${format}`);
+                const manual = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    ...base, ...authored,
+                    '--place-text', '1', '32500', '42500', prefix,
+                    '--place-text', '1', '32500', '51500', tail,
+                    '--export-paper', format,
+                    ...(format === 'png' ? ['--dpi', '72'] : []),
+                    '--output', manualFile, '--replace',
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(manual.status, 0, manual.stderr);
+                const expected = readFileSync(manualFile);
+                for (const flag of ['--flow-text', '--flow-markdown']) {
+                    const flowed = render(dir, source, format,
+                        [...region, ...authored], flag);
+                    assert.equal(flowed.result.status, 0,
+                        flowed.result.stderr);
+                    assert.deepEqual(readFileSync(flowed.output), expected,
+                        source + ' ' + flag + ' ' + format);
+                    const refused = render(dir, source, format,
+                        [...region, ...incomplete], flag);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.match(refused.result.stderr,
+                        /missing authored glyph|no authored strokes/i);
+                    assert.ok(refused.result.stderr.includes(codepoint));
+                    assert.deepEqual(readFileSync(refused.output), expected,
+                        'missing product ink must not overwrite PDF/PNG');
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

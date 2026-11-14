@@ -5281,3 +5281,23 @@ vector PDF and transparent PNG output with independently placed ink, and
 check missing authored glyphs cannot overwrite accepted output. This only
 changes advisory line breaking, not mathematical typography, semantic
 notebook persistence or the full notebook-to-PDF journey.
+
+## Authored scientific power-of-ten products (partial) — 2026-11-14
+
+The export-only Rust flow compositor now keeps a complete multiplication-sign
+power-of-ten expression such as `6.02×10^23`, `1×10⁻³` or `1×10^(2)`
+with its preceding numeric mantissa on one physical row when the exact ink
+fits. The expression must use authored `×10` followed by a complete ASCII
+caret exponent or Unicode superscript exponent, including matching optional
+parentheses and a signed power. Incomplete powers, ordinary multiplication
+and nonnumeric prefixes do not gain this numeric grouping preference.
+
+A focused native Rust regression covers exact grapheme ties, invalid suffixes,
+a maximum 4,096-byte input and physically narrow fallback without lost ink.
+A real-process regression checks eight complete expressions in plain and
+Markdown flow: exact physical PDF and transparent PNG bytes match separately
+positioned authored strokes, while missing shapes refuse without overwriting
+previous valid output. The grouping is advisory and synthesizes no glyph.
+
+This only improves CLI nominal line breaking. It does not implement parsed
+mathematics, saved notebook semantic content or complete notebook Export.

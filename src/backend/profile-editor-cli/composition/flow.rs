@@ -2286,6 +2286,69 @@ fn is_authored_superscript_digit(value: &str) -> bool {
         | "\u{2075}" | "\u{2076}" | "\u{2077}" | "\u{2078}" | "\u{2079}")
 }
 
+// A multiplication-sign scientific number has an explicitly written power
+// of ten, not just an arbitrary product. Return the end of ×10^n or ×10ⁿ
+// (including complete signed/parenthesized scripts) only when every required
+// glyph exists. Other multiplication is ordinary authored ink.
+fn scientific_multiplier_end(
+    glyphs: &[MeasuredGrapheme<'_>], from: usize,
+) -> Option<usize> {
+    if glyphs.get(from)?.0 != "\u{d7}"
+        || glyphs.get(from.checked_add(1)?)?.0 != "1"
+        || glyphs.get(from.checked_add(2)?)?.0 != "0" {
+        return None;
+    }
+    let power = from.checked_add(3)?;
+    let mut digits = power;
+    let (superscript, closing) = match glyphs.get(power)?.0 {
+        "^" => {
+            digits = digits.checked_add(1)?;
+            if glyphs.get(digits).is_some_and(|item| item.0 == "(") {
+                digits = digits.checked_add(1)?;
+                (false, Some(")"))
+            } else {
+                (false, None)
+            }
+        }
+        "\u{207d}" => {
+            digits = digits.checked_add(1)?;
+            (true, Some("\u{207e}"))
+        }
+        value if is_authored_superscript_digit(value)
+            || matches!(value, "\u{207a}" | "\u{207b}") => (true, None),
+        _ => return None,
+    };
+    if glyphs.get(digits).is_some_and(|item| {
+        if superscript {
+            matches!(item.0, "\u{207a}" | "\u{207b}")
+        } else {
+            matches!(item.0, "+" | "-" | "\u{2212}")
+        }
+    }) {
+        digits = digits.checked_add(1)?;
+    }
+    let is_digit = |at: usize| glyphs.get(at).is_some_and(|item| {
+        if superscript {
+            is_authored_superscript_digit(item.0)
+        } else {
+            matches!(item.0.as_bytes(), [b'0'..=b'9'])
+        }
+    });
+    if !is_digit(digits) {
+        return None;
+    }
+    while is_digit(digits) {
+        digits = digits.checked_add(1)?;
+    }
+    if let Some(close) = closing {
+        if glyphs.get(digits)?.0 != close {
+            return None;
+        }
+        digits = digits.checked_add(1)?;
+    }
+    Some(digits)
+}
+
 // A bounded ASCII number (including decimal and thousands separators,
 // clock colons, digit fractions/dates and numeric ranges) is one advisory
 // ink cluster when it fits. Numeric comparison prefixes also bind the
@@ -2440,6 +2503,12 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
             while superscript_digit(cursor) {
                 cursor = cursor.saturating_add(1);
             }
+        }
+        // This is a measured preference for a complete scientific
+        // product, not generic multiplication or an exponent renderer.
+        if let Some(end) = scientific_multiplier_end(glyphs, cursor) {
+            has_separator = true;
+            cursor = end;
         }
         // Keep ordinary multi-digit values with their already-supported
         // attached percent/per-mille/permyriad or degree punctuation. A

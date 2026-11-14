@@ -9387,6 +9387,75 @@ fn authored_multidigit_bases_keep_complete_parenthesized_scripts()
 }
 
 #[test]
+fn scientific_multiplication_powers_bind_complete_authored_notation()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    for source in [
+        "6.02\u{d7}10^23", "6,02\u{d7}10^-3", "1\u{d7}10\u{b2}",
+        "-0.5\u{d7}10\u{207b}\u{b3}", "1e3\u{d7}10^(2)",
+        "1\u{d7}10\u{207d}\u{b2}\u{207e}",
+    ] {
+        let glyphs = super::measured_word(source, None)?.0;
+        if super::numeric_separator_joins(&glyphs)
+            .iter().any(|joined| !*joined) {
+            return Err(format!("{source:?} split a complete product"));
+        }
+    }
+    for source in [
+        "1\u{d7}10^", "1\u{d7}10^-", "1\u{d7}10^a", "1\u{d7}11^2", "3\u{d7}4",
+        "1\u{d7}10\u{207b}", "1\u{d7}10\u{207d}\u{b2}", "a\u{d7}10^2",
+    ] {
+        let glyphs = super::measured_word(source, None)?.0;
+        let joins = super::numeric_separator_joins(&glyphs);
+        if joins.first() != Some(&false) {
+            return Err(format!("{source:?} bound incomplete multiplication"));
+        }
+    }
+    // The maximum 4096-byte CLI source still needs only one linear pass
+    // even when the mantissa is thousands of adjacent authored digits.
+    let longest = format!("{}\u{d7}10^3", "1".repeat(4_090));
+    if longest.len() != 4_096 {
+        return Err("full-size scientific fixture exceeds byte cap".into());
+    }
+    let glyphs = super::measured_word(&longest, None)?.0;
+    if super::numeric_separator_joins(&glyphs)
+        .iter().any(|joined| !*joined) {
+        return Err("full-size scientific product lost a tie".into());
+    }
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 33_000, height: 36_000,
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        let source = "abcde1\u{d7}10\u{b3}g";
+        let (rows, marks, pages) = super::layout_flow_with_region(
+            &FlowSource::new(format, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(), Some(region),
+        )?;
+        let texts = rows.iter().map(|row| row.text.as_str())
+            .collect::<Vec<_>>();
+        if pages != 1 || !marks.is_empty()
+            || texts != ["abcde", "1\u{d7}10\u{b3}g"] {
+            return Err(format!("{format:?} product split: {texts:?}"));
+        }
+        let narrow = super::FlowRegion {
+            width: 9_000, height: 128_000, ..region
+        };
+        let (fallback, _, _) = super::layout_flow_with_region(
+            &FlowSource::new(format, "1\u{d7}10^3")?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(), Some(narrow),
+        )?;
+        if fallback.iter().map(|row| row.text.as_str())
+            .collect::<String>() != "1\u{d7}10^3" {
+            return Err("narrow scientific notation lost ink".into());
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn bounded_numeric_join_scan_handles_full_size_number_once()
 -> Result<(), String> {
     // The 4,096-byte source cap permits a single long numeric word.
