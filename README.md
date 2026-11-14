@@ -521,9 +521,11 @@ Without an authored library all visible forms are reported missing. NFC
 and NFD remain distinct unless the caller explicitly supplies a single-hop
 `--fallback-glyph MISSING AUTHORED` mapping whose target is an existing
 stroke shape. With mappings, the report calls coverage **selected** rather
-than exact, and separately labels borrowed keys and their source strokes,
-including per-sheet counts. Invalid, duplicate, chained or ambiguous
-fallbacks refuse under the same native mapping checks as PDF/PNG exports.
+than exact, quantifies borrowed forms and uses, and separately labels
+borrowed keys and their source strokes, including per-sheet counts.
+Invalid, duplicate, chained or ambiguous fallbacks refuse under the same
+native mapping checks as PDF/PNG exports.
+
 Source-independent mapping conflicts refuse before selected profile/source
 reads; imported-library target existence is checked after the library loads.
 

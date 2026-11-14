@@ -4756,3 +4756,16 @@ The complete Rust CLI suite and native PDF/PNG reports remain authoritative.
 
 Preflight does not read or mutate the imported library. Remaining
 P1/P2 notebook work stays open.
+
+## Borrowed-form usage summary (partial) — 2026-11-13
+
+The opt-in coverage report now additionally totals forms and occurrences
+that rely on explicitly borrowed glyph strokes. This isolates how much of
+the selected coverage is not directly authored, including a zero-use mapping.
+Without any fallback selection, historical exact coverage output is
+byte-for-byte unchanged. The existing per-page borrowed statuses remain
+available for locating where new glyph authoring would be useful.
+
+Focused Rust tests cover borrowed counts for a three-sheet Unicode source and
+a loaded-library single-form case; no visual equivalence is inferred.
+This remains a planning diagnostic, not proof of physical pen clearance.

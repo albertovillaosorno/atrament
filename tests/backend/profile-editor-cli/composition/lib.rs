@@ -19943,6 +19943,7 @@ fn notebook_shape_coverage_reports_only_explicit_fallbacks_and_page_uses()
         "--glyph-stroke", "ó", "600", "500", "1800", "3000",
         "250", "#123456",
         "--fallback-glyph", "n\u{303}", "ó",
+        "--fallback-glyph", "é", "a",
     ]));
     let result = execute_notebook(&selected)?
         .ok_or("missing explicit fallback coverage")?;
@@ -19954,6 +19955,8 @@ fn notebook_shape_coverage_reports_only_explicit_fallbacks_and_page_uses()
         "Selected shape coverage: 3/4 forms, 4/5 uses ",
         "(ink clearance unchecked)\n",
     )), "{report}");
+    assert!(report.contains(
+        "Borrowed shape coverage: 1 forms, 2 uses\n"), "{report}");
     assert!(report.contains(
         "Borrowed \"n\\u{303}\" from \"ó\": 2\n"), "{report}");
     assert!(report.contains("Missing \"¿\": 1\n"), "{report}");
@@ -20081,6 +20084,7 @@ fn notebook_imported_fallback_coverage_matches_native_vector_pdf()
     assert!(report.contains(concat!(
         "Selected shape coverage: 1/1 forms, 1/1 uses ",
         "(ink clearance unchecked)\n",
+        "Borrowed shape coverage: 1 forms, 1 uses\n",
         "Borrowed \"ó\" from \"a\": 1\n",
     )), "{report}");
 

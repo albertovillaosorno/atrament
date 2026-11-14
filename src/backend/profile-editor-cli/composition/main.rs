@@ -3426,6 +3426,20 @@ fn append_flow_shape_coverage(
          {present_uses}/{total_uses} uses (ink clearance unchecked)",
         inventory.len(),
     ).map_err(|error| format!("flow coverage refused: {error}"))?;
+    if !glyphs.fallbacks.is_empty() {
+        let borrowed_forms = inventory.keys()
+            .filter(|key| matches!(status(key), ShapeCoverage::Borrowed(_)))
+            .count();
+        let borrowed_uses: usize = inventory.iter()
+            .filter(|(key, _)| matches!(
+                status(key), ShapeCoverage::Borrowed(_),
+            ))
+            .map(|(_, occurrences)| *occurrences).sum();
+        writeln!(report,
+            "Borrowed shape coverage: {borrowed_forms} forms, \
+             {borrowed_uses} uses",
+        ).map_err(|error| format!("flow coverage refused: {error}"))?;
+    }
     for (grapheme, count) in inventory {
         match status(grapheme) {
             ShapeCoverage::Authored =>
