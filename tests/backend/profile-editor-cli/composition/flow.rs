@@ -9028,7 +9028,7 @@ fn authored_caret_powers_bind_only_complete_numeric_exponents()
         source.chars().map(|ch| {
             let form = match ch {
                 '0'..='9' => "1",
-                '^' => "^", '+' => "+", '-' => "-", '−' => "−",
+                '^' => "^", '+' => "+", '-' => "-", '\u{2212}' => "\u{2212}",
                 '.' => ".", ',' => ",", 'e' => "e", 'E' => "E",
                 _ => "x",
             };
@@ -9039,9 +9039,9 @@ fn authored_caret_powers_bind_only_complete_numeric_exponents()
         ("10^3", &[0, 1, 2][..]),
         ("2^-4", &[0, 1, 2]),
         ("2^+4", &[0, 1, 2]),
-        ("2^−4", &[0, 1, 2]),
+        ("2^\u{2212}4", &[0, 1, 2]),
         ("-2^+4", &[0, 1, 2, 3]),
-        ("1.5^−3", &[0, 1, 2, 3, 4]),
+        ("1.5^\u{2212}3", &[0, 1, 2, 3, 4]),
         ("2e3^4", &[0, 1, 2, 3]),
         ("2^3x", &[0, 1]),
         ("2^3.4", &[0, 1]),
@@ -9060,8 +9060,10 @@ fn authored_caret_powers_bind_only_complete_numeric_exponents()
     }
     // A complete 4,096-grapheme power uses a single bounded scan.
     let mut long = vec![("1", 4_000, 4_000); 4_096];
-    long[2_048] = ("^", 4_000, 4_000);
-    long[2_049] = ("-", 4_000, 4_000);
+    *long.get_mut(2_048).ok_or("caret fixture index missing")? =
+        ("^", 4_000, 4_000);
+    *long.get_mut(2_049).ok_or("caret fixture sign missing")? =
+        ("-", 4_000, 4_000);
     assert!(super::numeric_separator_joins(&long)
         .iter().all(|joined| *joined));
 
@@ -9070,7 +9072,7 @@ fn authored_caret_powers_bind_only_complete_numeric_exponents()
     };
     for format in [FlowFormat::Plain, FlowFormat::Markdown] {
         for source in ["abcde10^3g", "abcde2^-3g",
-            "abcde1.2^+3g", "abcde2^−3g"] {
+            "abcde1.2^+3g", "abcde2^\u{2212}3g"] {
             let (rows, marks, pages) = super::layout_flow_with_region(
                 &FlowSource::new(format, source)?,
                 &NotebookProfile::default(), None,
@@ -9078,7 +9080,8 @@ fn authored_caret_powers_bind_only_complete_numeric_exponents()
             )?;
             assert_eq!(pages, 1);
             assert!(marks.is_empty());
-            let tail = &source[5..];
+            let tail = source.strip_prefix("abcde")
+                .ok_or("caret fixture prefix missing")?;
             assert_eq!(rows.iter().map(|row| row.text.as_str())
                 .collect::<Vec<_>>(), ["abcde", tail],
                 "{source} {format:?}");
@@ -9086,7 +9089,7 @@ fn authored_caret_powers_bind_only_complete_numeric_exponents()
         let narrow = super::FlowRegion {
             width: 9_000, height: 128_000, ..region
         };
-        let source = "2^−3";
+        let source = "2^\u{2212}3";
         let (rows, _, pages) = super::layout_flow_with_region(
             &FlowSource::new(format, source)?,
             &NotebookProfile::default(), None,
