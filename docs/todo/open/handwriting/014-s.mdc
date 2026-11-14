@@ -1580,9 +1580,39 @@ checks exact integer quadratic samples, two measured text rows,
 composed-vs-decomposed Unicode identities, explicit anchors, seeded
 replay, native vector PDF/transparent PNG, exact imported page-ink
 parity, a 128-bend independent numeric oracle, cross-row refusal and
-invalid export sentinel preservation. It performs no real printing or remote requests.
+invalid export sentinel preservation. It performs no real printing or
+remote requests.
 
 This is a local, export-only join selection. It does not synthesize a
 whole cursive alphabet, persist paths/joins as notebook semantics, infer
 human pen lifts or satisfy the full two-line calibrated handwriting
 acceptance criteria; ATR-P4-014 remains open.
+
+## Curved text-join boundary and full-row regression (partial) — 2026-11-14
+
+Six additional real CLI tests extend the export-only inter-glyph curve
+evidence. Two differently bent pairs in one text run retain their own
+quadratic samples even when selection flags appear in reverse text order.
+An independent signed-integer oracle checks 128 oblique endpoint gaps
+and bends, rather than only horizontal baseline joins. Near the A4
+right printable margin, both authored glyphs and the straight bridge
+fit, while a convex curved overshoot refuses PDF/PNG replacement without
+altering either existing output.
+
+A two-row NFC/NFD-accented fixture now composes 16 authored segments and
+16 curved pieces after seeded glyph, line and word variation. Emitted
+physical TSV reopens into byte-identical native vector PDF and transparent
+PNG. A deliberate source-stroke reversal is independently saved, reversed
+again and compared byte-for-byte with its original library; its unsafe
+physical join refuses without replacing the earlier PDF. Source TSV
+remains unchanged.
+
+The 4096-segment boundary has an exact test: 4092 original physical
+segments plus four curved pieces admit, but one more original segment
+refuses before replacing an approved output; the one-piece straight
+connector still fits. Seven malformed curved-join flags also refuse
+before reading a deliberately unclosed glyph-library stdin pipe.
+Together these cases extend the native curved-join suite to 15 tests.
+They do not add persisted curve controls, inferred pen lifts, editor
+word-joining controls or a calibrated handwritten alphabet. The full
+P1-014 task remains open.
