@@ -8609,6 +8609,45 @@ fn seeded_overlong_punctuation_prefixes_preserve_exact_flow()
 }
 
 #[test]
+fn punctuation_prefix_respects_exact_grapheme_and_byte_limits()
+-> Result<(), String> {
+    // The physical contour fits. A 97th one-byte grapheme must not be
+    // added to an otherwise valid 96-glyph cluster.
+    let marks = vec![("/", 1, 1); 120];
+    let first = super::next_punctuation_cluster(&marks, 0, 200)?;
+    assert_eq!((first.count, first.bytes, first.end, first.extent_um),
+        (96, 96, 96, 96));
+    let rest = super::next_punctuation_cluster(&marks, first.end, 200)?;
+    assert_eq!((rest.count, rest.bytes, rest.end, rest.extent_um),
+        (24, 24, 120, 24));
+
+    // Each source pair is NBSP + one combining-mark grapheme, so the
+    // nonbreaking join is valid. The byte cap, rather than the width or
+    // grapheme cap, ends the longest fitting prefix at 370 bytes.
+    let joined = concat!("a\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}",
+        "\u{0301}\u{0301}\u{0301}\u{0301}\u{0301}");
+    let mut large = Vec::new();
+    for _ in 0..70 {
+        large.push(("\u{a0}", 1, 1));
+        large.push((joined, 1, 1));
+    }
+    let prefix = super::next_punctuation_cluster(&large, 0, 200)?;
+    assert_eq!((prefix.count, prefix.bytes, prefix.end,
+        prefix.extent_um), (33, 370, 33, 33));
+    let following = super::next_punctuation_cluster(
+        &large, prefix.end, 200,
+    )?;
+    assert_eq!(following.count, 32);
+    assert_eq!(following.bytes, 368);
+    // If the row cannot fit a pair, the existing single-glyph fallback
+    // remains mandatory even with attached punctuation.
+    let narrow = super::next_punctuation_cluster(&marks, 0, 1)?;
+    assert_eq!((narrow.count, narrow.end, narrow.extent_um),
+        (1, 1, 1));
+    Ok(())
+}
+
+#[test]
 fn page_start_directive_is_exact_and_only_markdown_syntax() {
     for valid in [
         "<!-- atrament:page-break -->",

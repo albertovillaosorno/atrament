@@ -363,6 +363,11 @@ One failing-before/fixed-after test checks five actual three-row prefixes;
 Unicode grapheme in both plain text and Markdown. Real vector PDF and
 transparent PNG exports match independently placed authored ink for three
 punctuation kinds, and an unshaped mark still refuses atomic replacement.
+A direct boundary oracle also verifies 96 one-byte graphemes per selected
+cluster, the distinct 384-byte ceiling for longer combining-mark graphemes,
+correct resumption at the next source index, and one-glyph fallback when
+physical space is too narrow for a pair.
+
 This is bounded visual grouping, not automatic hyphenation, full Unicode
 line breaking, or an editable saved notebook.
 
