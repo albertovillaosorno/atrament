@@ -5083,3 +5083,27 @@ measured per-grapheme wrapping rather than refusing valid input.
 
 This remains CLI-only physical layout. The persisted notebook compiler,
 inline mathematics typesetting and semantic block editing remain unfinished.
+
+
+## Fraction, date and range flow grouping (partial) — 2026-11-14
+
+The native plain-text and Markdown CLI now keeps digit-delimited fractions
+(`3/4` and `3⁄4`), slash dates (`2026/11/14`) and numeric ranges (`3-4`,
+`3−4`, `3–4`) on the same physical row when their complete authored ink fits.
+The existing single-pass numeric scanner accepts these separators only
+between ASCII digits. A dangling slash, doubled separator, em dash or
+ordinary letter-hyphen word does not acquire numeric binding. Scientific
+notation and decimal/comma/time grouping retain their previous behavior.
+
+The physical preference is advisory: longer text still uses the existing
+measured fallback instead of clipping or refusing otherwise printable ink.
+It never converts characters, creates digits or supplies missing glyph
+strokes. Two pure Rust tests check positive and negative contextual ties,
+a 4,096-grapheme scan, actual row placement and narrow-row source identity.
+A native CLI subprocess regression compares six cases, both text modes and
+both PDF/transparent PNG against independently authored placed strokes.
+With a separator glyph removed, the export refuses and leaves previously
+valid file bytes unchanged.
+
+This is an export-only CLI pagination improvement, not a parsed numerical
+expression, localized date formatter or saved semantic notebook layout.

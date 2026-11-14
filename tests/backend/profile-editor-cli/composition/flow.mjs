@@ -2140,6 +2140,66 @@ test('numeric separators and unary signs preserve native PDF/PNG rows',
         }
     });
 
+test('numeric fractions, dates and ranges retain exact physical row ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-fractions-'));
+        try {
+            const cases = [
+                ['abcdef3/4g', '3/4g', '/', 33000],
+                ['abcdef3⁄4g', '3⁄4g', '⁄', 33000],
+                ['abcdef3-4g', '3-4g', '-', 33000],
+                ['abcdef3−4g', '3−4g', '−', 33000],
+                ['abcdef3–4g', '3–4g', '–', 33000],
+                ['abcdef2026/11/14g', '2026/11/14g', '/', 50000],
+            ];
+            const stroke = (glyph) => [
+                '--glyph-stroke', glyph, '600', '500', '1800',
+                '3000', '250', '#123456',
+            ];
+            for (const [source, tail, separator, width] of cases) {
+                const region = ['--flow-region', '30000', '40000',
+                    String(width), '36000'];
+                const shaped = [...new Set([...source].filter(
+                    (glyph) => glyph !== 'a'))].flatMap(stroke);
+                const missing = [...new Set([...source].filter(
+                    (glyph) => glyph !== 'a' && glyph !== separator))]
+                    .flatMap(stroke);
+                for (const format of ['pdf', 'png']) {
+                    const manualFile = join(dir, 'manual-' + format);
+                    const manual = spawnSync(cargo, [
+                        'run', '--offline', '--quiet',
+                        '-p', 'atrament_profile_editor_cli', '--',
+                        ...base, ...shaped,
+                        '--place-text', '1', '32500', '42500', 'abcdef',
+                        '--place-text', '1', '32500', '51500', tail,
+                        '--export-paper', format,
+                        ...(format === 'png' ? ['--dpi', '72'] : []),
+                        '--output', manualFile, '--replace',
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(manual.status, 0, manual.stderr);
+                    const expected = readFileSync(manualFile);
+                    for (const flag of ['--flow-text', '--flow-markdown']) {
+                        const flowed = render(dir, source, format,
+                            [...region, ...shaped], flag);
+                        assert.equal(flowed.result.status, 0,
+                            flowed.result.stderr);
+                        assert.deepEqual(readFileSync(flowed.output),
+                            expected, source + ' ' + flag + ' ' + format);
+                        const rejected = render(dir, source, format,
+                            [...region, ...missing], flag);
+                        assert.notEqual(rejected.result.status, 0);
+                        assert.match(rejected.result.stderr,
+                            /missing authored glyph|no authored strokes/i);
+                        assert.deepEqual(readFileSync(rejected.output),
+                            expected, 'invalid shape never clobbers ink');
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('scientific exponent notation stays on one fitting PDF/PNG row',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-exponents-'));

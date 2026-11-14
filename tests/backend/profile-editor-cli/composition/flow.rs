@@ -8521,6 +8521,102 @@ fn numeric_joining_is_contextual_and_never_ties_sentence_punctuation()
 }
 
 #[test]
+fn numeric_fraction_date_and_range_ties_require_digits_on_both_sides()
+-> Result<(), String> {
+    let measured = |source: &str| -> Vec<super::MeasuredGrapheme<'static>> {
+        source.chars().map(|ch| {
+            let form = match ch {
+                '0'..='9' => "1",
+                '/' => "/",
+                '⁄' => "⁄",
+                '-' => "-",
+                '−' => "−",
+                '–' => "–",
+                '—' => "—",
+                '.' => ".",
+                _ => "x",
+            };
+            (form, 4_000, 4_000)
+        }).collect()
+    };
+    for (source, expected) in [
+        ("3/4", &[0, 1][..]),
+        ("3⁄4", &[0, 1]),
+        ("2026/11/14", &[0, 1, 2, 3, 4, 5, 6, 7, 8]),
+        ("3-4", &[0, 1]),
+        ("3−4", &[0, 1]),
+        ("3–4", &[0, 1]),
+        ("-3/4", &[0, 1, 2]),
+        ("3/4.5", &[0, 1, 2, 3, 4]),
+        ("1//2", &[]),
+        ("1/-2", &[]),
+        ("1/", &[]),
+        ("/2", &[]),
+        ("1/a", &[]),
+        ("a/2", &[]),
+        ("a-2", &[]),
+        ("1—2", &[]),
+        ("1--2", &[]),
+        ("1–a", &[]),
+    ] {
+        let joins = super::numeric_separator_joins(&measured(source));
+        for (index, joined) in joins.iter().enumerate() {
+            assert_eq!(*joined, expected.contains(&index),
+                "{source} numeric fraction/range pair {index}");
+        }
+    }
+    // A full-size source with many separators is scanned once.
+    let mut long = vec![("1", 4_000, 4_000); 4_096];
+    for offset in (3..4_095).step_by(4) {
+        long[offset] = ("/", 4_000, 4_000);
+    }
+    assert!(super::numeric_separator_joins(&long)
+        .iter().all(|joined| *joined));
+    Ok(())
+}
+
+#[test]
+fn numeric_fraction_and_range_compounds_move_without_ink_loss()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 33_000, height: 36_000,
+    };
+    for source in ["abcdef3/4g", "abcdef3⁄4g", "abcdef3-4g",
+        "abcdef3−4g", "abcdef3–4g"] {
+        for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            assert_eq!(pages, 1);
+            assert!(marks.is_empty());
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>(), ["abcdef", &source[6..]],
+                "{source} {format:?}");
+        }
+    }
+    // Exact authored source even when the compound exceeds a single row.
+    let narrow = super::FlowRegion {
+        width: 9_000, height: 72_000, ..region
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        for source in ["3/4", "3⁄4", "3-4", "3−4", "3–4"] {
+            let (rows, _, _) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(narrow),
+            )?;
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<String>(), source);
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn scientific_exponent_joining_requires_complete_ascii_power()
 -> Result<(), String> {
     let measured = |source: &str| -> Vec<super::MeasuredGrapheme<'static>> {

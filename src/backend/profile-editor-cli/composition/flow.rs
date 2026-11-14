@@ -2273,10 +2273,10 @@ fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
             | "‽" | "⁇" | "⁈" | "⁉" | "‼")
 }
 
-// A bounded ASCII number (including Spanish comma decimals, English dot
-// decimals, thousands groups and clock colons) is one advisory ink cluster
-// when it fits. Only separators surrounded by digits join a numeric run;
-// terminal sentence punctuation and ordinary adjacent words stay separate.
+// A bounded ASCII number (including decimal and thousands separators,
+// clock colons, digit fractions/dates and numeric ranges) is one advisory
+// ink cluster when it fits. Only separators surrounded by ASCII digits
+// join a numeric run; terminal punctuation and words stay separate.
 // A leading +, hyphen or mathematical minus also joins following digits;
 // after a letter, the ordinary hyphen retains its previous layout.
 // Compute the adjacent ties once per word: long 4,096-byte inputs must not
@@ -2309,7 +2309,8 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
         }
         let mut has_separator = unary_sign;
         while glyphs.get(cursor).is_some_and(|item| {
-            matches!(item.0, "." | "," | ":")
+            matches!(item.0, "." | "," | ":" | "/" | "⁄"
+                | "-" | "−" | "–")
         }) && glyphs.get(cursor.saturating_add(1))
             .is_some_and(|item| ascii_digit(item.0)) {
             has_separator = true;
