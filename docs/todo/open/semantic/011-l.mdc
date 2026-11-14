@@ -5245,3 +5245,21 @@ transparent PNG bytes, and prove an absent script glyph cannot replace a
 previously successful export. This is advisory line breaking only: no math
 text shaping, generated superscript positioning, chemical parser, semantic
 identity or persisted notebook flow is claimed.
+
+## Parenthesized authored exponent and subscript groups (partial) — 2026-11-14
+
+The native CLI now keeps a complete parenthesized numeric script on the same
+measured row as its immediately preceding letter or digit when that row fits.
+Supported explicit forms include ASCII caret `x^(-2)`, Unicode superscript
+`x⁽⁻²⁾`, and Unicode subscript `x₍₋₂₎`. Parentheses, optional signs, and
+digits must be authored exactly; malformed, unfinished, or mixed-script
+groups receive no additional ties, while previously complete suffixes remain
+attached. An overlong cluster still falls back to exact-grapheme wrapping.
+
+A failing-before-fix Rust regression now covers complete and incomplete
+combinations, multiple suffixes, full-size inputs, plain/Markdown modes and
+narrow regions. A real CLI process test compares independently authored
+physical rows against exported PDF and transparent PNG bytes, and confirms
+that an omitted parenthesis cannot overwrite an existing accepted export.
+This changes advisory CLI line breaking only; it does not parse expressions,
+add positioned glyphs, persist notebook semantics or finish notebook export.

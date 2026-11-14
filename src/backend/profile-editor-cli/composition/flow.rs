@@ -2458,8 +2458,8 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
     joins
 }
 
-// Only attach an explicitly written exponent or numeric subscript to its
-// immediately preceding letter or digit. Unlike a semantic math shaper,
+// Only attach a complete explicitly authored exponent or numeric subscript
+// to its immediately preceding letter or digit. Unlike a semantic math shaper,
 // this does not invent script forms or bind an entire chemical expression.
 // A complete signed sequence can join across a physical row boundary when
 // it fits; an incomplete suffix leaves the original ink wrapping intact.
@@ -2485,24 +2485,44 @@ fn mark_authored_script_joins(
         }
         let mut end = index.saturating_add(1);
         loop {
-            let script = match glyphs.get(end).map(|item| item.0) {
-                Some("^") => Script::Caret,
+            let (script, parenthesized) = match glyphs.get(end)
+                .map(|item| item.0) {
+                Some("^") => (Script::Caret, false),
+                Some("\u{207d}") => (Script::Superscript, true),
+                Some("\u{208d}") => (Script::Subscript, true),
                 Some(value) if is_authored_superscript_digit(value)
                     || matches!(value, "\u{207a}" | "\u{207b}") =>
                 {
-                    Script::Superscript
+                    (Script::Superscript, false)
                 }
                 Some(value) if subscript_digit(value)
                     || matches!(value, "\u{208a}" | "\u{208b}") =>
                 {
-                    Script::Subscript
+                    (Script::Subscript, false)
                 }
                 _ => break,
             };
-            let mut digits = if matches!(script, Script::Caret) {
+            let mut digits = if matches!(script, Script::Caret)
+                || parenthesized {
                 end.saturating_add(1)
             } else {
                 end
+            };
+            // ASCII caret parentheses and Unicode script parentheses
+            // are authored ink. Admit only balanced, numeric contents;
+            // a missing close cannot consume part of an earlier suffix.
+            let closing = if parenthesized {
+                Some(if matches!(script, Script::Superscript) {
+                    "\u{207e}"
+                } else {
+                    "\u{208e}"
+                })
+            } else if matches!(script, Script::Caret)
+                && glyphs.get(digits).is_some_and(|item| item.0 == "(") {
+                digits = digits.saturating_add(1);
+                Some(")")
+            } else {
+                None
             };
             let has_sign = glyphs.get(digits).is_some_and(|item| {
                 match script {
@@ -2525,11 +2545,19 @@ fn mark_authored_script_joins(
                 .is_some_and(|item| digit_matches(item.0)) {
                 break;
             }
-            end = digits;
-            while glyphs.get(end)
+            let mut after_digits = digits;
+            while glyphs.get(after_digits)
                 .is_some_and(|item| digit_matches(item.0)) {
-                end = end.saturating_add(1);
+                after_digits = after_digits.saturating_add(1);
             }
+            if let Some(close) = closing {
+                if !glyphs.get(after_digits)
+                    .is_some_and(|item| item.0 == close) {
+                    break;
+                }
+                after_digits = after_digits.saturating_add(1);
+            }
+            end = after_digits;
         }
         if let Some(ties) = joins.get_mut(index..end.saturating_sub(1)) {
             ties.fill(true);

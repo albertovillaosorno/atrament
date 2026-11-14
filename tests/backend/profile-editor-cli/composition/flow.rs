@@ -9202,6 +9202,90 @@ fn authored_letter_powers_and_subscripts_keep_measured_bases()
 }
 
 #[test]
+fn authored_parenthesized_powers_bind_only_closed_digit_groups()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    for (source, expected) in [
+        ("x^(2)", &[0, 1, 2, 3][..]),
+        ("x^(-2)", &[0, 1, 2, 3, 4]),
+        ("x^(+12)", &[0, 1, 2, 3, 4, 5]),
+        ("x^(−2)", &[0, 1, 2, 3, 4]),
+        ("x⁽²⁾", &[0, 1, 2]),
+        ("x⁽⁻²⁾", &[0, 1, 2, 3]),
+        ("x₍₂₎", &[0, 1, 2]),
+        ("x₍₋₂₎", &[0, 1, 2, 3]),
+        ("x⁽²⁾₍₃₎", &[0, 1, 2, 3, 4, 5]),
+        ("x^(2)^3", &[0, 1, 2, 3, 4, 5]),
+        ("x²⁽³", &[0]),
+        ("x⁽²⁾⁻", &[0, 1, 2]),
+        ("x^(2", &[]),
+        ("x^()", &[]),
+        ("x^(−)", &[]),
+        ("x^(2a)", &[]),
+        ("x⁽²", &[]),
+        ("x⁽⁻²", &[]),
+        ("x₍₂", &[]),
+        ("x₍₋₎", &[]),
+        ("x⁽²₎", &[]),
+        ("x^(a)", &[]),
+    ] {
+        let glyphs = super::measured_word(source, None)?.0;
+        let joins = super::numeric_separator_joins(&glyphs);
+        for (index, tied) in joins.iter().enumerate() {
+            assert_eq!(*tied, expected.contains(&index),
+                "{source:?} parenthesized power pair {index}");
+        }
+    }
+    // A closing delimiter at the last admitted byte must not make a
+    // complete script quadratic or silently shorten the authored run.
+    for source in [
+        format!("x^({})", "2".repeat(4_092)),
+        format!("x⁽{}⁾", "²".repeat(2_044)),
+    ] {
+        let glyphs = super::measured_word(&source, None)?.0;
+        assert!(super::numeric_separator_joins(&glyphs)
+            .iter().all(|joined| *joined));
+    }
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 32_000, height: 50_000,
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        for (source, tail) in [
+            ("abcdeX^(2)g", "X^(2)g"),
+            ("abcdeX⁽⁻²⁾g", "X⁽⁻²⁾g"),
+            ("abcdeX₍₂₎g", "X₍₂₎g"),
+        ] {
+            let (rows, ornaments, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            assert_eq!(pages, 1);
+            assert!(ornaments.is_empty());
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>(), ["abcde", tail],
+                "{source:?} {format:?}");
+        }
+        let narrow = super::FlowRegion {
+            width: 9_000, height: 128_000, ..region
+        };
+        for source in ["x^(-2)", "x⁽⁻²⁾", "x₍₋₂₎"] {
+            let (rows, _, _) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(narrow),
+            )?;
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<String>(), source,
+                "narrow parenthesized power must preserve exact glyphs");
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn bounded_numeric_join_scan_handles_full_size_number_once()
 -> Result<(), String> {
     // The 4,096-byte source cap permits a single long numeric word.
