@@ -9932,3 +9932,78 @@ test('ASCII caret powers keep exact native PDF/PNG rows and authored ink',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+
+test('authored letter scripts keep complete measured PDF and PNG ink', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-letter-scripts-'));
+    try {
+        const region = ['--flow-region', '30000', '40000',
+            '32000', '36000'];
+        const cases = [
+            ['abcdeX^2g', 'X^2g', '^', 'U+005E'],
+            ['abcdeH\u{2082}Og', 'H\u{2082}Og',
+                '\u{2082}', 'U+2082'],
+            ['abcdeN\u{208b}\u{2082}g',
+                'N\u{208b}\u{2082}g', '\u{208b}', 'U+208B'],
+            ['abcde\u{3b1}\u{207b}\u{b2}g',
+                '\u{3b1}\u{207b}\u{b2}g',
+                '\u{207b}', 'U+207B'],
+        ];
+        const stroke = (glyph) => [
+            '--glyph-stroke', glyph, '600', '500', '1800',
+            '3000', '250', '#123456',
+        ];
+        for (const [source, tail, omitted, codepoint] of cases) {
+            const glyphs = [...new Set([...source].filter(
+                (glyph) => glyph !== 'a'))];
+            const full = glyphs.flatMap(stroke);
+            const missing = glyphs.filter((glyph) => glyph !== omitted)
+                .flatMap(stroke);
+            for (const flag of ['--flow-text', '--flow-markdown']) {
+                const inspected = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    'notebook', '--inspect-flow', ...region, flag, source,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(inspected.status, 0, inspected.stderr);
+                assert.ok(inspected.stdout.includes(
+                    'Page 1 x=32500 um y=42500 um: "abcde"'));
+                assert.ok(inspected.stdout.includes(
+                    'Page 1 x=32500 um y=51500 um: "' + tail + '"'));
+            }
+            for (const format of ['pdf', 'png']) {
+                const manualFile = join(dir, 'manual-letter-script-' + format);
+                const manual = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    ...base, ...full,
+                    '--place-text', '1', '32500', '42500', 'abcde',
+                    '--place-text', '1', '32500', '51500', tail,
+                    '--export-paper', format,
+                    ...(format === 'png' ? ['--dpi', '72'] : []),
+                    '--output', manualFile, '--replace',
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(manual.status, 0, manual.stderr);
+                const expected = readFileSync(manualFile);
+                for (const flag of ['--flow-text', '--flow-markdown']) {
+                    const flowed = render(dir, source, format,
+                        [...region, ...full], flag);
+                    assert.equal(flowed.result.status, 0,
+                        flowed.result.stderr);
+                    assert.deepEqual(readFileSync(flowed.output), expected,
+                        source + ' ' + flag + ' ' + format);
+                    const refused = render(dir, source, format,
+                        [...region, ...missing], flag);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.match(refused.result.stderr,
+                        /missing authored glyph|no authored strokes/i);
+                    assert.ok(refused.result.stderr.includes(codepoint));
+                    assert.deepEqual(readFileSync(refused.output), expected,
+                        'missing script cannot overwrite existing export');
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

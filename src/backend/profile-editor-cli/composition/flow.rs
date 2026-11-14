@@ -2280,6 +2280,12 @@ fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
             | "‽" | "⁇" | "⁈" | "⁉" | "‼")
 }
 
+fn is_authored_superscript_digit(value: &str) -> bool {
+    matches!(value,
+        "\u{2070}" | "\u{b9}" | "\u{b2}" | "\u{b3}" | "\u{2074}"
+        | "\u{2075}" | "\u{2076}" | "\u{2077}" | "\u{2078}" | "\u{2079}")
+}
+
 // A bounded ASCII number (including decimal and thousands separators,
 // clock colons, digit fractions/dates and numeric ranges) is one advisory
 // ink cluster when it fits. Numeric comparison prefixes also bind the
@@ -2419,9 +2425,8 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
         // is not an exponent; letters and missing superscript glyphs
         // remain ordinary ink. No superscript shape is synthesized.
         let superscript_digit = |offset: usize| {
-            glyphs.get(offset).is_some_and(|item| matches!(item.0,
-                "\u{2070}" | "\u{b9}" | "\u{b2}" | "\u{b3}" | "\u{2074}"
-                | "\u{2075}" | "\u{2076}" | "\u{2077}" | "\u{2078}" | "\u{2079}"))
+            glyphs.get(offset)
+                .is_some_and(|item| is_authored_superscript_digit(item.0))
         };
         let superscript_start = if glyphs.get(cursor)
             .is_some_and(|item| matches!(item.0, "\u{207a}" | "\u{207b}")) {
@@ -2449,7 +2454,88 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
             }
         }
     }
+    mark_authored_script_joins(glyphs, &mut joins);
     joins
+}
+
+// Only attach an explicitly written exponent or numeric subscript to its
+// immediately preceding letter or digit. Unlike a semantic math shaper,
+// this does not invent script forms or bind an entire chemical expression.
+// A complete signed sequence can join across a physical row boundary when
+// it fits; an incomplete suffix leaves the original ink wrapping intact.
+// Walk each suffix at most once even on the largest admitted source word.
+fn mark_authored_script_joins(
+    glyphs: &[MeasuredGrapheme<'_>], joins: &mut [bool],
+) {
+    enum Script {
+        Caret,
+        Subscript,
+        Superscript,
+    }
+    let subscript_digit = |value: &str| matches!(value,
+        "\u{2080}" | "\u{2081}" | "\u{2082}" | "\u{2083}" | "\u{2084}"
+        | "\u{2085}" | "\u{2086}" | "\u{2087}" | "\u{2088}" | "\u{2089}");
+    let mut index = 0usize;
+    while let Some(&(base, _, _)) = glyphs.get(index) {
+        if !base.chars().next().is_some_and(|character| {
+            character.is_alphabetic() || character.is_ascii_digit()
+        }) {
+            index = index.saturating_add(1);
+            continue;
+        }
+        let mut end = index.saturating_add(1);
+        loop {
+            let script = match glyphs.get(end).map(|item| item.0) {
+                Some("^") => Script::Caret,
+                Some(value) if is_authored_superscript_digit(value)
+                    || matches!(value, "\u{207a}" | "\u{207b}") =>
+                {
+                    Script::Superscript
+                }
+                Some(value) if subscript_digit(value)
+                    || matches!(value, "\u{208a}" | "\u{208b}") =>
+                {
+                    Script::Subscript
+                }
+                _ => break,
+            };
+            let mut digits = if matches!(script, Script::Caret) {
+                end.saturating_add(1)
+            } else {
+                end
+            };
+            let has_sign = glyphs.get(digits).is_some_and(|item| {
+                match script {
+                    Script::Caret => matches!(item.0, "+" | "-" | "\u{2212}"),
+                    Script::Superscript =>
+                        matches!(item.0, "\u{207a}" | "\u{207b}"),
+                    Script::Subscript =>
+                        matches!(item.0, "\u{208a}" | "\u{208b}"),
+                }
+            });
+            if has_sign {
+                digits = digits.saturating_add(1);
+            }
+            let digit_matches = |value: &str| match script {
+                Script::Caret => matches!(value.as_bytes(), [b'0'..=b'9']),
+                Script::Superscript => is_authored_superscript_digit(value),
+                Script::Subscript => subscript_digit(value),
+            };
+            if !glyphs.get(digits)
+                .is_some_and(|item| digit_matches(item.0)) {
+                break;
+            }
+            end = digits;
+            while glyphs.get(end)
+                .is_some_and(|item| digit_matches(item.0)) {
+                end = end.saturating_add(1);
+            }
+        }
+        if let Some(ties) = joins.get_mut(index..end.saturating_sub(1)) {
+            ties.fill(true);
+        }
+        index = end;
+    }
 }
 
 // Flowing prose reserves a preceding compressed glyph's nominal ink contour.

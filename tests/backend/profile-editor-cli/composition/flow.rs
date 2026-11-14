@@ -8979,7 +8979,7 @@ fn superscript_numeric_powers_keep_exact_measured_graphemes()
         ("10\u{207a}x", &[]),
         ("a10\u{207b}\u{b3}", &[1, 2, 3]),
         ("10\u{207b}\u{b3}x", &[0, 1, 2]),
-        ("x\u{207b}\u{b3}", &[]),
+        ("x\u{207b}\u{b3}", &[0, 1]),
         ("10\u{b2}\u{207a}", &[0, 1]),
         ("1e3\u{2074}", &[0, 1, 2]),
         ("1.2\u{207b}\u{b3}", &[0, 1, 2, 3, 4]),
@@ -9049,7 +9049,7 @@ fn authored_caret_powers_bind_only_complete_numeric_exponents()
         ("2^-", &[]),
         ("2^+a", &[]),
         ("2^^3", &[]),
-        ("x^2", &[]),
+        ("x^2", &[0, 1]),
         ("2^a", &[]),
     ] {
         let joined = super::numeric_separator_joins(&measured(source));
@@ -9100,6 +9100,103 @@ fn authored_caret_powers_bind_only_complete_numeric_exponents()
         assert_eq!(rows.iter().map(|row| row.text.as_str())
             .collect::<String>(), source,
             "non-fitting caret must fall back to exact graphemes");
+    }
+    Ok(())
+}
+
+#[test]
+fn authored_letter_powers_and_subscripts_keep_measured_bases()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    for (source, expected) in [
+        ("x^2", &[0, 1][..]),
+        ("x^-2", &[0, 1, 2]),
+        ("x^+2", &[0, 1, 2]),
+        ("x^\u{2212}2", &[0, 1, 2]),
+        ("x\u{207b}\u{b2}", &[0, 1]),
+        ("x\u{b2}\u{b3}", &[0, 1]),
+        ("H\u{2082}O", &[0]),
+        ("x\u{2081}\u{2082}", &[0, 1]),
+        ("N\u{208b}\u{2082}", &[0, 1]),
+        ("10\u{2082}", &[1]),
+        ("\u{3b1}\u{207a}\u{b3}", &[0, 1]),
+        ("n\u{303}\u{2081}", &[0]),
+        ("x\u{b2}\u{2081}", &[0, 1]),
+        ("x^", &[]),
+        ("x^-", &[]),
+        ("x\u{207b}", &[]),
+        ("x\u{208b}", &[]),
+        ("x^a", &[]),
+        ("x\u{2081}O", &[0]),
+        ("x\u{b2}\u{207b}", &[0]),
+        ("x^2\u{2081}", &[0, 1, 2]),
+        ("x\u{2081}\u{208b}", &[0]),
+    ] {
+        let measured = super::measured_word(source, None)?.0;
+        let joins = super::numeric_separator_joins(&measured);
+        for (index, joined) in joins.iter().enumerate() {
+            if *joined != expected.contains(&index) {
+                return Err(format!("{source:?} script pair {index}: \
+                    expected {}, got {joined}", expected.contains(&index)));
+            }
+        }
+    }
+
+    // A maximum-length 4,096-byte source cannot trigger suffix rescans.
+    for (suffix, count) in [("^", 4_094usize),
+        ("\u{2081}", 1_364usize)] {
+        let value = format!("x{suffix}{}",
+            if suffix == "^" { "1".repeat(count) }
+            else { suffix.repeat(count) });
+        if value.len() != 4_096 {
+            return Err("maximum-length script fixture has wrong byte count"
+                .into());
+        }
+        let measured = super::measured_word(&value, None)?.0;
+        if !super::numeric_separator_joins(&measured)
+            .iter().all(|joined| *joined) {
+            return Err("full-length authored script loses a joined suffix"
+                .into());
+        }
+    }
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 32_000, height: 50_000,
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        for (source, tail) in [
+            ("abcdeX^2g", "X^2g"),
+            ("abcdeH\u{2082}Og", "H\u{2082}Og"),
+            ("abcdeN\u{208b}\u{2082}g", "N\u{208b}\u{2082}g"),
+            ("abcde\u{3b1}\u{207b}\u{b2}g",
+                "\u{3b1}\u{207b}\u{b2}g"),
+        ] {
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            let actual = rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>();
+            if pages != 1 || !marks.is_empty()
+                || actual != ["abcde", tail] {
+                return Err(format!("{source:?} {format:?}: {actual:?}"));
+            }
+        }
+        let narrow = super::FlowRegion {
+            width: 9_000, height: 128_000, ..region
+        };
+        let source = "x\u{208b}\u{2082}";
+        let (rows, _, _) = super::layout_flow_with_region(
+            &FlowSource::new(format, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(), Some(narrow),
+        )?;
+        if rows.iter().map(|row| row.text.as_str())
+            .collect::<String>() != source {
+            return Err("narrow script fallback lost authored ink".into());
+        }
     }
     Ok(())
 }

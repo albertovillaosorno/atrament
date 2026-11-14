@@ -5214,7 +5214,8 @@ semantic block identities, or saved notebook content are synthesized.
 CLI-only physical text flow now keeps explicitly authored ASCII caret powers
 (`10^3`, `2^-4`, `1.5^+2`) with their numeric bases when the complete ink
 fits the measured row. A signed exponent requires at least one ASCII digit;
-bare carets, unfinished signs and symbolic bases remain literal. The
+bare carets and unfinished signs remain literal. Letter bases are
+covered by the separate script-suffix extension below. The
 existing exact-grapheme fallback handles narrower physical rows without
 introducing glyphs or refusing otherwise printable text.
 
@@ -5224,3 +5225,23 @@ in both source formats. Real-process regressions compare exported PDF and
 transparent PNG bytes with independently placed ink and verify that a
 missing caret shape never replaces an accepted export. This is not general
 math expression parsing, superscript geometry or persisted semantic flow.
+
+## Authored letter powers and numeric subscripts (partial) — 2026-11-14
+
+The native CLI now keeps complete authored script suffixes with the immediately
+preceding letter or digit when their measured ink fits. This covers ASCII
+caret powers on variables (`x^-2`), Unicode superscripts on Unicode letters
+(`α⁻²`), numeric subscripts in formulas (`H₂`, `N₋₂`) and successive
+script groups, without automatically grouping the rest of a chemical formula.
+
+A decomposed letter plus combining mark remains one exact Unicode grapheme.
+Missing signs or digits never imply a completed script. No glyphs are drawn
+without explicitly supplied authored strokes.
+
+A targeted Rust regression checks complete and incomplete suffix ties, both
+source modes, exact physical rows and narrow-sheet fallback. Real CLI process
+tests compare separate manual glyph placements against vector PDF and
+transparent PNG bytes, and prove an absent script glyph cannot replace a
+previously successful export. This is advisory line breaking only: no math
+text shaping, generated superscript positioning, chemical parser, semantic
+identity or persisted notebook flow is claimed.
