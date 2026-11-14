@@ -665,6 +665,14 @@ segments each contribute their full length. Paper and printed annotations
 are excluded. The in-memory report does not alter the saved glyph library,
 create an export or change the output of previously available inspections.
 
+Add `--inspect-flow-ink-length-by-color` after the length flag to split
+that same measured pen-down distance by exact RGB ink. The ordered report
+provides global and page-local totals and stroke counts for each color,
+including marker bands and authored glyph colors. Sheets without drawn ink
+report `empty`. It is a read-only physical inventory, not a prediction of
+ink volume, print time, color blending or plotter travel. The previous
+length report stays byte-identical without this additional flag.
+
 This is an in-memory dry run of the current unjoined, non-varied flow ink,
 not a PNG pixel-budget test, a calibrated handwriting inspection or a proof
 of visual quality. Explicit placed ink, joins and seeded variation remain

@@ -8844,6 +8844,59 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             ].join('\n');
             assert.equal(lengths.stdout.slice(verified.stdout.length),
                 expectedLengths);
+            const byColor = run([
+                '--inspect-flow', '--inspect-flow-inventory',
+                '--inspect-flow-page-inventory',
+                '--inspect-flow-shape-coverage',
+                '--inspect-flow-stroke-demand',
+                '--inspect-flow-ink-validation',
+                '--inspect-flow-ink-length',
+                '--inspect-flow-ink-length-by-color',
+                '--flow-text', source, ...region, ...shape,
+            ]);
+            assert.equal(byColor.status, 0, byColor.stderr);
+            assert.ok(byColor.stdout.startsWith(lengths.stdout),
+                'color lengths preserve previous native report bytes');
+            const globalColors = new Map();
+            const pageColors = new Map();
+            for (const line of rows) {
+                const [page, x1, y1, x2, y2, , color] = line.split('\t');
+                const distance = Math.round(Math.hypot(
+                    Number(x2) - Number(x1), Number(y2) - Number(y1)));
+                const add = (colors) => {
+                    const prior = colors.get(color)
+                        ?? { distance: 0, count: 0 };
+                    colors.set(color, {
+                        distance: prior.distance + distance,
+                        count: prior.count + 1,
+                    });
+                };
+                add(globalColors);
+                const local = pageColors.get(Number(page)) ?? new Map();
+                add(local);
+                pageColors.set(Number(page), local);
+            }
+            const describeColorLengths = (label, colors) => {
+                if (!colors || colors.size === 0) {
+                    return `${label}: empty\n`;
+                }
+                return `${label}: ${colors.size} RGB `
+                    + `${colors.size === 1 ? 'color' : 'colors'}\n`
+                    + [...colors].sort(([a], [b]) =>
+                        a.localeCompare(b)).map(([rgb, totals]) =>
+                        `  ${rgb}: ${totals.distance} um across `
+                        + `${totals.count} `
+                        + `${totals.count === 1 ? 'segment' : 'segments'}\n`)
+                        .join('');
+            };
+            const expectedByColor = describeColorLengths(
+                'Validated ink length by color', globalColors,
+            ) + [1, 2].map((page) => describeColorLengths(
+                `Page ${page} validated ink length by color`,
+                pageColors.get(page),
+            )).join('');
+            assert.equal(byColor.stdout.slice(lengths.stdout.length),
+                expectedByColor);
             for (const format of ['pdf', 'png']) {
                 const output = join(dir, `page.${format}`);
                 const exported = run([
@@ -8925,6 +8978,16 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             assert.match(invalidInkLength.stderr,
                 /--inspect-flow-ink-length requires/);
             assert.doesNotMatch(invalidInkLength.stderr,
+                /FileIo\(NotFound\)/);
+            const invalidInkColorLength = run([
+                '--flow-text-file', join(dir, 'nonexistent.md'),
+                '--inspect-flow', '--inspect-flow-shape-coverage',
+                '--inspect-flow-ink-length-by-color',
+            ]);
+            assert.notEqual(invalidInkColorLength.status, 0);
+            assert.match(invalidInkColorLength.stderr,
+                /--inspect-flow-ink-length-by-color requires/);
+            assert.doesNotMatch(invalidInkColorLength.stderr,
                 /FileIo\(NotFound\)/);
         } finally {
             rmSync(dir, { recursive: true, force: true });

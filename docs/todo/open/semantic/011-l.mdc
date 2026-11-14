@@ -4945,3 +4945,21 @@ source-independent refusal before reading missing files.
 This is a diagnostic for actual pen-down centerline demand only: it does not
 predict ink volume, printed darkness, elapsed plotting time, pen-up travel or
 saved semantic notebook content. ATR-P2-011 remains open.
+
+## Validated ink length by RGB pen color (partial) — 2026-11-13
+
+The optional `--inspect-flow-ink-length-by-color` refines the actual
+pen-down centerline length inspection by sorted physical RGB. It requires
+`--inspect-flow-ink-length` and therefore the complete native ink validation.
+Global and page-local RGB groups include exact and borrowed glyph forms,
+Markdown ornaments, segment counts and deterministic rounded micrometres.
+Sheets without ink report `empty`; no output file is created.
+
+An independent Rust integration test reconstructs the sorted colored
+lengths and counts from real native physical ink TSV across two decorated
+pages and an empty first sheet. The imported-library Node subprocess
+regression checks per-color TSV distance sums, preserves the previous
+inspection byte prefix, and verifies invalid selections refuse before
+opening a missing source. This remains diagnostic-only: it does not
+estimate material use, pen-up motion, plot duration, color blending or
+persisted notebook semantics. ATR-P2-011 remains open.

@@ -21181,6 +21181,8 @@ fn notebook_ink_validation_flags_refuse_before_selected_file_io() {
             "--inspect-flow-ink-widths requires"),
         (vec!["--inspect-flow-ink-length"],
             "--inspect-flow-ink-length requires"),
+        (vec!["--inspect-flow-ink-length-by-color"],
+            "--inspect-flow-ink-length-by-color requires"),
         (vec!["--inspect-flow-ink-palette"],
             "--inspect-flow-ink-palette requires"),
         (vec!["--inspect-flow-ink-bounds"],
@@ -21206,6 +21208,11 @@ fn notebook_ink_validation_flags_refuse_before_selected_file_io() {
             "--inspect-flow-ink-validation", "--inspect-flow-ink-length",
             "--inspect-flow-ink-length"],
             "--inspect-flow-ink-length may appear only once"),
+        (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-ink-validation", "--inspect-flow-ink-length",
+            "--inspect-flow-ink-length-by-color",
+            "--inspect-flow-ink-length-by-color"],
+            "--inspect-flow-ink-length-by-color may appear only once"),
         (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
             "--inspect-flow-ink-validation", "--inspect-flow-ink-palette",
             "--inspect-flow-ink-palette"],
@@ -21432,5 +21439,106 @@ fn notebook_ink_length_matches_native_tsv_and_blank_physical_pages()
         "Page 1 validated ink pen-down length: empty\n",
         "Page 2 validated ink pen-down length: 2147 um\n",
     )), "{blank_report}");
+    Ok(())
+}
+
+#[test]
+fn notebook_ink_length_by_color_matches_native_tsv()
+-> Result<(), String> {
+    let shared = args(&[
+        "--flow-markdown", "# a\n- ó\n> a", "--heading-style", "marker",
+        "--heading-marker-scale", "95",
+        "--flow-region", "30000", "40000", "32000", "25000",
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "251", "#123456", "--glyph-stroke", "a", "600", "700",
+        "1600", "3200", "501", "#123456",
+        "--fallback-glyph", "ó", "a",
+    ]);
+    let mut inspection = shared.clone();
+    inspection.extend(args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-ink-validation", "--inspect-flow-ink-length",
+    ]));
+    let baseline = String::from_utf8(execute_notebook(&inspection)?
+        .ok_or("missing previous length report")?)
+        .map_err(|error| error.to_string())?;
+    inspection.push("--inspect-flow-ink-length-by-color".into());
+    let report = String::from_utf8(execute_notebook(&inspection)?
+        .ok_or("missing color length report")?)
+        .map_err(|error| error.to_string())?;
+    let mut emission = shared;
+    emission.push("--emit-ink-file".into());
+    let ink = String::from_utf8(execute_notebook(&emission)?
+        .ok_or("missing independent physical TSV")?)
+        .map_err(|error| error.to_string())?;
+    let mut global = BTreeMap::<String, (u128, usize)>::new();
+    let mut per_page = BTreeMap::<
+        usize, BTreeMap<String, (u128, usize)>
+    >::new();
+    for row in ink.lines().skip(1) {
+        let fields: Vec<_> = row.split('\t').collect();
+        let [page, x1, y1, x2, y2, _, color] = fields.as_slice() else {
+            return Err(format!("unexpected TSV row: {row:?}"));
+        };
+        let page = page.parse::<usize>()
+            .map_err(|error| error.to_string())?;
+        let coords = [x1, y1, x2, y2].map(|value| value
+            .parse::<u32>().map_err(|error| error.to_string()))
+            .into_iter().collect::<Result<Vec<_>, _>>()?;
+        let length = f64::from(coords[0].abs_diff(coords[2]))
+            .hypot(f64::from(coords[1].abs_diff(coords[3])))
+            .round() as u128;
+        for totals in [&mut global,
+            per_page.entry(page).or_default()] {
+            let entry = totals.entry((*color).to_owned()).or_default();
+            entry.0 += length;
+            entry.1 += 1;
+        }
+    }
+    assert!(global.len() >= 2, "expected mixed RGB ornaments: {ink}");
+    let mut expected = String::new();
+    let empty = BTreeMap::new();
+    use std::fmt::Write as _;
+    for (title, colors) in std::iter::once((
+        "Validated ink length by color".to_owned(), &global,
+    )).chain((1..=2).map(|page| (
+        format!("Page {page} validated ink length by color"),
+        per_page.get(&page).unwrap_or(&empty),
+    ))) {
+        if colors.is_empty() {
+            writeln!(expected, "{title}: empty")
+                .map_err(|error| error.to_string())?;
+        } else {
+            let noun = if colors.len() == 1 { "color" } else { "colors" };
+            writeln!(expected, "{title}: {} RGB {noun}", colors.len())
+                .map_err(|error| error.to_string())?;
+            for (color, (length, segments)) in colors {
+                let noun = if *segments == 1 { "segment" } else { "segments" };
+                writeln!(expected,
+                    "  {color}: {length} um across {segments} {noun}")
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+    }
+    assert_eq!(report.strip_prefix(&baseline), Some(expected.as_str()),
+        "{report}");
+    let blank = args(&[
+        "--flow-text", "\n\na", "--flow-region", "30000", "40000",
+        "32000", "25000", "--inspect-flow",
+        "--inspect-flow-shape-coverage", "--inspect-flow-ink-validation",
+        "--inspect-flow-ink-length", "--inspect-flow-ink-length-by-color",
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "251", "#123456",
+    ]);
+    let report = String::from_utf8(execute_notebook(&blank)?
+        .ok_or("missing blank-sheet color lengths")?)
+        .map_err(|error| error.to_string())?;
+    assert!(report.ends_with(concat!(
+        "Validated ink length by color: 1 RGB color\n",
+        "  #123456: 2147 um across 1 segment\n",
+        "Page 1 validated ink length by color: empty\n",
+        "Page 2 validated ink length by color: 1 RGB color\n",
+        "  #123456: 2147 um across 1 segment\n",
+    )), "{report}");
     Ok(())
 }
