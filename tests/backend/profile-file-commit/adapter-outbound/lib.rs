@@ -104,6 +104,10 @@ mod linux {
                 .collect()
         }
     }
+    #[expect(
+        clippy::missing_trait_methods,
+        reason = "unstable pin_drop cannot be implemented on stable Rust"
+    )]
     impl Drop for OwnedDir {
         fn drop(&mut self) {
             fs::remove_dir_all(&self.0).expect("remove only owned fixture");

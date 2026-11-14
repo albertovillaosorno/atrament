@@ -166,7 +166,13 @@ struct ReplaceTargetObservation {
     modified: (i64, i64),
 }
 
+// The stable `Drop` trait exposes an unstable default `pin_drop` method.
+// Clippy's completeness lint cannot be satisfied by implementing both methods.
 #[cfg(target_os = "linux")]
+#[expect(
+    clippy::missing_trait_methods,
+    reason = "unstable pin_drop cannot be implemented on stable Rust"
+)]
 impl Drop for OwnedTemp<'_> {
     fn drop(&mut self) {
         // A competing actor can move or replace the random sibling before

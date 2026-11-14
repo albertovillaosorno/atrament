@@ -111,6 +111,10 @@ impl OwnedProbeDirectory {
 }
 
 #[cfg(target_os = "linux")]
+#[expect(
+    clippy::missing_trait_methods,
+    reason = "unstable pin_drop cannot be implemented on stable Rust"
+)]
 impl Drop for OwnedProbeDirectory {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.path)
@@ -139,6 +143,10 @@ impl OwnedTestFile {
     }
 }
 
+#[expect(
+    clippy::missing_trait_methods,
+    reason = "unstable pin_drop cannot be implemented on stable Rust"
+)]
 impl Drop for OwnedTestFile {
     fn drop(&mut self) {
         fs::remove_file(&self.path).expect("remove owned fixture");
