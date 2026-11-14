@@ -885,6 +885,32 @@ native Rust PDF/PNG Markdown parser regressions from the mirrored backend
 test tree. It is separate from `test:frontend` so the Node tests do not
 silently require a browser. The Rust CLI must remain available locally.
 
+## Read-only nominal CLI flow inspection (partial) — 2026-11-13
+
+The Rust `atrament-profiles notebook --inspect-flow` selection now reports
+physical page count, measured body rows and their exact page-local x/y
+micrometres, source text and synthetic ornament count to standard output.
+It admits the same 4,096-byte plain/Markdown flow, bounded region, selected
+paper geometry, structural Markdown and optional handwriting statistics as
+the native exporter. No glyph strokes are required to obtain the report,
+and no saved notebook or binary PDF/PNG file is changed.
+
+The flags require an actual flow and refuse selected PDF/PNG/TSV export,
+`--inspect`, `--output` and inline/file-backed authored ink. Source-independent
+invalid combinations refuse before opening an earlier profile, source or
+glyph library. Existing flow-without-export refusal is unchanged unless
+explicit inspection was selected. Separate native regressions check nominal
+one- and two-row coordinates, two-page Unicode NFC/NFD source identity,
+Markdown ornaments, unchanged profile inspection, output-invalid preflight
+and an 8-mm mean-width statistics file.
+
+The CLI's real PDF and PNG acceptance compares inspected two-row positions
+with exact independently placed caller-authored ink for both source modes.
+The inspection intentionally does **not** validate glyph coverage, transformed
+pen contours, final region clearance, semantic identities, fixed-object
+collisions or production PDF/PNG readiness. Those gates still belong to
+explicit output and the unfinished accepted notebook compiler.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

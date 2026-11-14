@@ -19386,3 +19386,120 @@ fn notebook_ruler_saved_profile_cli_matches_typed_pdf_and_selected_png() {
     }
     fs::remove_file(input).expect("remove test-owned saved source");
 }
+
+#[test]
+fn notebook_inspect_flow_reports_nominal_pages_without_glyph_strokes() {
+    let report = execute_notebook(&args(&[
+        "--inspect-flow", "--flow-region", "30000", "40000",
+        "32000", "36000", "--flow-text", "abcdefg",
+    ])).expect("admitted inspection").expect("stdout report");
+    assert_eq!(String::from_utf8(report).expect("UTF-8 report"), concat!(
+        "Nominal flow (glyph coverage and ink clearance unchecked)\n",
+        "Pages: 1\nRows: 2\nOrnaments: 0\n",
+        "Page 1 x=32500 um y=42500 um: \"abcdef\"\n",
+        "Page 1 x=32500 um y=51500 um: \"g\"\n",
+    ));
+
+    // Heading, collapsed blank and synthetic bullet remain measurable
+    // without any authored glyph library, but the report has no ink.
+    let markdown = execute_notebook(&args(&[
+        "--inspect-flow", "--flow-markdown", "# a\n\n- a",
+    ])).expect("nominal Markdown").expect("stdout report");
+    let markdown = String::from_utf8(markdown).expect("UTF-8 report");
+    assert!(markdown.contains("Pages: 1\nRows: 2\nOrnaments: 2\n"),
+        "{markdown}");
+    assert!(markdown.contains("Page 1 x=22500 um y=24500 um: \"a\""),
+        "{markdown}");
+    assert!(markdown.contains("Page 1 x=28500 um y=37500 um: \"a\""),
+        "{markdown}");
+    let profile = execute_notebook(&args(&["--inspect"]))
+        .expect("metadata inspect unchanged").expect("profile report");
+    assert!(String::from_utf8_lossy(&profile)
+        .starts_with("Version: atrament.notebook.v1\n"));
+}
+
+#[test]
+fn notebook_inspect_flow_preflights_before_selected_file_io() {
+    for (extra, expected) in [
+        (vec!["--inspect-flow"], "--inspect-flow requires"),
+        (vec!["--inspect-flow", "--export-paper", "pdf"],
+            "--inspect-flow is stdout only"),
+        (vec!["--inspect-flow", "--output", "unused.pdf"],
+            "--inspect-flow is stdout only"),
+        (vec!["--inspect-flow", "--inspect"],
+            "--inspect-flow is stdout only"),
+        (vec!["--inspect-flow", "--glyph-file", "missing.tsv"],
+            "--inspect-flow cannot include authored ink"),
+        (vec!["--inspect-flow", "--glyph-stroke", "a", "0", "0",
+            "1000", "1000", "250", "#123456"],
+            "--inspect-flow cannot include authored ink"),
+        (vec!["--inspect-flow", "--ink-line", "1", "30000",
+            "40000", "33000", "43000", "250", "#123456"],
+            "--inspect-flow cannot include authored ink"),
+        (vec!["--inspect-flow", "--inspect-flow"],
+            "--inspect-flow may appear only once"),
+    ] {
+        let mut command = args(&[
+            "--profile", "missing-notebook-inspection-file.json",
+        ]);
+        if extra != vec!["--inspect-flow"] {
+            command.extend(args(&["--flow-text", "a"]));
+        }
+        command.extend(extra.into_iter().map(str::to_owned));
+        let error = execute_notebook(&command)
+            .expect_err("invalid inspection preflights source IO");
+        assert!(error.contains(expected), "{error:?}");
+    }
+    let error = execute_notebook(&args(&[
+        "--flow-text", "a",
+    ])).expect_err("plain source still cannot be saved as profile");
+    assert!(error.contains("flow source needs --export-paper"),
+        "{error}");
+}
+
+#[test]
+fn notebook_inspect_flow_uses_selected_statistics_without_ink() {
+    let profile = execute_handwriting(&args(&[
+        "--set-global", "width", "8000", "8000", "8000", "8000", "0",
+    ])).expect("valid statistics").expect("canonical JSON");
+    let input = test_path();
+    let selected = input.to_str().expect("test-owned profile path");
+    fs::write(&input, &profile).expect("write test-owned statistics");
+    let report = execute_notebook(&args(&[
+        "--inspect-flow", "--handwriting-profile", selected,
+        "--flow-text", "abcdefg", "--flow-region", "30000",
+        "40000", "32000", "36000",
+    ])).expect("measured statistics plan").expect("stdout report");
+    let report = String::from_utf8(report).expect("UTF-8 report");
+    assert!(report.contains("Pages: 1\nRows: 3\nOrnaments: 0\n"),
+        "{report}");
+    for (y, text) in [(42500, "abc"), (51500, "def"), (60500, "g")] {
+        assert!(report.contains(&format!(
+            "Page 1 x=32500 um y={y} um: {text:?}\n",
+        )), "{report}");
+    }
+    assert_eq!(fs::read(&input).expect("read selected profile"), profile);
+    fs::remove_file(input).expect("remove test-owned statistics");
+}
+
+#[test]
+fn notebook_inspect_flow_keeps_unicode_identity_across_physical_pages() {
+    let source = "\u{feff}ó\r\nn\u{303}\r\n…";
+    let input = test_path().with_extension("txt");
+    let selected = input.to_str().expect("test-owned text path");
+    fs::write(&input, source.as_bytes()).expect("write exact source text");
+    let report = execute_notebook(&args(&[
+        "--inspect-flow", "--flow-text-file", selected,
+        "--flow-region", "30000", "40000", "32000", "25000",
+    ])).expect("bounded file inspection").expect("stdout report");
+    assert_eq!(String::from_utf8(report).expect("UTF-8 report"), concat!(
+        "Nominal flow (glyph coverage and ink clearance unchecked)\n",
+        "Pages: 2\nRows: 3\nOrnaments: 0\n",
+        "Page 1 x=32500 um y=42500 um: \"ó\"\n",
+        "Page 1 x=32500 um y=51500 um: \"n\\u{303}\"\n",
+        "Page 2 x=32500 um y=42500 um: \"…\"\n",
+    ));
+    assert_eq!(fs::read(&input).expect("source unchanged"),
+        source.as_bytes());
+    fs::remove_file(input).expect("remove test-owned input");
+}

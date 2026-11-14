@@ -52,6 +52,57 @@ function coloredHeadingWidths(bytes) {
     )].map((match) => match[1]);
 }
 
+test('stdout nominal flow rows predict independently authored PDF/PNG ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-inspection-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '32000', '36000'];
+            for (const flag of ['--flow-text', '--flow-markdown']) {
+                const inspected = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    'notebook', '--inspect-flow', ...region,
+                    flag, 'abcdefg',
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(inspected.status, 0, inspected.stderr);
+                assert.equal(inspected.stdout, [
+                    'Nominal flow (glyph coverage and ink clearance unchecked)',
+                    'Pages: 1', 'Rows: 2', 'Ornaments: 0',
+                    'Page 1 x=32500 um y=42500 um: "abcdef"',
+                    'Page 1 x=32500 um y=51500 um: "g"', '',
+                ].join('\n'));
+                const strokes = [...'bcdefg'].flatMap((glyph) => [
+                    '--glyph-stroke', glyph, '600', '500', '1800',
+                    '3000', '250', '#123456',
+                ]);
+                for (const format of ['pdf', 'png']) {
+                    const flowed = render(dir, 'abcdefg', format,
+                        [...region, ...strokes], flag);
+                    assert.equal(flowed.result.status, 0,
+                        flowed.result.stderr);
+                    const manualName = join(dir, `manual-${format}`);
+                    const manual = spawnSync(cargo, [
+                        'run', '--offline', '--quiet',
+                        '-p', 'atrament_profile_editor_cli', '--',
+                        ...base, ...strokes,
+                        '--place-text', '1', '32500', '42500', 'abcdef',
+                        '--place-text', '1', '32500', '51500', 'g',
+                        '--export-paper', format,
+                        ...(format === 'png' ? ['--dpi', '72'] : []),
+                        '--output', manualName, '--replace',
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(manual.status, 0, manual.stderr);
+                    assert.deepEqual(readFileSync(flowed.output),
+                        readFileSync(manualName),
+                        `${flag} ${format} agrees with nominal row report`);
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('compressed numbered label refuses overlap without clobbering PDF/PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-number-clearance-'));

@@ -183,7 +183,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--date-placement none|top-left|top-right] \
     [--date-text YYYY-MM-DD|NN/NN/YYYY|NN.NN.YYYY] \
     [--border-radius-um INTEGER] [--page-numbers true|false] \
-    [--printed-sheet true|false] [--inspect] \
+    [--printed-sheet true|false] [--inspect | --inspect-flow] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--ruler-seed UINT32 --ruler-error-mm 0.001..0.250] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
@@ -298,6 +298,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     --flow-task-color changes only checkbox and check ink. \
     --flow-list-quote-inset-um shifts list/quote ink 0..12 mm right; \
     --flow-list-quote-right-inset-um reserves 0..12 mm on their right. \
+    --inspect-flow prints the nominal measured row positions and page \
+    count without requiring glyph strokes or writing any output file. \
+    It does not validate authored pen contour or glyph coverage. \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
     PDF page count includes the last manual ink page, with or without \
@@ -417,6 +420,7 @@ struct NotebookRequest {
     heading: HeadingDecoration,
     ink: Vec<NotebookInkLine>,
     inspect: bool,
+    inspect_flow: bool,
     output: Option<String>,
     pages: usize,
     pages_explicit: bool,
@@ -573,8 +577,8 @@ impl NotebookFlagPreflight {
         self.imported_ink_count = self.imported_ink_count
             .saturating_add(usize::from(option == "--ink-file"));
         let operands = match option {
-            "--inspect" => {
-                self.unique(option, "--inspect may appear only once")?;
+            "--inspect" | "--inspect-flow" => {
+                self.unique(option, &format!("{option} may appear only once"))?;
                 0
             }
             "--replace" => {
@@ -699,6 +703,23 @@ impl NotebookFlagPreflight {
         glyph_has_any: bool,
     ) -> Result<(), String> {
         let has = |option: &str| self.selected.contains(option);
+        let inspect_flow = has("--inspect-flow");
+        if inspect_flow && flow_format.is_none() {
+            return Err("--inspect-flow requires a text or Markdown flow"
+                .into());
+        }
+        if inspect_flow && (has("--inspect") || has("--output")
+            || self.export_format.is_some()) {
+            return Err(concat!(
+                "--inspect-flow is stdout only and cannot accompany ",
+                "--inspect, --output or export",
+            ).into());
+        }
+        if inspect_flow && (inline_ink_count > 0 || glyph_has_any
+            || self.imported_overlay_selected) {
+            return Err("--inspect-flow cannot include authored ink or glyphs"
+                .into());
+        }
         if has("--replace") && !has("--output") {
             return Err("--replace requires --output".into());
         }
@@ -776,7 +797,7 @@ impl NotebookFlagPreflight {
                     .then_some(0),
                 list_quote_right_inset: has("--flow-list-quote-right-inset-um")
                     .then_some(0),
-            }, self.heading, self.export_format,
+            }, self.heading, self.export_format, inspect_flow,
         )?;
         // Explicit ink and glyph intent needs an output mode even before
         // selected library or stdin bytes are available.
@@ -2197,7 +2218,7 @@ fn parse_notebook_export_option(
 fn validate_notebook_export_flags(
     replace: bool,
     output: Option<&str>,
-    inspect: bool,
+    inspect: bool, inspect_flow: bool,
     export: &NotebookExportOptions,
     ink: &[NotebookInkLine],
     glyphs: &GlyphOverlay,
@@ -2246,7 +2267,7 @@ fn validate_notebook_export_flags(
     if glyphs.variation.is_some() && glyphs.strokes.is_empty() {
         return Err("--glyph-variation needs authored glyph shapes".into());
     }
-    if statistics.is_some() && !glyphs.has_any() {
+    if statistics.is_some() && !glyphs.has_any() && !inspect_flow {
         return Err(concat!(
             "--handwriting-profile requires both --glyph-stroke ",
             "and --place-text",
@@ -2615,10 +2636,10 @@ fn load_notebook_paper_option(
 fn validate_notebook_flow_flag_compatibility(
     flow_format: Option<FlowFormat>, region_selected: bool,
     typography: FlowTypography, heading: HeadingDecoration,
-    export_format: Option<NotebookExportFormat>,
+    export_format: Option<NotebookExportFormat>, inspect_flow: bool,
 ) -> Result<(), String> {
     // Transient text is not a field in the saved notebook v1 profile.
-    if flow_format.is_some() && export_format.is_none() {
+    if flow_format.is_some() && export_format.is_none() && !inspect_flow {
         return Err(concat!(
             "flow source needs --export-paper pdf or png ",
             "or --emit-ink-file; ",
@@ -2720,14 +2741,15 @@ fn validate_notebook_flow_selection(
     flow: Option<&FlowSource>, glyphs: &GlyphOverlay,
     heading: HeadingDecoration, region: Option<FlowRegion>,
     typography: FlowTypography, export: &NotebookExportOptions,
+    inspect_flow: bool,
 ) -> Result<(), String> {
     validate_notebook_flow_flag_compatibility(
         flow.map(|source| source.format), region.is_some(),
-        typography, heading, export.format,
+        typography, heading, export.format, inspect_flow,
     )?;
     if flow.is_none() {
         glyphs.validate_pairing()?;
-    } else if glyphs.strokes.is_empty() {
+    } else if glyphs.strokes.is_empty() && !inspect_flow {
         return Err("flow requires authored glyph shapes".into());
     }
     Ok(())
@@ -3022,8 +3044,12 @@ fn preflight_notebook_export_and_ink(
     let manual_last_page = inline_ink.iter().map(|line| line.page)
         .chain(glyphs.runs.iter().map(|run| run.page))
         .max().unwrap_or(0);
+    let inspect_flow = flags.selected.contains("--inspect-flow");
     flags.validate(flow_format, region_selected, inline_ink.len(),
         manual_last_page, glyphs.has_any())?;
+    if inspect_flow {
+        return Ok(());
+    }
     preflight_notebook_ink_requirements(
         flow_format, glyph_file_selected, handwriting_selected, glyphs,
     )
@@ -3098,6 +3124,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     preflight_notebook_sources(args)?;
     let mut profile = NotebookProfile::default();
     let (mut inspect, mut output, mut replace) = (false, None, false);
+    let mut inspect_flow = false;
     let (mut export, mut ink) = (NotebookExportOptions::default(), Vec::new());
     let (mut glyphs, mut statistics) = (GlyphOverlay::default(), None);
     let (mut flow, mut flow_region) = (None, None);
@@ -3128,6 +3155,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--inspect" if inspect =>
                 return Err("--inspect may appear only once".into()),
             "--inspect" => inspect = true,
+            "--inspect-flow" if inspect_flow =>
+                return Err("--inspect-flow may appear only once".into()),
+            "--inspect-flow" => inspect_flow = true,
             "--handwriting-profile" =>
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
             "--heading-style" | "--heading-align" | "--heading-color"
@@ -3165,10 +3195,10 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     }
     validate_notebook_flow_selection(
         flow.as_ref(), &glyphs, heading, flow_region, flow_typography,
-        &export,
+        &export, inspect_flow,
     )?;
     validate_notebook_export_flags(
-        replace, output.as_deref(), inspect, &export, &ink,
+        replace, output.as_deref(), inspect, inspect_flow, &export, &ink,
         &glyphs, statistics.as_ref(),
     )?;
     profile.validate()?;
@@ -3186,6 +3216,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         export_format: export.format,
         ink,
         inspect,
+        inspect_flow,
         output,
         pages: export.pages.unwrap_or(1),
         png_page: export.png_page.unwrap_or(1),
@@ -3280,6 +3311,26 @@ fn admit_flow_page_selection(
 fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     let mut request = parse_notebook_options(args)?;
     let canonical = request.profile.canonical_json()?;
+    if request.inspect_flow {
+        let source = request.flow.as_ref()
+            .ok_or("--inspect-flow requires a text or Markdown flow")?;
+        let (runs, ornaments, pages) = layout_flow_with_typography(
+            source, &request.profile, request.statistics.as_ref(),
+            request.heading, request.flow_region, request.flow_typography,
+        )?;
+        let mut report = format!(
+            "Nominal flow (glyph coverage and ink clearance unchecked)\n\
+             Pages: {pages}\nRows: {}\nOrnaments: {}\n",
+            runs.len(), ornaments.len(),
+        );
+        for row in runs {
+            report.push_str(&format!(
+                "Page {} x={} um y={} um: {:?}\n",
+                row.page, row.origin_um.0, row.origin_um.1, row.text,
+            ));
+        }
+        return Ok(Some(report.into_bytes()));
+    }
     if request.inspect {
         return Ok(Some(
             format!(

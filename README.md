@@ -459,6 +459,24 @@ cargo run -q -p atrament_profile_editor_cli -- \
   --flow-markdown-file notes.md --output notes-page-1.png
 ```
 
+For a **read-only layout report before drawing any glyphs**, inspect the
+nominal physical rows and page count directly from pasted Markdown or a
+selected file:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --flow-markdown-file notes.md --inspect-flow
+```
+
+`--inspect-flow` prints each measured row's page and x/y position in
+micrometres, its exact text and the counts of heading/list/quote ornaments.
+It accepts an optional notebook/paper and handwriting-statistics profile,
+without requiring glyph strokes or writing a file. This report is **not a
+renderability verdict**: exact authored glyph availability, actual pen
+contours, physical ink clearance and PDF/PNG validation are checked only
+when exporting with the selected glyph library. Inspection cannot be
+combined with `--output`, `--inspect`, export or manually supplied ink.
+
 To add reproducible, bounded pen-like variation to the **printed paper
 ruling** under the authored text, select both export-only options:
 
