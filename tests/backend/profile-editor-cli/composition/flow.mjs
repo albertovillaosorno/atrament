@@ -2269,6 +2269,76 @@ test('leading decimal mantissas retain exact native PDF/PNG rows', () => {
     }
 });
 
+test('numeric comparisons retain whole physical PDF/PNG ink', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-comparisons-'));
+    try {
+        const region = ['--flow-region', '30000', '40000',
+            '33000', '36000'];
+        const cases = [
+            ['abcde=1e3g', '=1e3g', '='],
+            ['abcde≤-.5g', '≤-.5g', '≤'],
+            ['abcde<=.5g', '<=.5g', '<'],
+            ['abcde!=2g', '!=2g', '!'],
+            ['abcde≈3.2g', '≈3.2g', '≈'],
+        ];
+        const stroke = (glyph) => [
+            '--glyph-stroke', glyph, '600', '500', '1800',
+            '3000', '250', '#123456',
+        ];
+        for (const [source, second, omitted] of cases) {
+            const forms = [...new Set([...source].filter(
+                (glyph) => glyph !== 'a'))];
+            const shapes = forms.flatMap(stroke);
+            const missing = forms.filter((glyph) => glyph !== omitted)
+                .flatMap(stroke);
+            for (const flag of ['--flow-text', '--flow-markdown']) {
+                const inspected = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    'notebook', '--inspect-flow', ...region, flag, source,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(inspected.status, 0, inspected.stderr);
+                assert.ok(inspected.stdout.includes(
+                    'Page 1 x=32500 um y=42500 um: "abcde"'));
+                assert.ok(inspected.stdout.includes(
+                    'Page 1 x=32500 um y=51500 um: "' + second + '"'));
+            }
+            for (const format of ['pdf', 'png']) {
+                const manualFile = join(dir, 'manual-' + format);
+                const manual = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    ...base, ...shapes,
+                    '--place-text', '1', '32500', '42500', 'abcde',
+                    '--place-text', '1', '32500', '51500', second,
+                    '--export-paper', format,
+                    ...(format === 'png' ? ['--dpi', '72'] : []),
+                    '--output', manualFile, '--replace',
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(manual.status, 0, manual.stderr);
+                const expected = readFileSync(manualFile);
+                for (const flag of ['--flow-text', '--flow-markdown']) {
+                    const actual = render(dir, source, format,
+                        [...region, ...shapes], flag);
+                    assert.equal(actual.result.status, 0,
+                        actual.result.stderr);
+                    assert.deepEqual(readFileSync(actual.output), expected,
+                        source + ' ' + flag + ' ' + format);
+                    const rejected = render(dir, source, format,
+                        [...region, ...missing], flag);
+                    assert.notEqual(rejected.result.status, 0);
+                    assert.match(rejected.result.stderr,
+                        /missing authored glyph|no authored strokes/i);
+                    assert.deepEqual(readFileSync(rejected.output), expected,
+                        'missing comparison ink cannot replace PDF/PNG');
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 test('scientific exponent notation stays on one fitting PDF/PNG row',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-exponents-'));

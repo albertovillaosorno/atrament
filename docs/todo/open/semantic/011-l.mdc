@@ -5151,3 +5151,24 @@ confirms that a missing authored glyph cannot replace accepted output.
 
 This change does not add number parsing, mathematical typography, a saved
 semantic notebook block, or a complete notebook-to-PDF journey.
+
+## Bounded numeric comparison ink (partial) — 2026-11-14
+
+The CLI-only Rust measured-flow compositor now groups a comparison symbol
+with an immediately following complete numeric token when the authored ink
+fits: `=`, `<`, `>`, `≤`, `≥`, `≈`, `≠`, plus ASCII `<=`, `>=`, `!=` and `==`.
+It preserves unary signs, omitted-zero decimals and valid `e`/`E` exponents.
+An ASCII `!` in `!=` is the numeric relation prefix, not punctuation
+attached to the left-hand word. Ordinary sentence exclamation marks retain
+their previous line-breaking behavior.
+
+The grouping is advisory: a physically narrow row still breaks between
+individual exact Unicode graphemes. Incomplete operators and nonnumeric
+comparison tails do not invent a numeric binding. Focused native Rust tests
+check contextual ties, plain/Markdown placement and narrow-row fallback;
+a CLI subprocess test compares actual PDF/transparent PNG output against
+separately positioned strokes and checks missing-ink refusal without
+replacing an accepted output file.
+
+This is not expression parsing, equation layout or the saved semantic
+notebook-to-PDF pathway. ATR-P2-011 remains open.

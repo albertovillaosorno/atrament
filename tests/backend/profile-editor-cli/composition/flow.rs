@@ -8507,7 +8507,7 @@ fn numeric_joining_is_contextual_and_never_ties_sentence_punctuation()
         ("−12", vec![0, 1]),
         ("a-12", vec![]),
         ("(−12", vec![1, 2]),
-        ("a=-12", vec![2, 3]),
+        ("a=-12", vec![1, 2, 3]),
         ("$-123", vec![1, 2, 3]),
     ] {
         let measured = glyphs(source);
@@ -8644,13 +8644,13 @@ fn leading_decimal_tokens_join_only_in_numeric_context()
         ("-.5", &[0, 1]),
         ("+,5", &[0, 1]),
         ("−.5", &[0, 1]),
-        ("=.5", &[1]),
+        ("=.5", &[0, 1]),
         ("(.5", &[1]),
         ("€.5", &[1]),
         ("$-.5", &[1, 2]),
         ("(-.5", &[1, 2]),
         ("-.5e+2", &[0, 1, 2, 3, 4]),
-        ("a=.5", &[2]),
+        ("a=.5", &[1, 2]),
         ("1.5", &[0, 1]),
         ("a.5", &[]),
         ("a-.5", &[]),
@@ -8665,6 +8665,95 @@ fn leading_decimal_tokens_join_only_in_numeric_context()
         for (index, joined) in actual.iter().enumerate() {
             assert_eq!(*joined, expected.contains(&index),
                 "{source} leading decimal tie {index}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn numeric_comparison_prefixes_bind_fitting_number_ink()
+-> Result<(), String> {
+    let measured = |source: &str| -> Vec<super::MeasuredGrapheme<'static>> {
+        source.chars().map(|ch| {
+            let form = match ch {
+                '0'..='9' => "1",
+                '=' => "=", '<' => "<", '>' => ">", '!' => "!",
+                '≤' => "≤", '≥' => "≥", '≈' => "≈", '≠' => "≠",
+                '+' => "+", '-' => "-", '−' => "−",
+                '.' => ".", ',' => ",", 'e' => "e",
+                _ => "x",
+            };
+            (form, 4_000, 4_000)
+        }).collect()
+    };
+    for (source, expected) in [
+        ("x=3", &[1][..]),
+        ("x=1e3", &[1, 2, 3]),
+        ("x≤-.5", &[1, 2, 3]),
+        ("x≥,5", &[1, 2]),
+        ("x≈3.2", &[1, 2, 3]),
+        ("x≠-2", &[1, 2]),
+        ("x<−.5", &[1, 2, 3]),
+        ("x>.5e-3", &[1, 2, 3, 4, 5]),
+        ("x<=.5", &[1, 2, 3]),
+        ("x>=1", &[1, 2]),
+        ("x!=2", &[1, 2]),
+        ("x==3", &[1, 2]),
+        ("x=word", &[]),
+        ("x≤word", &[]),
+        ("x<-word", &[]),
+        ("a.5", &[]),
+        ("1..5", &[]),
+    ] {
+        let joins = super::numeric_separator_joins(&measured(source));
+        for (index, tie) in joins.iter().enumerate() {
+            assert_eq!(*tie, expected.contains(&index),
+                "{source} comparison tie at {index}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn numeric_relations_move_as_one_fitting_physical_row()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 33_000, height: 36_000,
+    };
+    for source in ["abcde=1e3g", "abcde≤-.5g", "abcde<=.5g",
+        "abcde≈3.2g", "abcde!=2g", "abcde≥,5g"] {
+        for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+            let (rows, ornaments, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            assert_eq!(pages, 1);
+            assert!(ornaments.is_empty());
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>(), ["abcde", &source[5..]],
+                "comparison {source} {format:?}");
+        }
+    }
+    // A comparison prefix must not introduce a minimum row width. With
+    // only one 4-mm glyph per row, every authored glyph still renders.
+    let narrow = super::FlowRegion {
+        width: 9_000, height: 72_000, ..region
+    };
+    for source in ["<=.5", "!=2", "≤-.5", "=1e3", "≈3.2"] {
+        for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(narrow),
+            )?;
+            assert_eq!(pages, 1);
+            assert!(marks.is_empty());
+            assert_eq!(rows.len(), source.chars().count());
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<String>(), source);
         }
     }
     Ok(())

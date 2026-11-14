@@ -2215,10 +2215,19 @@ fn next_punctuation_cluster(
     for (index, &(grapheme, advance, slot)) in glyphs
         .get(from..).ok_or("flow punctuation cluster boundary refused")?
         .iter().enumerate() {
-        if index > 0 && !punctuation_pair_stays_together(
+        // An exclamation in != is a relation prefix, not the closing
+        // punctuation of the preceding word. Other exclamations retain
+        // their ordinary punctuation behavior.
+        let relation_not_equal = grapheme == "!"
+            && glyphs.get(from + index + 1)
+                .is_some_and(|item| item.0 == "=")
+            && numeric_joins.get(from + index)
+                .copied().unwrap_or(false);
+        if index > 0 && (!punctuation_pair_stays_together(
             previous, grapheme,
-        ) && !numeric_joins.get(from + index - 1)
-            .copied().unwrap_or(false) {
+        ) || relation_not_equal)
+            && !numeric_joins.get(from + index - 1)
+                .copied().unwrap_or(false) {
             break;
         }
         let next_extent = extent_um.max(advance_um.checked_add(slot)
@@ -2273,8 +2282,10 @@ fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
 
 // A bounded ASCII number (including decimal and thousands separators,
 // clock colons, digit fractions/dates and numeric ranges) is one advisory
-// ink cluster when it fits. Only separators surrounded by ASCII digits
-// join a numeric run; terminal punctuation and words stay separate.
+// ink cluster when it fits. Numeric comparison prefixes also bind the
+// following number, including leading decimals and complete exponents.
+// Only separators surrounded by ASCII digits join a numeric run;
+// terminal punctuation and words stay separate.
 // A leading +, hyphen or mathematical minus also joins following digits;
 // after a letter, the ordinary hyphen retains its previous layout.
 // Compute the adjacent ties once per word: long 4,096-byte inputs must not
@@ -2289,10 +2300,30 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
         // An omitted leading zero is still an authored decimal. Recognize
         // .5 and ,5 only at a numeric boundary, never after sentence
         // punctuation in ordinary prose (a.5, 1..5).
+        // Mathematical comparisons are prefixes of the following
+        // complete number, not trailing ink on the preceding prose row.
+        // Include the two ASCII characters of <=, >=, != and ==.
+        let comparison_start = cursor.checked_sub(1)
+            .filter(|&index| glyphs.get(index).is_some_and(|item| {
+                matches!(item.0,
+                    "=" | "<" | ">" | "\u{2264}" | "\u{2265}"
+                    | "\u{2248}" | "\u{2260}")
+            }))
+            .map(|index| {
+                if glyphs[index].0 == "=" && index > 0
+                    && glyphs.get(index - 1).is_some_and(|item| {
+                        matches!(item.0, "<" | ">" | "!" | "=")
+                    }) {
+                    index - 1
+                } else {
+                    index
+                }
+            });
         let numeric_boundary = cursor == 0
+            || comparison_start.is_some()
             || glyphs.get(cursor.saturating_sub(1))
                 .is_some_and(|item| matches!(item.0,
-                    "(" | "[" | "=" | "$" | "\u{20ac}"
+                    "(" | "[" | "$" | "\u{20ac}"
                     | "\u{a3}" | "\u{a5}"));
         let decimal_start = |offset: usize| {
             glyphs.get(offset).is_some_and(|item| {
@@ -2310,7 +2341,7 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
             cursor = cursor.saturating_add(1);
             continue;
         }
-        let start = cursor;
+        let start = comparison_start.unwrap_or(cursor);
         if unary_sign {
             cursor = cursor.saturating_add(1);
         }
@@ -2321,7 +2352,8 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
             .is_some_and(|item| ascii_digit(item.0)) {
             cursor = cursor.saturating_add(1);
         }
-        let mut has_separator = unary_sign || leading_decimal;
+        let mut has_separator = comparison_start.is_some()
+            || unary_sign || leading_decimal;
         while glyphs.get(cursor).is_some_and(|item| {
             matches!(item.0, "." | "," | ":" | "/" | "⁄"
                 | "-" | "−" | "–")
