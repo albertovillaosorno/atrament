@@ -2080,6 +2080,64 @@ test('degree temperature units keep letters on the same PDF/PNG row',
         }
     });
 
+test('numeric separators preserve native decimal and clock PDF/PNG rows',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-numeric-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '33000', '36000'];
+            const cases = [
+                ['abcde3.14g', '3.14g', '.'],
+                ['abcde3,14g', '3,14g', ','],
+                ['abcde3:14g', '3:14g', ':'],
+                ['abcde1,000g', '1,000g', ','],
+            ];
+            const stroke = (glyph) => [
+                '--glyph-stroke', glyph, '600', '500', '1800',
+                '3000', '250', '#123456',
+            ];
+            for (const [source, tail, separator] of cases) {
+                const shaped = [...new Set([...source].filter(
+                    (glyph) => glyph !== 'a'))].flatMap(stroke);
+                const missingSeparator = [...new Set([...source].filter(
+                    (glyph) => glyph !== 'a' && glyph !== separator))]
+                    .flatMap(stroke);
+                for (const format of ['pdf', 'png']) {
+                    const manualFile = join(dir, `manual-${format}`);
+                    const manual = spawnSync(cargo, [
+                        'run', '--offline', '--quiet',
+                        '-p', 'atrament_profile_editor_cli', '--',
+                        ...base, ...shaped,
+                        '--place-text', '1', '32500', '42500', 'abcde',
+                        '--place-text', '1', '32500', '51500', tail,
+                        '--export-paper', format,
+                        ...(format === 'png' ? ['--dpi', '72'] : []),
+                        '--output', manualFile, '--replace',
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(manual.status, 0, manual.stderr);
+                    const expected = readFileSync(manualFile);
+                    for (const flag of ['--flow-text', '--flow-markdown']) {
+                        const flow = render(dir, source, format,
+                            [...region, ...shaped], flag);
+                        assert.equal(flow.result.status, 0,
+                            flow.result.stderr);
+                        assert.deepEqual(readFileSync(flow.output), expected,
+                            `${source} ${format} ${flag}`);
+                        const rejected = render(dir, source, format,
+                            [...region, ...missingSeparator], flag);
+                        assert.notEqual(rejected.result.status, 0);
+                        assert.match(rejected.result.stderr,
+                            /missing authored glyph|no authored strokes/i);
+                        assert.deepEqual(readFileSync(rejected.output),
+                            expected, 'missing decimal must not replace ink');
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('overlong punctuation chains use longest fitting physical prefixes',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-punctuation-prefix-'));

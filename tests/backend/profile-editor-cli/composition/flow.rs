@@ -8408,6 +8408,129 @@ fn temperature_degree_and_unit_letter_remain_on_one_fitting_row()
 }
 
 #[test]
+fn numeric_decimal_grouping_and_time_separators_keep_fitting_tokens()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 33_000, height: 36_000,
+    };
+    for (source, expected) in [
+        ("abcde3.14g", ["abcde", "3.14g"]),
+        ("abcde3,14g", ["abcde", "3,14g"]),
+        ("abcde3:14g", ["abcde", "3:14g"]),
+        ("abcde1,000g", ["abcde", "1,000g"]),
+        ("abcde3;14g", ["abcde3;", "14g"]),
+    ] {
+        for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+            let (runs, ornaments, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            assert_eq!(pages, 1);
+            assert!(ornaments.is_empty());
+            assert_eq!(runs.iter().map(|run| run.text.as_str())
+                .collect::<Vec<_>>(), expected, "{source} {format:?}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn numeric_joining_keeps_exact_ink_under_narrow_row_fallback()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    // Even one decimal cannot become an impossible minimum width. Each
+    // original grapheme is emitted exactly once on these 5-mm rows.
+    let narrow = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 9_000, height: 68_000,
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        for source in ["3.14", "1,000", "12:30", "1.2.3",
+            "3..14", "3.a", "a.3", "a1.2z", "ñ3,14"] {
+            let (rows, ornaments, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(narrow),
+            )?;
+            assert!(ornaments.is_empty());
+            assert_eq!(pages, 1, "{source} {format:?}");
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<String>(), source, "{source} {format:?}");
+            assert!(rows.iter().all(|row| {
+                row.text.chars().count() == 1
+                    && row.origin_um.0 == narrow.left + 2_500
+            }), "{source} {format:?}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn numeric_joining_is_contextual_and_never_ties_sentence_punctuation()
+-> Result<(), String> {
+    let glyphs = |text: &'static str| -> Vec<super::MeasuredGrapheme<'static>> {
+        text.chars().map(|character| match character {
+            '0' => ("0", 4_000, 4_000),
+            '1' => ("1", 4_000, 4_000),
+            '2' => ("2", 4_000, 4_000),
+            '3' => ("3", 4_000, 4_000),
+            '.' => (".", 4_000, 4_000),
+            ',' => (",", 4_000, 4_000),
+            ':' => (":", 4_000, 4_000),
+            ';' => (";", 4_000, 4_000),
+            _ => ("a", 4_000, 4_000),
+        }).collect()
+    };
+    for (source, numeric_pairs) in [
+        ("12.30", vec![0, 1, 2, 3]),
+        ("1,000", vec![0, 1, 2, 3]),
+        ("1:23", vec![0, 1, 2]),
+        ("1.2.3", vec![0, 1, 2, 3]),
+        ("1.2.", vec![0, 1]),
+        ("1..2", vec![]),
+        ("1.a", vec![]),
+        ("a.1", vec![]),
+        ("1;2", vec![]),
+    ] {
+        let measured = glyphs(source);
+        let joined = super::numeric_separator_joins(&measured);
+        for (index, tie) in joined.into_iter().enumerate() {
+            assert_eq!(tie, numeric_pairs.contains(&index),
+                "{source} numeric join at {index}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn bounded_numeric_join_scan_handles_full_size_number_once()
+-> Result<(), String> {
+    // The 4,096-byte source cap permits a single long numeric word.
+    // Its thousands separator cannot trigger per-grapheme rescanning.
+    let mut glyphs = vec![("1", 4_000, 4_000); 4_096];
+    glyphs[2_048] = (",", 4_000, 4_000);
+    let joins = super::numeric_separator_joins(&glyphs);
+    assert_eq!(joins.len(), 4_095);
+    assert!(joins.iter().all(|joined| *joined));
+    let selected = super::next_punctuation_cluster(
+        &glyphs, &joins, 0, 96 * 4_000,
+    )?;
+    assert_eq!(selected.count, 96);
+    assert_eq!(selected.end, 96);
+    assert_eq!(selected.extent_um, 96 * 4_000);
+    glyphs[2_049] = (".", 4_000, 4_000);
+    let joins = super::numeric_separator_joins(&glyphs);
+    assert!(joins[..2_047].iter().all(|joined| !*joined));
+    assert!(!joins[2_047]);
+    assert!(!joins[2_048]);
+    assert!(!joins[2_049]);
+    Ok(())
+}
+
+#[test]
 fn narrow_paired_rows_retain_exact_unicode_ink_when_pair_cannot_fit()
     -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;
@@ -8683,10 +8806,14 @@ fn punctuation_prefix_respects_exact_grapheme_and_byte_limits()
     // The physical contour fits. A 97th one-byte grapheme must not be
     // added to an otherwise valid 96-glyph cluster.
     let marks = vec![("/", 1, 1); 120];
-    let first = super::next_punctuation_cluster(&marks, 0, 200)?;
+    let first = super::next_punctuation_cluster(
+        &marks, &super::numeric_separator_joins(&marks), 0, 200,
+    )?;
     assert_eq!((first.count, first.bytes, first.end, first.extent_um),
         (96, 96, 96, 96));
-    let rest = super::next_punctuation_cluster(&marks, first.end, 200)?;
+    let rest = super::next_punctuation_cluster(
+        &marks, &super::numeric_separator_joins(&marks), first.end, 200,
+    )?;
     assert_eq!((rest.count, rest.bytes, rest.end, rest.extent_um),
         (24, 24, 120, 24));
 
@@ -8700,17 +8827,21 @@ fn punctuation_prefix_respects_exact_grapheme_and_byte_limits()
         large.push(("\u{a0}", 1, 1));
         large.push((joined, 1, 1));
     }
-    let prefix = super::next_punctuation_cluster(&large, 0, 200)?;
+    let prefix = super::next_punctuation_cluster(
+        &large, &super::numeric_separator_joins(&large), 0, 200,
+    )?;
     assert_eq!((prefix.count, prefix.bytes, prefix.end,
         prefix.extent_um), (33, 370, 33, 33));
     let following = super::next_punctuation_cluster(
-        &large, prefix.end, 200,
+        &large, &super::numeric_separator_joins(&large), prefix.end, 200,
     )?;
     assert_eq!(following.count, 32);
     assert_eq!(following.bytes, 368);
     // If the row cannot fit a pair, the existing single-glyph fallback
     // remains mandatory even with attached punctuation.
-    let narrow = super::next_punctuation_cluster(&marks, 0, 1)?;
+    let narrow = super::next_punctuation_cluster(
+        &marks, &super::numeric_separator_joins(&marks), 0, 1,
+    )?;
     assert_eq!((narrow.count, narrow.end, narrow.extent_um),
         (1, 1, 1));
     Ok(())

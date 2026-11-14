@@ -1501,6 +1501,7 @@ impl Layout<'_> {
                 continue;
             }
             let (glyphs, _, word_span) = measured_word(word, self.statistics)?;
+            let numeric_joins = numeric_separator_joins(&glyphs);
             let spaces_um = u32::try_from(pending_spaces)
                 .map_err(|_error| "flow spaces overflow")?
                 .checked_mul(4_000).ok_or("flow spaces overflow")?;
@@ -1541,7 +1542,7 @@ impl Layout<'_> {
             let mut glyph_index = 0usize;
             while glyph_index < glyphs.len() {
                 let mut cluster = next_punctuation_cluster(
-                    &glyphs, glyph_index, cap,
+                    &glyphs, &numeric_joins, glyph_index, cap,
                 )?;
                 if !row.is_empty()
                     && (width.checked_add(cluster.extent_um)
@@ -1566,7 +1567,7 @@ impl Layout<'_> {
                     (width, row_ink_extent, count) = (0, 0, 0);
                     // A hanging indent may reduce this row's space.
                     cluster = next_punctuation_cluster(
-                        &glyphs, glyph_index, cap,
+                        &glyphs, &numeric_joins, glyph_index, cap,
                     )?;
                 }
                 let selected = glyphs.get(glyph_index..cluster.end)
@@ -2193,7 +2194,8 @@ fn append_cluster_ink(
 }
 
 fn next_punctuation_cluster(
-    glyphs: &[MeasuredGrapheme<'_>], from: usize, cap: u32,
+    glyphs: &[MeasuredGrapheme<'_>], numeric_joins: &[bool],
+    from: usize, cap: u32,
 ) -> Result<PunctuationCluster, String> {
     let &(first, _, first_extent) = glyphs.get(from)
         .ok_or("flow punctuation start outside word")?;
@@ -2201,7 +2203,8 @@ fn next_punctuation_cluster(
         .ok_or("flow punctuation offset overflow")?;
     let mut previous = first;
     while let Some(&(next, _, _)) = glyphs.get(end) {
-        if !punctuation_pair_stays_together(previous, next) {
+        if !punctuation_pair_stays_together(previous, next)
+            && !numeric_joins.get(end - 1).copied().unwrap_or(false) {
             break;
         }
         previous = next;
@@ -2268,6 +2271,49 @@ fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
             | "/" | "\\"
             | ")" | "]" | "}" | "»" | "›" | "”" | "’"
             | "‽" | "⁇" | "⁈" | "⁉" | "‼")
+}
+
+// A bounded ASCII number (including Spanish comma decimals, English dot
+// decimals, thousands groups and clock colons) is one advisory ink cluster
+// when it fits. Only separators surrounded by digits join a numeric run;
+// terminal sentence punctuation and ordinary adjacent words stay separate.
+// Compute the adjacent ties once per word: long 4,096-byte inputs must not
+// repeatedly rescan the rest of a number when measuring each glyph.
+fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
+    const fn ascii_digit(grapheme: &str) -> bool {
+        matches!(grapheme.as_bytes(), [b'0'..=b'9'])
+    }
+    let mut joins = vec![false; glyphs.len().saturating_sub(1)];
+    let mut cursor = 0usize;
+    while let Some(&(grapheme, _, _)) = glyphs.get(cursor) {
+        if !ascii_digit(grapheme) {
+            cursor = cursor.saturating_add(1);
+            continue;
+        }
+        let start = cursor;
+        while glyphs.get(cursor)
+            .is_some_and(|item| ascii_digit(item.0)) {
+            cursor = cursor.saturating_add(1);
+        }
+        let mut has_separator = false;
+        while glyphs.get(cursor).is_some_and(|item| {
+            matches!(item.0, "." | "," | ":")
+        }) && glyphs.get(cursor.saturating_add(1))
+            .is_some_and(|item| ascii_digit(item.0)) {
+            has_separator = true;
+            cursor = cursor.saturating_add(1);
+            while glyphs.get(cursor)
+                .is_some_and(|item| ascii_digit(item.0)) {
+                cursor = cursor.saturating_add(1);
+            }
+        }
+        if has_separator {
+            if let Some(ties) = joins.get_mut(start..cursor.saturating_sub(1)) {
+                ties.fill(true);
+            }
+        }
+    }
+    joins
 }
 
 // Flowing prose reserves a preceding compressed glyph's nominal ink contour.

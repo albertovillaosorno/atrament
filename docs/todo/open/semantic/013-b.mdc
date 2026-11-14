@@ -391,6 +391,34 @@ strokes and verify missing ink refuses without replacing accepted output.
 Currency locale is not inferred, spaces remain explicit, and full Unicode
 line-breaking and temperature typography remain unfinished.
 
+
+## ASCII numeric separators in native measured rows (partial) — 2026-11-14
+
+The CLI's plain-text and Markdown flow compiler now treats a contiguous
+ASCII-digit number containing an interior `.` (English decimal), `,`
+(Spanish decimal or thousands grouping), or `:` (clock/ratio notation) as
+one advisory measured group when its authored pen ink fits the selected
+physical row. A narrow row that could previously leave `3.` behind and
+start the next row with `14` can now carry the fitting `3.14` together.
+Only punctuation with a digit on each side qualifies: a terminal period,
+repeated dots, prose punctuation, and letters stay outside the numeric group.
+
+The rule uses source graphemes without locale inference, normalization,
+synthetic glyphs, or altered ink geometry. Long numbers still fall back
+to the largest fitting prefix within the existing width, byte, and glyph
+limits. An impossibly narrow row retains the single-grapheme fallback.
+The source's ASCII spaces still establish independent word boundaries.
+
+A failing-before/fixed-after native row test verifies exact positions for
+decimal dots, decimal commas, clock colons, thousands separators and an
+unrelated semicolon. Additional native tests cover punctuation context,
+5-mm one-grapheme rows and a 4,096-grapheme word with linear-time ties.
+Independent
+manual pen placements are byte-identical to native PDF and transparent PNG
+flow output in both source modes; missing separator ink refuses without
+replacing the previously accepted file. This remains CLI-only flow and does
+not satisfy complete bilingual line breaking or saved notebook editing.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
