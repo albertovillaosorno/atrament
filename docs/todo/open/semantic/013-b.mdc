@@ -371,23 +371,25 @@ physical space is too narrow for a pair.
 This is bounded visual grouping, not automatic hyphenation, full Unicode
 line breaking, or an editable saved notebook.
 
-## Currency and measurement affixes in physical rows (partial)
+## Currency, measurement and temperature affixes in rows (partial)
 
-Native plain/Markdown flow now keeps caller-authored `$`, `€`, `£` and `¥`
-with the next grapheme inside an unspaced word. The `%`,
-`‰`, `‱` and `°` marks stay with preceding ink. For example, narrow
-physical rows avoid a currency symbol stranded before its amount and a
-percent or degree symbol separated from its measurement. These are
-measured, advisory pairs: if two glyphs cannot physically share a row, the prior single-glyph
-fallback keeps every exact source character rather than inventing ink or
-rejecting the otherwise printable source.
+Native plain/Markdown flow keeps caller-authored `$`, `€`, `£` and `¥`
+with following ink within an unspaced word. The `%`, `‰`, `‱` and `°`
+marks stay with preceding ink; a degree sign also binds following `C`
+or `F` in an unspaced temperature unit. For example, a narrow physical
+row avoids stranding `°` away from the temperature unit letter.
 
-Failing-before/fixed-after native row tests cover each of eight marks in
-both source modes. Existing narrow-row and seeded bilingual punctuation
-oracles now include these affixes. Real PDF/transparent PNG acceptance
-compares independently positioned authored strokes and checks that missing
-affix ink refuses without replacing an accepted output. Currency locale is not inferred, spaces are never silently removed, and
-this is not a complete locale-specific Unicode line breaker.
+These are measured, advisory pairs: if two glyphs cannot physically share
+a row, the prior single-glyph fallback preserves every exact source
+grapheme rather than inventing ink or rejecting printable source text.
+
+Failing-before/fixed-after native row tests cover eight currency/measurement
+marks and two temperature units in both source modes. Narrow-row and
+seeded bilingual punctuation oracles also exercise these affixes. Native
+PDF/transparent PNG comparisons use independently positioned authored
+strokes and verify missing ink refuses without replacing accepted output.
+Currency locale is not inferred, spaces remain explicit, and full Unicode
+line-breaking and temperature typography remain unfinished.
 
 ## Acceptance decision
 

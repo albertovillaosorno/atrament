@@ -2250,14 +2250,16 @@ fn next_punctuation_cluster(
 // the nonbreaking hyphen bind *both* adjacent graphemes. Ordinary hyphen
 // and dash marks, an ellipsis, and path separators stay after their
 // preceding ink, but can wrap before the next grapheme. Currency prefixes
-// bind following ink, and percent/degree suffixes bind preceding ink. An
-// overlarge group falls back to measured individual ink.
+// bind following ink, and percent/degree suffixes bind preceding ink.
+// The degree mark also binds C/F temperature units. An overlarge group
+// falls back to measured individual ink.
 // Exact Unicode identities survive; straight quotes remain nondirectional.
 fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
     fn nonbreaking(grapheme: &str) -> bool {
         matches!(grapheme, "\u{a0}" | "\u{202f}" | "\u{2011}")
     }
     nonbreaking(previous) || nonbreaking(next)
+        || (previous == "°" && matches!(next, "C" | "F"))
         || matches!(previous, "¿" | "¡" | "«" | "‹" | "“" | "‘"
             | "(" | "[" | "{" | "$" | "€" | "£" | "¥")
         || matches!(next, "?" | "!" | "." | "," | ";" | ":"

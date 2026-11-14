@@ -8382,6 +8382,32 @@ fn money_prefixes_and_measurement_suffixes_stay_with_neighbors()
 }
 
 #[test]
+fn temperature_degree_and_unit_letter_remain_on_one_fitting_row()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 33_000, height: 36_000,
+    };
+    for unit in ["°C", "°F"] {
+        let source = format!("abcdef{unit}g");
+        for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, &source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            assert_eq!(pages, 1);
+            assert!(marks.is_empty());
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>(), ["abcde", &format!("f{unit}g")],
+                "temperature {unit} {format:?}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn narrow_paired_rows_retain_exact_unicode_ink_when_pair_cannot_fit()
     -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;
@@ -8397,7 +8423,7 @@ fn narrow_paired_rows_retain_exact_unicode_ink_when_pair_cannot_fit()
             "a\u{a0}b", "a\u{202f}b", "a\u{2011}b",
             "a-b", "a\u{2010}b", "a\u{2013}b", "a\u{2014}b",
             "a…b", "a/b", "a\\b", "a%b", "a‰b", "a‱b",
-            "a°b", "$ab", "€ab", "£ab", "¥ab"] {
+            "a°b", "a°C", "a°F", "$ab", "€ab", "£ab", "¥ab"] {
             let source = FlowSource::new(format, text)?;
             let (runs, ornaments, pages) = super::layout_flow_with_region(
                 &source, &NotebookProfile::default(), None,
