@@ -2080,7 +2080,7 @@ test('degree temperature units keep letters on the same PDF/PNG row',
         }
     });
 
-test('numeric separators preserve native decimal and clock PDF/PNG rows',
+test('numeric separators and unary signs preserve native PDF/PNG rows',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-numeric-'));
         try {
@@ -2091,6 +2091,8 @@ test('numeric separators preserve native decimal and clock PDF/PNG rows',
                 ['abcde3,14g', '3,14g', ','],
                 ['abcde3:14g', '3:14g', ':'],
                 ['abcde1,000g', '1,000g', ','],
+                ['abcde=-3g', '=-3g', '-'],
+                ['abcde(+3g', '(+3g', '+'],
             ];
             const stroke = (glyph) => [
                 '--glyph-stroke', glyph, '600', '500', '1800',

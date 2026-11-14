@@ -8421,6 +8421,8 @@ fn numeric_decimal_grouping_and_time_separators_keep_fitting_tokens()
         ("abcde3:14g", ["abcde", "3:14g"]),
         ("abcde1,000g", ["abcde", "1,000g"]),
         ("abcde3;14g", ["abcde3;", "14g"]),
+        ("abcde=-3g", ["abcde", "=-3g"]),
+        ("abcde(+3g", ["abcde", "(+3g"]),
     ] {
         for format in [FlowFormat::Plain, FlowFormat::Markdown] {
             let (runs, ornaments, pages) = super::layout_flow_with_region(
@@ -8481,6 +8483,12 @@ fn numeric_joining_is_contextual_and_never_ties_sentence_punctuation()
             ',' => (",", 4_000, 4_000),
             ':' => (":", 4_000, 4_000),
             ';' => (";", 4_000, 4_000),
+            '+' => ("+", 4_000, 4_000),
+            '-' => ("-", 4_000, 4_000),
+            '−' => ("−", 4_000, 4_000),
+            '(' => ("(", 4_000, 4_000),
+            '=' => ("=", 4_000, 4_000),
+            '$' => ("$", 4_000, 4_000),
             _ => ("a", 4_000, 4_000),
         }).collect()
     };
@@ -8494,6 +8502,13 @@ fn numeric_joining_is_contextual_and_never_ties_sentence_punctuation()
         ("1.a", vec![]),
         ("a.1", vec![]),
         ("1;2", vec![]),
+        ("+123", vec![0, 1, 2]),
+        ("-12.3", vec![0, 1, 2, 3]),
+        ("−12", vec![0, 1]),
+        ("a-12", vec![]),
+        ("(−12", vec![1, 2]),
+        ("a=-12", vec![2, 3]),
+        ("$-123", vec![1, 2, 3]),
     ] {
         let measured = glyphs(source);
         let joined = super::numeric_separator_joins(&measured);
@@ -8521,6 +8536,10 @@ fn bounded_numeric_join_scan_handles_full_size_number_once()
     assert_eq!(selected.count, 96);
     assert_eq!(selected.end, 96);
     assert_eq!(selected.extent_um, 96 * 4_000);
+    glyphs[0] = ("+", 4_000, 4_000);
+    assert!(super::numeric_separator_joins(&glyphs)
+        .iter().all(|joined| *joined));
+    glyphs[0] = ("1", 4_000, 4_000);
     glyphs[2_049] = (".", 4_000, 4_000);
     let joins = super::numeric_separator_joins(&glyphs);
     assert!(joins[..2_047].iter().all(|joined| !*joined));

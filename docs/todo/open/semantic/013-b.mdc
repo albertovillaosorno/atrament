@@ -419,6 +419,24 @@ flow output in both source modes; missing separator ink refuses without
 replacing the previously accepted file. This remains CLI-only flow and does
 not satisfy complete bilingual line breaking or saved notebook editing.
 
+
+## Leading numeric signs in CLI rows (partial) — 2026-11-14
+
+A leading ASCII `+`, ASCII `-`, or mathematical minus U+2212 now
+participates in the same advisory numeric group, including integers with
+no separator. A sign following an opening bracket, `=`, or a supported
+currency prefix also binds a following ASCII digit. A hyphen following
+an ordinary letter stays a hyphen rather than becoming a guessed unary
+sign. The compiler neither converts punctuation nor invents sign ink.
+
+Failing-before/fixed-after physical-row examples keep `=-3` and `(+3`
+together when they fit on the next row. Numeric boundary tests cover all
+three signs, a hyphenated control, and a 4,096-grapheme signed token;
+manual PDF/PNG placements verify exact stroke parity in both source modes
+and refusal to overwrite an accepted output when sign ink is missing.
+Rows narrower than an entire signed number still use the measured prefix
+fallback, so this is not a semantic mathematical expression parser.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
