@@ -1548,3 +1548,40 @@ Linux subprocess tests keep stdin open for twelve typed preflight cases.
 This is author-directed closure of sampled line segments, not a stored
 Bézier, automatic connected handwriting, physical pressure variation or
 completion of the two-line correlated P1-014 acceptance.
+
+## Explicit curved joins between placed glyphs (partial) — 2026-11-14
+
+The native `atrament-profiles notebook` command now admits
+`--join-text-curved LEFT RIGHT EXIT_STROKE ENTRY_STROKE BEND_X BEND_Y`.
+It links two **adjacent exact Unicode graphemes in one placed text run**
+using caller-selected one-based authored stroke endpoints. This opt-in
+connection is distinct from existing straight `--join-text-pair` and
+`--join-text-anchors` and from authored within-glyph path joins.
+
+The user selects nonzero transverse whole-micrometre bend offsets of
+-600..600 on each physical axis. Rust samples four directed quadratic
+segments between the **already placed** source exit and target entry.
+The page-relative curve therefore follows selected seeded per-occurrence
+variation and any explicit statistical scaling, slant, heading color or
+width. It preserves the original glyph library and both authored pen
+orders rather than writing a synthetic connector back into the TSV.
+
+The shared native physical join authority still refuses cross-page
+links, color/width mismatches, zero-length strokes and gaps greater than
+1200 um. The curved mode additionally refuses zero, parallel, collapsed,
+non-representable or visually straight sampled bends, nonexistent
+anchors, duplicate pair selections and physical 4096-stroke exhaustion.
+The final PDF, PNG and page-ink TSV use the same bounded physical
+segments; explicit file output keeps atomic no-clobber semantics.
+
+The separate six-case production CLI subprocess suite at
+`tests/backend/handwriting-curved-text-joins/curved-joins.mjs`
+checks exact integer quadratic samples, two measured text rows,
+composed-vs-decomposed Unicode identities, explicit anchors, seeded
+replay, native vector PDF/transparent PNG, and invalid export sentinel
+preservation. It performs no real printing or remote requests.
+
+This is a local, export-only join selection. It does not synthesize a
+whole cursive alphabet, persist paths/joins as notebook semantics, infer
+human pen lifts or satisfy the full two-line calibrated handwriting
+acceptance criteria; ATR-P4-014 remains open.

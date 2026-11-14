@@ -575,18 +575,27 @@ impl GlyphOverlay {
     pub(super) fn add_text_join_anchors(
         &mut self, iter: &mut Iter<'_, String>,
     ) -> Result<(), String> {
-        self.add_text_join_pair_with_anchors(iter, true)
+        self.add_text_join_pair_with_anchors(iter, true, false)
+    }
+
+    /// Select two source stroke anchors and a quadratic bend for an
+    /// opt-in physical connection between adjacent exact graphemes.
+    pub(super) fn add_text_join_curved(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        self.add_text_join_pair_with_anchors(iter, true, true)
     }
 
     /// Historical last-to-first opt-in pair, preserved for existing callers.
     pub(super) fn add_text_join_pair(
         &mut self, iter: &mut Iter<'_, String>,
     ) -> Result<(), String> {
-        self.add_text_join_pair_with_anchors(iter, false)
+        self.add_text_join_pair_with_anchors(iter, false, false)
     }
 
     fn add_text_join_pair_with_anchors(
         &mut self, iter: &mut Iter<'_, String>, anchored: bool,
+        curved: bool,
     ) -> Result<(), String> {
         let left = iter.next()
             .ok_or("--join-text-pair needs two exact graphemes")?;
@@ -620,9 +629,22 @@ impl GlyphOverlay {
                 usize::try_from(entry)
                 .map_err(|error| error.to_string())?.saturating_sub(1)))
         } else { None };
+        let curve_bend_um = if curved {
+            let bx = next_signed_path_offset(
+                iter, "curved text join X bend", 600,
+            )?;
+            let by = next_signed_path_offset(
+                iter, "curved text join Y bend", 600,
+            )?;
+            if bx == 0 && by == 0 {
+                return Err("curved text join requires nonzero bend".into());
+            }
+            Some((bx, by))
+        } else { None };
         self.text_joins.push(super::TextJoin {
             left: left.clone(), right: right.clone(), anchors,
         });
+        self.text_join_curves.push(curve_bend_um);
         Ok(())
     }
 
@@ -1355,7 +1377,8 @@ impl GlyphOverlay {
                     previous.as_ref().map(|(glyph, strokes)| (
                         *glyph, strokes.as_slice(),
                     )),
-                    grapheme, &self.text_joins, &mut joined_pairs,
+                    grapheme, &self.text_joins, &self.text_join_curves,
+                    &mut joined_pairs,
                 )?;
                 previous = Some((grapheme, rendered));
                 let advance = if let Some(values) = metrics {
@@ -3948,6 +3971,7 @@ fn append_text_ink(
     previous: Option<(&str, &[NotebookInkLine])>,
     grapheme: &str,
     text_joins: &[super::TextJoin],
+    text_join_curves: &[Option<(i32, i32)>],
     joined_pairs: &mut [bool],
 ) -> Result<(), String> {
     if let Some((left, prior)) = previous
@@ -3964,7 +3988,17 @@ fn append_text_ink(
             .ok_or("selected text join exit stroke outside glyph")?;
         let first = rendered.get(entry)
             .ok_or("selected text join entry stroke outside glyph")?;
-        if let Some(bridge) = text_join_bridge(*last, *first)? {
+        if let Some(bend) = text_join_curves.get(pair_index)
+            .copied().flatten() {
+            let bridge = text_join_bridge(*last, *first)?
+                .ok_or("curved text join requires distinct endpoints")?;
+            let curved = sample_curved_text_join(bridge, bend)?;
+            if curved.len() > MAX_NOTEBOOK_INK_LINES
+                .saturating_sub(expanded.len()) {
+                return Err("text exceeds 4096 total pen strokes".into());
+            }
+            expanded.extend(curved);
+        } else if let Some(bridge) = text_join_bridge(*last, *first)? {
             if expanded.len() == MAX_NOTEBOOK_INK_LINES {
                 return Err("text exceeds 4096 total pen strokes".into());
             }
@@ -3999,6 +4033,58 @@ fn text_join_bridge(
         start_um: segment.start_um, end_um: segment.end_um,
         width_um: segment.width_um, rgb: segment.rgb,
     })).map_err(str::to_owned)
+}
+
+// Draw four directed quadratic samples in already projected physical units.
+// The bridge was admitted by the shared native pen-distance and style guard;
+// only the visible curvature is new. Integer rounding matches authored path
+// curves, but unlike local glyph construction these points are page positions.
+fn sample_curved_text_join(
+    bridge: NotebookInkLine, bend: (i32, i32),
+) -> Result<Vec<NotebookInkLine>, String> {
+    let (start, end) = (bridge.start_um, bridge.end_um);
+    let dx = i64::from(start.0) - i64::from(end.0);
+    let dy = i64::from(start.1) - i64::from(end.1);
+    if i64::from(bend.0) * dy == i64::from(bend.1) * dx {
+        return Err("curved text join requires transverse bend".into());
+    }
+    let sample = |i: i64| -> Result<(u32, u32), String> {
+        let component = |a: u32, b: u32, shift: i32|
+            -> Result<u32, String> {
+            let remainder = 4 - i;
+            let numerator = remainder * remainder * i64::from(a)
+                + i * remainder * (i64::from(a) + i64::from(b)
+                    + 2 * i64::from(shift))
+                + i * i * i64::from(b);
+            u32::try_from((numerator + 8).div_euclid(16))
+                .map_err(|_error| {
+                    "curved text join leaves physical coordinates".into()
+                })
+        };
+        Ok((component(start.0, end.0, bend.0)?,
+            component(start.1, end.1, bend.1)?))
+    };
+    let mut strokes = Vec::with_capacity(4);
+    let mut previous = start;
+    for index in 1..=4 {
+        let next = sample(index)?;
+        if next == previous {
+            return Err("curved text join collapses a pen segment".into());
+        }
+        strokes.push(NotebookInkLine {
+            start_um: previous, end_um: next, ..bridge
+        });
+        previous = next;
+    }
+    // Guard tiny transverse bends that disappear after whole-um rounding.
+    if strokes.iter().all(|piece| {
+        let px = i64::from(piece.end_um.0) - i64::from(start.0);
+        let py = i64::from(piece.end_um.1) - i64::from(start.1);
+        px * dy == py * dx
+    }) {
+        return Err("curved text join does not bend selected ink".into());
+    }
+    Ok(strokes)
 }
 
 fn missing_shapes_error(missing: &[&str]) -> String {

@@ -209,6 +209,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--place-text PAGE X_UM Y_UM UTF8_TEXT] \
     [--join-text-pair LEFT RIGHT (repeatable, max 32)] \
     [--join-text-anchors LEFT RIGHT EXIT_STROKE ENTRY_STROKE] \
+    [--join-text-curved LEFT RIGHT EXIT_STROKE ENTRY_STROKE BEND_X BEND_Y] \
     [--glyph-variation SEED WIDTH HEIGHT THICKNESS SLANT SPACING REGULARITY] \
     [--glyph-line-drift MAX_UM (requires --glyph-variation)] \
     [--glyph-word-drift MAX_UM (requires --glyph-variation)] \
@@ -267,6 +268,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     within one row; matching physical ink and <=1200 um gap required. \
     --join-text-anchors chooses explicit 1-based source exit and target \
     entry strokes for an adjacent pair, without modifying glyph ink. \
+    --join-text-curved uses explicit stroke anchors and a nonzero \
+    transverse quadratic bend (-600..600 um per axis), sampled into \
+    four physical pen segments after variation and mean transforms. \
     --fallback-glyph borrows a caller-selected existing authored shape \
     for one missing exact grapheme; no implicit or chained mappings. \
     --flow-text keeps explicit lines; --flow-markdown joins plain lines \
@@ -442,6 +446,8 @@ struct GlyphOverlay {
     runs: Vec<TextRun>,
     strokes: Vec<GlyphStroke>,
     text_joins: Vec<TextJoin>,
+    // Indexed alongside selections to keep existing typed join contract.
+    text_join_curves: Vec<Option<(i32, i32)>>,
     variation: Option<GlyphVariation>,
     word_baseline_step_um: Option<u32>,
     word_drift_um: Option<u32>,
@@ -2358,6 +2364,7 @@ fn parse_notebook_export_option(
         }
         "--join-text-pair" => glyphs.add_text_join_pair(iter)?,
         "--join-text-anchors" => glyphs.add_text_join_anchors(iter)?,
+        "--join-text-curved" => glyphs.add_text_join_curved(iter)?,
         "--glyph-file" => {
             let selected = iter.next()
                 .ok_or("--glyph-file requires a library path")?;
@@ -2946,6 +2953,7 @@ fn preflight_notebook_glyph_option(
 ) -> Result<(), String> {
     match option {
         "--join-text-anchors" => glyphs.add_text_join_anchors(iter),
+        "--join-text-curved" => glyphs.add_text_join_curved(iter),
         "--join-text-pair" => glyphs.add_text_join_pair(iter),
         _ => glyphs.parse(option, iter),
     }
@@ -3063,7 +3071,8 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                     (0, false)
                 }
                 "--glyph-word-slant" | "--glyph-word-width" | "--fallback-glyph"
-                | "--join-text-anchors" | "--glyph-word-height" | "--place-text"
+                | "--join-text-anchors" | "--join-text-curved"
+                | "--glyph-word-height" | "--place-text"
                 | "--glyph-line-drift" | "--glyph-word-drift" | "--glyph-stroke"
                 | "--glyph-variation" | "--glyph-word-rise" | "--join-text-pair"
                 | "--glyph-word-pressure" | "--glyph-word-pigment"
@@ -3442,7 +3451,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                     &mut stdin_used)?,
             "--emit-ink-file" | "--export-paper" | "--pages" | "--dpi"
             | "--ruler-seed" | "--ruler-error-mm"
-            | "--png-page" | "--ink-line" | "--ink-file" | "--join-text-anchors"
+            | "--png-page" | "--ink-line" | "--ink-file"
+            | "--join-text-anchors" | "--join-text-curved"
             | "--glyph-stroke" | "--glyph-file" | "--place-text" | "--quality"
             | "--fallback-glyph" | "--glyph-variation" | "--glyph-word-rise"
             | "--glyph-line-drift" | "--glyph-word-drift" | "--join-text-pair"
