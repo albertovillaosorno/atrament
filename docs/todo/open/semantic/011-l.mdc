@@ -4843,13 +4843,16 @@ library are selected. It projects exact and explicitly borrowed shapes with
 the selected native handwriting dimensions, verifies any fixed flow rectangle,
 then invokes the same all-page Rust vector-PDF geometry and total-segment
 admission path as native export. Success appends the actual segment and page
-counts; missing or clipped ink, invalid shapes and budget overflow refuse
+counts and, with page inventory selected, page-local validated segment counts
+including zero-use sheets. These include ornaments and sum to the global
+count; missing or clipped ink, invalid shapes and budget overflow refuse
 without writing a PDF, PNG, TSV, or changing the caller's library.
 
-Three focused Rust tests compare two-page Markdown ornaments with real TSV,
+Four focused Rust tests compare two-page Markdown ornaments with real TSV,
 PDF and selected PNG output, preserve previous report bytes, match missing
-shape and global stroke-overflow export errors, and reject bad flag
-combinations before selected file I/O. A separate real-process Node test
+shape and global stroke-overflow export errors, check 256 seeded physical
+per-page segment oracles and blank sheets, and reject bad flags before source
+I/O. A separate real-process Node test
 checks imported Unicode/fallback ink, read-only report preservation, all-page
 counts, refusal of missing shapes and source-independent invalid selections.
 

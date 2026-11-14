@@ -576,8 +576,12 @@ Unlike the nominal budget and membership reports, this path **expands the
 actual authored pen segments** at the measured positions, validates any
 selected fixed flow region, and runs the shared vector PDF serializer's
 all-page printable-geometry and stroke-budget checks in memory. A successful
-report prints the validated segment count and physical page count, but
-creates no PDF, PNG or TSV output file. Missing glyphs, out-of-bounds ink and
+report prints the validated segment count and physical page count. With
+`--inspect-flow-inventory --inspect-flow-page-inventory`, it also counts the
+**actual validated ink segments on every page**, including Markdown ornaments
+and any blank sheets; these totals sum to the global validated segment count.
+The check creates no PDF, PNG or TSV output file. Missing glyphs,
+out-of-bounds ink and
 excess stroke demand produce explicit errors rather than a misleading pass.
 
 This is an in-memory dry run of the current unjoined, non-varied flow ink,

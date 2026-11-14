@@ -3745,7 +3745,27 @@ fn append_flow_ink_validation(
     writeln!(report,
         "Native ink validation: {} segments across {pages} physical {page_noun} \
          (PDF geometry accepted; no output file written)", ink.len(),
-    ).map_err(|error| format!("flow ink validation refused: {error}"))
+    ).map_err(|error| format!("flow ink validation refused: {error}"))?;
+    if request.inspect_flow_page_inventory {
+        let mut per_page = vec![0usize; pages];
+        for line in &ink {
+            let count = line.page.checked_sub(1)
+                .and_then(|index| per_page.get_mut(index))
+                .ok_or("validated ink references nonexistent physical page")?;
+            *count = count.checked_add(1)
+                .ok_or("flow ink page segment count overflow")?;
+        }
+        for (index, count) in per_page.iter().enumerate() {
+            let noun = if *count == 1 { "segment" } else { "segments" };
+            writeln!(report,
+                "Page {} validated ink: {count} physical {noun}",
+                index + 1,
+            ).map_err(|error| {
+                format!("flow ink page validation refused: {error}")
+            })?;
+        }
+    }
+    Ok(())
 }
 
 // Inspect nominal physical rows before drawing any authored glyph shapes.

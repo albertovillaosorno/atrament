@@ -8663,9 +8663,13 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             assert.equal(verified.status, 0, verified.stderr);
             assert.ok(verified.stdout.startsWith(inspection.stdout),
                 'full validation must preserve the nominal report bytes');
-            assert.equal(verified.stdout.slice(inspection.stdout.length),
+            assert.equal(verified.stdout.slice(inspection.stdout.length), [
                 'Native ink validation: 5 segments across 2 physical pages '
-                + '(PDF geometry accepted; no output file written)\n');
+                    + '(PDF geometry accepted; no output file written)',
+                'Page 1 validated ink: 4 physical segments',
+                'Page 2 validated ink: 1 physical segment',
+                '',
+            ].join('\n'));
             const missingInk = run([
                 '--inspect-flow', '--inspect-flow-shape-coverage',
                 '--inspect-flow-ink-validation',

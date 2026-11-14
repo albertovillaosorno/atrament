@@ -20757,6 +20757,8 @@ fn notebook_ink_validation_checks_physical_flow_without_exporting()
     assert_eq!(report.strip_prefix(&before), Some(concat!(
         "Native ink validation: 6 segments across 2 physical pages ",
         "(PDF geometry accepted; no output file written)\n",
+        "Page 1 validated ink: 4 physical segments\n",
+        "Page 2 validated ink: 2 physical segments\n",
     )), "{report}");
     let mut ink_flags = shared.clone();
     ink_flags.push("--emit-ink-file".into());
@@ -20908,4 +20910,88 @@ fn notebook_ink_validation_flags_refuse_before_selected_file_io() {
             .expect_err("invalid ink validation must refuse before sources");
         assert!(error.contains(expected), "{selected:?}: {error}");
     }
+}
+
+#[test]
+fn notebook_ink_validation_page_totals_match_seeded_physical_strokes()
+-> Result<(), String> {
+    let glyphs = ["a", "ó", "n\u{303}", "x"];
+    let shapes = args(&[
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "250", "#123456",
+        "--glyph-stroke", "a", "500", "700", "1500", "3200",
+        "250", "#123456",
+        "--glyph-stroke", "n\u{303}", "500", "600", "1500", "2500",
+        "250", "#123456",
+        "--glyph-stroke", "n\u{303}", "500", "700", "1500", "3200",
+        "250", "#123456",
+        "--glyph-stroke", "n\u{303}", "500", "800", "1500", "3500",
+        "250", "#123456",
+        "--glyph-stroke", "x", "500", "600", "1500", "2500",
+        "250", "#123456",
+        "--fallback-glyph", "ó", "a",
+    ]);
+    let mut seed = 0xe8c1_364a_0d72_5bf9u64;
+    for case in 0..256 {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        let count = 1 + (seed as usize % 64);
+        let mut rows = Vec::new();
+        for _ in 0..count {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            rows.push(glyphs[seed as usize % glyphs.len()]);
+        }
+        let source = rows.join("\n");
+        let mut inspect = args(&[
+            "--flow-text", &source, "--flow-region", "30000", "40000",
+            "32000", "25000", "--inspect-flow",
+            "--inspect-flow-shape-coverage",
+            "--inspect-flow-inventory", "--inspect-flow-page-inventory",
+            "--inspect-flow-ink-validation",
+        ]);
+        inspect.extend(shapes.iter().cloned());
+        let report = String::from_utf8(execute_notebook(&inspect)?
+            .ok_or("missing randomized physical validation")?)
+            .map_err(|error| error.to_string())?;
+        let per_glyph = |glyph: &str| match glyph {
+            "a" | "ó" => 2usize, "n\u{303}" => 3, _ => 1,
+        };
+        let total = rows.iter().map(|value| per_glyph(value)).sum::<usize>();
+        let pages = rows.len().div_ceil(2);
+        assert!(report.contains(&format!(
+            "Native ink validation: {total} segments across {pages} \
+             physical {} (PDF geometry accepted; no output file written)",
+            if pages == 1 { "page" } else { "pages" },
+        )), "case {case}: {report}");
+        for (page, group) in rows.chunks(2).enumerate() {
+            let subtotal = group.iter().map(|value| per_glyph(value))
+                .sum::<usize>();
+            let noun = if subtotal == 1 { "segment" } else { "segments" };
+            assert!(report.contains(&format!(
+                "Page {} validated ink: {subtotal} physical {noun}\n",
+                page + 1,
+            )), "case {case}, page {page}: {report}");
+        }
+    }
+    let mut blank = args(&[
+        "--flow-text", "\n\na", "--flow-region", "30000", "40000",
+        "32000", "25000", "--inspect-flow",
+        "--inspect-flow-shape-coverage", "--inspect-flow-inventory",
+        "--inspect-flow-page-inventory", "--inspect-flow-ink-validation",
+    ]);
+    blank.extend(args(&[
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "250", "#123456",
+    ]));
+    let report = String::from_utf8(execute_notebook(&blank)?
+        .ok_or("missing blank-sheet physical validation")?)
+        .map_err(|error| error.to_string())?;
+    assert!(report.contains(concat!(
+        "Page 1 validated ink: 0 physical segments\n",
+        "Page 2 validated ink: 1 physical segment\n",
+    )), "{report}");
+    Ok(())
 }
