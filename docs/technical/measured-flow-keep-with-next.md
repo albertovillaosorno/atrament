@@ -181,3 +181,36 @@ flow/revision authority under a rescued heading group.
 This recovery only affects caller-measured vertical flow placement. It does
 not connect the CLI Markdown parser, persist semantic paragraphs, resolve
 fixed obstacles or produce a complete notebook PDF/PNG Export.
+
+### Mandatory measured page starts (partial) — 2026-11-14
+
+`FlowUnitPolicy::StartOnNewPage` allows an upstream measured semantic block to
+request a physical page boundary before its first fragment. If the current
+page already contains placed flow, the paginator advances to the next supplied
+page; it then places the unit's fragments normally, preserving measurements,
+source indices, page identities and actual writable rectangles. A nonempty
+unit at the beginning of flow uses the first page without wasting paper, and
+an empty unit has no page-break effect. Consecutive nonempty requests each
+start a separate physical page.
+
+This boundary is **mandatory**, not a keep-together preference. If the last
+sheet already contains flow, the next request refuses with the existing
+`NoPageAvailable` error for the first fragment. No fallback replay may erase
+an explicit break: advisory keep-together or keep-with-next moves may be
+recovered by independent fragment placement, but every requested page start
+remains.
+
+A preceding keep-with-next heading cannot reserve across an explicit
+boundary. The result includes any skipped physical pages in `covered_pages`
+without inventing a sheet or silently clipping content.
+
+Seven focused domain tests cover nonsequential page identities, differing page
+widths, empty/initial starts, heading-boundary separation, typed exhaustion,
+advisory recovery and a 2,187-case integer reference sweep. The existing
+10,000-case randomized all-policy oracle exercises this sixth policy as
+well. An accepted-revision application test proves exact page placement,
+source ownership and refusal on genuine page-profile authority.
+
+This exposes a measured layout policy only. Neither the native CLI Markdown
+parser nor the persisted semantic notebook schema accepts page-break markup,
+so it does not complete the saved-notebook layout journey.

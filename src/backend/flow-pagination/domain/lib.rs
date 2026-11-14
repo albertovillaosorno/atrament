@@ -53,6 +53,10 @@ pub enum FlowUnitPolicy {
     /// Prefer the complete unit with its next visible measured fragment.
     /// Consecutive keep-with-next units form a chain.
     KeepWithNextWhenPossible,
+    /// Begin this nonempty unit on a fresh physical page when earlier rows
+    /// have consumed the current page. Unlike keep preferences, this is a
+    /// mandatory boundary that independent recovery must preserve.
+    StartOnNewPage,
 }
 
 /// One already-measured indivisible semantic flow fragment.
@@ -187,6 +191,12 @@ enum PaginationMode {
 
 /// Paginate immutable measured fragments over the supplied page sequence.
 ///
+/// `StartOnNewPage` is a mandatory boundary before a nonempty unit when the
+/// current sheet already contains placed flow. An unused initial or skipped
+/// page is not discarded, and empty units cannot request a blank page.
+/// Unlike advisory grouping, explicit breaks survive fallback replay and
+/// refuse with `NoPageAvailable` if no later sheet remains.
+///
 /// `KeepTogetherWhenPossible` moves a complete unit to the earliest remaining
 /// fresh page that can contain it when the current remainder cannot. If no
 /// single remaining page can contain the whole unit, the unit falls back to
@@ -244,7 +254,8 @@ where
         return Ok(fallback);
     }
     if units.iter().any(|unit| !unit.fragments.is_empty()
-        && unit.policy != FlowUnitPolicy::Independent)
+        && !matches!(unit.policy,
+            FlowUnitPolicy::Independent | FlowUnitPolicy::StartOnNewPage))
         && let Ok(fallback) = paginate_once(
             pages, units, PaginationMode::IndependentFallback,
         )
@@ -295,7 +306,9 @@ where
         if unit.fragments.is_empty() {
             continue;
         }
-        if mode == PaginationMode::IndependentFallback {
+        if mode == PaginationMode::IndependentFallback
+            && unit.policy != FlowUnitPolicy::StartOnNewPage
+        {
             place_independent(
                 pages, &unit.fragments, unit_index,
                 &mut cursor, &mut placements,
@@ -303,6 +316,10 @@ where
             continue;
         }
         match unit.policy {
+            FlowUnitPolicy::StartOnNewPage => place_on_fresh_page(
+                pages, &unit.fragments, unit_index,
+                &mut cursor, &mut placements,
+            )?,
             FlowUnitPolicy::Independent => {
                 place_independent(
                     pages,
@@ -415,6 +432,7 @@ fn keep_with_next_reservations<Identity>(
             | FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible => {
                 complete_group_extent(&unit.fragments)
             },
+            FlowUnitPolicy::StartOnNewPage => None,
             FlowUnitPolicy::Independent => unit.fragments.first()
                 .map(|fragment| GroupExtent {
                     height: fragment.height,
@@ -487,6 +505,33 @@ where
         place_one(pages, *fragment, source, cursor, placements)?;
     }
     Ok(())
+}
+
+/// A requested section boundary cannot be removed by a later replay of
+/// advisory grouping. Consume another sheet only if current rows exist.
+fn place_on_fresh_page<Identity, PageIdentity>(
+    pages: &[PageRegion<PageIdentity>],
+    fragments: &[MeasuredFragment<Identity>],
+    unit_index: usize,
+    cursor: &mut Cursor,
+    placements: &mut Vec<PlacedFragment<Identity, PageIdentity>>,
+) -> PlacementResult<Identity, PageIdentity>
+where
+    Identity: Copy,
+    PageIdentity: Copy,
+{
+    let Some(first) = fragments.first() else {
+        return Ok(());
+    };
+    if cursor.used_height != Length::ZERO
+        && (!advance_cursor(cursor)
+            || pages.get(cursor.page_index).is_none())
+    {
+        return Err(PaginationError::NoPageAvailable {
+            owner: first.owner,
+        });
+    }
+    place_independent(pages, fragments, unit_index, cursor, placements)
 }
 
 fn place_keep_together_when_possible<Identity, PageIdentity>(

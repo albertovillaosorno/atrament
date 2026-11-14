@@ -7726,3 +7726,72 @@ fn accepted_revision_balances_opening_and_trailing_paragraph_rows() {
     assert_eq!(revised.placements()[6].top.micrometres(),
         writable.y.micrometres() + 120_000);
 }
+
+#[test]
+fn accepted_revision_explicit_page_start_uses_accepted_sheet_authority() {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let section = ids.allocate_candidate().expect("section block");
+    let trailing = ids.allocate_candidate().expect("trailing block");
+    for block in [section, trailing] {
+        fixture.notebook.pages[0].flows[0].blocks.push(Block {
+            content: BlockContent::Rule,
+            extensions: vec![],
+            id: block,
+            provenance: None,
+            style: None,
+        });
+    }
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else { panic!("accepted two-page notebook"); };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let pages = [fixture.page_one, fixture.page_two]
+        .map(|candidate| accepted_for(&mapping, candidate));
+    let owners = [fixture.block, section, trailing]
+        .map(|candidate| accepted_for(&mapping, candidate));
+    let mut measured = RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: owners.iter().enumerate().map(|(index, owner)| {
+            MeasuredFlowUnit {
+                fragments: vec![MeasuredFragment {
+                    height: Length::from_micrometres(20_000),
+                    owner: *owner,
+                    width: Length::from_micrometres(50_000),
+                }],
+                policy: if index == 1 {
+                    FlowUnitPolicy::StartOnNewPage
+                } else { FlowUnitPolicy::Independent },
+            }
+        }).collect(),
+    };
+    let accepted = session.current().expect("accepted two-page authority");
+    let plan = paginate_revision(accepted, &measured)
+        .expect("mandatory boundary starts the next physical sheet");
+    assert_eq!(plan.revision(), revision);
+    assert_eq!(plan.flow(), flow);
+    assert_eq!(plan.covered_pages().iter().map(|page| page.page)
+        .collect::<Vec<_>>(), pages);
+    assert_eq!(plan.placements().iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [pages[0], pages[1], pages[1]]);
+    assert_eq!(plan.placements().iter().map(|row| row.owner)
+        .collect::<Vec<_>>(), owners);
+    assert_eq!(plan.placements().iter().map(|row| row.source.unit)
+        .collect::<Vec<_>>(), [0, 1, 2]);
+    assert_eq!(plan.placements().iter().map(
+        |row| row.top.micrometres()).collect::<Vec<_>>(),
+        [20_000, 20_000, 40_000]);
+    for row in plan.placements() {
+        let page = plan.covered_pages().iter()
+            .find(|page| page.page == row.page)
+            .expect("accepted sheet must own selected row");
+        assert_eq!(row.writable, page.writable);
+    }
+
+    measured.units[2].policy = FlowUnitPolicy::StartOnNewPage;
+    assert_eq!(paginate_revision(accepted, &measured),
+        Err(SemanticPaginationError::Pagination(
+            PaginationError::NoPageAvailable { owner: owners[2] })));
+}
