@@ -5062,3 +5062,24 @@ options before reading a nonexistent selected file. No native pen-up
 motion plan, color-changing device adapter, or persistent semantic block
 is implied.
 ATR-P2-011 remains open.
+
+## Bounded scientific-notation flow grouping (partial) — 2026-11-14
+
+The native plain-text and Markdown flow compiler now treats a complete
+scientific notation such as `1e-3`, `12E+3`, `1E−4` or `1,2E-3`
+as one *advisory* line-breaking cluster when its authored ink fits a row.
+The exponent is recognized only after a numeric mantissa and only when
+one or more ASCII power digits follow optional `+`, `-` or `−`.
+Incomplete `1e`, `1e+` and doubled-sign text retain their ordinary
+authored-character line breaking. All exact glyph identities and physical
+pen strokes are preserved; no scientific numbers are reformatted.
+
+One new native subprocess regression covers five positive constructions
+and four invalid examples in both source modes. It checks nominal two-row
+placement, matches actual PDF and transparent PNG bytes against separately
+authored positioned ink, and verifies immutable previously valid exports
+on missing exponent glyphs. Oversized clusters continue to fall back to
+measured per-grapheme wrapping rather than refusing valid input.
+
+This remains CLI-only physical layout. The persisted notebook compiler,
+inline mathematics typesetting and semantic block editing remain unfinished.

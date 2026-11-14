@@ -2140,6 +2140,106 @@ test('numeric separators and unary signs preserve native PDF/PNG rows',
         }
     });
 
+test('scientific exponent notation stays on one fitting PDF/PNG row',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-exponents-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '33000', '36000'];
+            const cases = [
+                ['abcde1e-3g', '1e-3g'],
+                ['abcde2e3g', '2e3g'],
+                ['abcde12E+3g', '12E+3g'],
+                ['abcde1E−4g', '1E−4g'],
+                ['abcde1,2E-3g', '1,2E-3g'],
+            ];
+            const stroke = (glyph) => [
+                '--glyph-stroke', glyph, '600', '500', '1800',
+                '3000', '250', '#123456',
+            ];
+            const inspect = (source, flag) => spawnSync(cargo, [
+                'run', '--offline', '--quiet',
+                '-p', 'atrament_profile_editor_cli', '--',
+                'notebook', '--inspect-flow', ...region, flag, source,
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            for (const [source, tail] of cases) {
+                const shaped = [...new Set([...source].filter(
+                    (glyph) => glyph !== 'a'))].flatMap(stroke);
+                const exponent = source.includes('E') ? 'E' : 'e';
+                const missingExponent = [...new Set([...source].filter(
+                    (glyph) => glyph !== 'a' && glyph !== exponent))]
+                    .flatMap(stroke);
+                for (const flag of ['--flow-text', '--flow-markdown']) {
+                    const inspected = inspect(source, flag);
+                    assert.equal(inspected.status, 0, inspected.stderr);
+                    assert.ok(inspected.stdout.includes(
+                        'Page 1 x=32500 um y=42500 um: "abcde"'),
+                    flag + ': mantissa must move off the opening row');
+                    assert.ok(inspected.stdout.includes(
+                        'Page 1 x=32500 um y=51500 um: "' + tail + '"'),
+                    flag + ': complete exponent belongs on next row');
+                }
+                for (const format of ['pdf', 'png']) {
+                    const manualFile = join(dir, 'manual-' + format);
+                    const manual = spawnSync(cargo, [
+                        'run', '--offline', '--quiet',
+                        '-p', 'atrament_profile_editor_cli', '--',
+                        ...base, ...shaped,
+                        '--place-text', '1', '32500', '42500', 'abcde',
+                        '--place-text', '1', '32500', '51500', tail,
+                        '--export-paper', format,
+                        ...(format === 'png' ? ['--dpi', '72'] : []),
+                        '--output', manualFile, '--replace',
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(manual.status, 0, manual.stderr);
+                    const expected = readFileSync(manualFile);
+                    for (const flag of ['--flow-text', '--flow-markdown']) {
+                        const actual = render(dir, source, format,
+                            [...region, ...shaped], flag);
+                        assert.equal(actual.result.status, 0,
+                            actual.result.stderr);
+                        assert.deepEqual(readFileSync(actual.output), expected,
+                            source + ' ' + flag + ' ' + format);
+                        const missing = render(dir, source, format,
+                            [...region, ...missingExponent], flag);
+                        assert.notEqual(missing.result.status, 0);
+                        assert.match(missing.result.stderr,
+                            /missing authored glyph|no authored strokes/i);
+                        assert.ok(missing.result.stderr.includes(
+                            exponent === 'E' ? 'U+0045' : 'U+0065'));
+                        assert.deepEqual(readFileSync(missing.output), expected,
+                            'missing exponent glyph preserves accepted ink');
+                    }
+                }
+            }
+            // Bare e and exponent signs without digits remain ordinary text.
+            for (const [source, expected] of [
+                ['abcde1eg', 'abcde1e'],
+                ['abcde1e+g', 'abcde1e'],
+                ['abcde1E−g', 'abcde1E'],
+                ['abcde1e--4g', 'abcde1'],
+            ]) {
+                for (const flag of ['--flow-text', '--flow-markdown']) {
+                    const result = inspect(source, flag);
+                    assert.equal(result.status, 0, result.stderr);
+                    assert.ok(result.stdout.includes(
+                        'Page 1 x=32500 um y=42500 um: "' + expected + '"'),
+                    'incomplete exponent stays ordinary visible source');
+                }
+            }
+            // A physically overlong exponent is advisory, not a refusal.
+            for (const flag of ['--flow-text', '--flow-markdown']) {
+                const long = inspect('abcde1e123456789g', flag);
+                assert.equal(long.status, 0, long.stderr);
+                assert.match(long.stdout, /Rows: 3/);
+                assert.ok(long.stdout.includes('"1e12345"'));
+                assert.ok(long.stdout.includes('"6789g"'));
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('overlong punctuation chains use longest fitting physical prefixes',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-punctuation-prefix-'));

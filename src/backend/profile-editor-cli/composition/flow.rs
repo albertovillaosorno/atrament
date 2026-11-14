@@ -2319,6 +2319,32 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
                 cursor = cursor.saturating_add(1);
             }
         }
+        // Bind a complete ASCII scientific exponent to its mantissa,
+        // including the optional signed power. An incomplete 1e or
+        // 1e+ remains ordinary authored ink and may wrap as before.
+        // ASCII digits and e/E are deliberate: do not infer Unicode
+        // superscript notation or synthesize unprovided glyphs.
+        if glyphs.get(cursor)
+            .is_some_and(|item| matches!(item.0, "e" | "E")) {
+            let power_start = cursor.saturating_add(1);
+            let digit_start = if glyphs.get(power_start)
+                .is_some_and(|item| matches!(
+                    item.0, "+" | "-" | "\u{2212}"
+                )) {
+                power_start.saturating_add(1)
+            } else {
+                power_start
+            };
+            if glyphs.get(digit_start)
+                .is_some_and(|item| ascii_digit(item.0)) {
+                has_separator = true;
+                cursor = digit_start;
+                while glyphs.get(cursor)
+                    .is_some_and(|item| ascii_digit(item.0)) {
+                    cursor = cursor.saturating_add(1);
+                }
+            }
+        }
         if has_separator {
             if let Some(ties) = joins.get_mut(start..cursor.saturating_sub(1)) {
                 ties.fill(true);

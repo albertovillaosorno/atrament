@@ -8521,6 +8521,61 @@ fn numeric_joining_is_contextual_and_never_ties_sentence_punctuation()
 }
 
 #[test]
+fn scientific_exponent_joining_requires_complete_ascii_power()
+-> Result<(), String> {
+    let measured = |source: &str| -> Vec<super::MeasuredGrapheme<'static>> {
+        source.chars().map(|ch| {
+            let form = match ch {
+                '0'..='9' => "1",
+                'e' => "e",
+                'E' => "E",
+                '+' => "+",
+                '-' => "-",
+                '−' => "−",
+                '.' => ".",
+                ',' => ",",
+                _ => "x",
+            };
+            (form, 4_000, 4_000)
+        }).collect()
+    };
+    for (source, expected) in [
+        ("1e3", &[0, 1][..]),
+        ("1E-3", &[0, 1, 2]),
+        ("12E+3", &[0, 1, 2, 3]),
+        ("1.2e-3", &[0, 1, 2, 3, 4]),
+        ("1,2E−3", &[0, 1, 2, 3, 4]),
+        ("-1e+3", &[0, 1, 2, 3]),
+        ("1e", &[]),
+        ("1E+", &[]),
+        ("1e--3", &[]),
+        ("1e−", &[]),
+        ("1ea", &[]),
+        ("1e3a", &[0, 1]),
+        ("a1e-3", &[1, 2, 3]),
+        ("1E+3.", &[0, 1, 2]),
+        ("1.2E+", &[0, 1]),
+        ("1e2.3", &[0, 1]),
+        ("123e456", &[0, 1, 2, 3, 4, 5]),
+        ("1E+3e2", &[0, 1, 2]),
+    ] {
+        let joins = super::numeric_separator_joins(&measured(source));
+        for (index, joined) in joins.iter().enumerate() {
+            assert_eq!(*joined, expected.contains(&index),
+                "{source} numeric exponent pair {index}");
+        }
+    }
+    // A complete exponent can fill the source byte budget without
+    // recursive suffix scans or a bounded-number truncation.
+    let mut long = vec![("1", 4_000, 4_000); 4_096];
+    long[2_048] = ("E", 4_000, 4_000);
+    long[2_049] = ("−", 4_000, 4_000);
+    assert!(super::numeric_separator_joins(&long)
+        .iter().all(|joined| *joined));
+    Ok(())
+}
+
+#[test]
 fn bounded_numeric_join_scan_handles_full_size_number_once()
 -> Result<(), String> {
     // The 4,096-byte source cap permits a single long numeric word.
