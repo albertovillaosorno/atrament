@@ -1786,6 +1786,61 @@ test('wrapped dashes and ellipsis match direct PDF/PNG ink', () => {
     }
 });
 
+test('single guillemets and compact terminal marks retain exact PDF/PNG ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-terminal-marks-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '32000', '36000'];
+            for (const [source, upper, lower, marker] of [
+                ['abcde‹fg', 'abcde', '‹fg', '‹'],
+                ['abcdef›g', 'abcde', 'f›g', '›'],
+                ['abcdef‽g', 'abcde', 'f‽g', '‽'],
+                ['abcdef⁇g', 'abcde', 'f⁇g', '⁇'],
+                ['abcdef⁈g', 'abcde', 'f⁈g', '⁈'],
+                ['abcdef⁉g', 'abcde', 'f⁉g', '⁉'],
+                ['abcdef‼g', 'abcde', 'f‼g', '‼'],
+            ]) {
+                const strokes = [...'bcdefg', marker].flatMap((glyph) => [
+                    '--glyph-stroke', glyph, '600', '500', '1800',
+                    '3000', '250', '#123456',
+                ]);
+                for (const format of ['pdf', 'png']) {
+                    const manuallyPlaced = join(dir, `manual-${format}`);
+                    const manual = spawnSync(cargo, [
+                        'run', '--offline', '--quiet',
+                        '-p', 'atrament_profile_editor_cli', '--',
+                        ...base, ...strokes,
+                        '--place-text', '1', '32500', '42500', upper,
+                        '--place-text', '1', '32500', '51500', lower,
+                        '--export-paper', format,
+                        ...(format === 'png' ? ['--dpi', '72'] : []),
+                        '--output', manuallyPlaced, '--replace',
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(manual.status, 0, manual.stderr);
+                    const expectedInk = readFileSync(manuallyPlaced);
+                    for (const flag of ['--flow-text', '--flow-markdown']) {
+                        const actual = render(dir, source, format,
+                            [...strokes, ...region], flag);
+                        assert.equal(actual.result.status, 0,
+                            actual.result.stderr);
+                        assert.deepEqual(readFileSync(actual.output),
+                            expectedInk, `${flag} ${format} ${marker}`);
+                        const refused = render(dir, source, format,
+                            [...region], flag);
+                        assert.notEqual(refused.result.status, 0);
+                        assert.match(refused.result.stderr,
+                            /missing authored glyph|no authored strokes/i);
+                        assert.deepEqual(readFileSync(refused.output),
+                            expectedInk, 'missing mark preserves prior export');
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('code fences keep literal Unicode ink and physical hard line breaks',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-fence-'));

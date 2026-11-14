@@ -2213,11 +2213,12 @@ fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
         matches!(grapheme, "\u{a0}" | "\u{202f}" | "\u{2011}")
     }
     nonbreaking(previous) || nonbreaking(next)
-        || matches!(previous, "¿" | "¡" | "«" | "“" | "‘"
+        || matches!(previous, "¿" | "¡" | "«" | "‹" | "“" | "‘"
             | "(" | "[" | "{")
         || matches!(next, "?" | "!" | "." | "," | ";" | ":"
             | "-" | "\u{2010}" | "\u{2013}" | "\u{2014}" | "…"
-            | ")" | "]" | "}" | "»" | "”" | "’")
+            | ")" | "]" | "}" | "»" | "›" | "”" | "’"
+            | "‽" | "⁇" | "⁈" | "⁉" | "‼")
 }
 
 // Flowing prose reserves a preceding compressed glyph's nominal ink contour.

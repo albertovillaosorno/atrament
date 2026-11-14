@@ -308,6 +308,31 @@ NFC/NFD matrix, and real manual-stroke PDF/PNG byte comparisons now include
 the Unicode ellipsis. Missing authored ellipsis ink cannot replace an
 accepted export. This is still not a locale or full Unicode word breaker.
 
+## Single guillemets and compact question/exclamation marks (partial)
+
+Native plain/Markdown long-word wrapping now retains paired single guillemets
+`‹…›`: the opening mark stays with following ink and the closing mark with
+preceding ink when the measured cluster fits a physical row. The same
+preceding-ink rule applies to the exact Unicode interrobang `‽`, double
+question `⁇`, question/exclamation `⁈`, exclamation/question `⁉`, and double
+exclamation `‼` glyphs. These are authored glyphs, not synthesized from
+ASCII punctuation or automatically created punctuation ligatures.
+
+A failing-before/fixed-after Rust physical-row regression covers each mark,
+while the deterministic bilingual pair and trailing-punctuation oracles now
+include them alongside NFC/NFD words. A 5-mm writing region proves that
+unfit two-glyph clusters retain the existing grapheme-by-grapheme fallback.
+
+Real native PDF and transparent PNG exports for all seven new symbols are
+byte-identical to independently placed caller-authored strokes in both
+plain and Markdown flow. A missing selected glyph still refuses without
+replacing accepted output. Physical pen widths, line budgets and exact
+Unicode identities are unchanged.
+
+This is bounded visual punctuation grouping, not full Unicode line-breaking,
+automatic writer calibration, locale-sensitive hyphenation or a persisted
+semantic notebook. P2-013 remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

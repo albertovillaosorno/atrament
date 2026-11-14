@@ -8285,6 +8285,13 @@ fn bilingual_punctuation_stays_with_neighbor_when_long_words_wrap()
         ("abcdef!g", ["abcde", "f!g"]),
         ("abcdef.!", ["abcde", "f.!"]),
         ("abcde«fg", ["abcde", "«fg"]),
+        ("abcde‹fg", ["abcde", "‹fg"]),
+        ("abcdef›g", ["abcde", "f›g"]),
+        ("abcdef‽g", ["abcde", "f‽g"]),
+        ("abcdef⁇g", ["abcde", "f⁇g"]),
+        ("abcdef⁈g", ["abcde", "f⁈g"]),
+        ("abcdef⁉g", ["abcde", "f⁉g"]),
+        ("abcdef‼g", ["abcde", "f‼g"]),
         ("abcde“fg", ["abcde", "“fg"]),
         ("abcde‘fg", ["abcde", "‘fg"]),
         ("abcde(fg", ["abcde", "(fg"]),
@@ -8342,7 +8349,8 @@ fn narrow_paired_rows_retain_exact_unicode_ink_when_pair_cannot_fit()
         left: 30_000, top: 40_000, width: 9_000, height: 50_000,
     };
     for format in [FlowFormat::Plain, FlowFormat::Markdown] {
-        for text in ["«a»", "“a”", "‘a’", "(a)", "[a]", "{a}",
+        for text in ["«a»", "‹a›", "a‽b", "a⁇b",
+            "a⁈b", "a⁉b", "a‼b", "“a”", "‘a’", "(a)", "[a]", "{a}",
             "a\u{a0}b", "a\u{202f}b", "a\u{2011}b",
             "a-b", "a\u{2010}b", "a\u{2013}b", "a\u{2014}b",
             "a…b"] {
@@ -8430,7 +8438,8 @@ fn seeded_trailing_punctuation_does_not_start_overflow_rows()
         let suffix = 3usize + usize::try_from(seed % 19)
             .map_err(|error| error.to_string())?;
         let trailing = ["-", "\u{2010}", "\u{2013}",
-            "\u{2014}", "…"][case % 5];
+            "\u{2014}", "…", "›", "‽", "⁇", "⁈", "⁉", "‼"]
+            [case % 11];
         let text = format!("{}n\u{303}{}{}ñ", "a".repeat(prefix),
             trailing, "b".repeat(suffix));
         let region = super::FlowRegion {
@@ -8483,7 +8492,8 @@ fn seeded_bilingual_long_words_keep_punctuation_inside_physical_rows()
             .map_err(|error| error.to_string())?;
         let pairs = [
             ("¿", "?"), ("¡", "!"), ("«", "»"), ("“", "”"),
-            ("‘", "’"), ("(", ")"), ("[", "]"), ("{", "}"),
+            ("‘", "’"), ("‹", "›"), ("(", ")"), ("[", "]"),
+            ("{", "}"),
         ];
         let (opening, closing) = pairs[sample % pairs.len()];
         let text = format!(
