@@ -4923,3 +4923,25 @@ imported-library TSV counts with prerequisite refusal before file access.
 This is a read-only physical diagnostic requiring complete geometry
 validation, not a prediction of stroke area or optical density. It adds no
 saved notebook semantics or graphical notebook editing.
+
+## Read-only physical pen-down length (partial) — 2026-11-13
+
+`--inspect-flow-ink-length` adds total actual straight-segment centerline
+length in micrometres to the validated flow dry run, globally and per
+physical sheet. The same expanded native glyph, explicit fallback, and
+Markdown ornament strokes as PDF/PNG are counted after full printable-ink
+admission; blank sheets report `empty`. Each segment's Euclidean distance
+is rounded to the nearest micrometre with checked integer-square-root
+geometry, summed without floating-point accumulation or synthetic pen moves.
+
+Native tests compare real physical ink TSV coordinates to independent
+floating-point geometry across two adorned sheets, exercise a blank first
+sheet and 4,096 sampled directional distance pairs, including large
+Pythagorean coordinates. The real CLI process regression independently
+reconstructs every page length from imported Unicode/fallback library ink,
+confirms prior report bytes are intact, validates actual PDF/PNG and checks
+source-independent refusal before reading missing files.
+
+This is a diagnostic for actual pen-down centerline demand only: it does not
+predict ink volume, printed darkness, elapsed plotting time, pen-up travel or
+saved semantic notebook content. ATR-P2-011 remains open.

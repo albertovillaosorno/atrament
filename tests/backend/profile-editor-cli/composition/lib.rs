@@ -21179,6 +21179,8 @@ fn notebook_ink_validation_flags_refuse_before_selected_file_io() {
     for (extra, expected) in [
         (vec!["--inspect-flow-ink-widths"],
             "--inspect-flow-ink-widths requires"),
+        (vec!["--inspect-flow-ink-length"],
+            "--inspect-flow-ink-length requires"),
         (vec!["--inspect-flow-ink-palette"],
             "--inspect-flow-ink-palette requires"),
         (vec!["--inspect-flow-ink-bounds"],
@@ -21200,6 +21202,10 @@ fn notebook_ink_validation_flags_refuse_before_selected_file_io() {
             "--inspect-flow-ink-validation", "--inspect-flow-ink-widths",
             "--inspect-flow-ink-widths"],
             "--inspect-flow-ink-widths may appear only once"),
+        (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
+            "--inspect-flow-ink-validation", "--inspect-flow-ink-length",
+            "--inspect-flow-ink-length"],
+            "--inspect-flow-ink-length may appear only once"),
         (vec!["--inspect-flow", "--inspect-flow-shape-coverage",
             "--inspect-flow-ink-validation", "--inspect-flow-ink-palette",
             "--inspect-flow-ink-palette"],
@@ -21308,5 +21314,123 @@ fn notebook_ink_validation_page_totals_match_seeded_physical_strokes()
         "Page 1 validated ink: 0 physical segments\n",
         "Page 2 validated ink: 1 physical segment\n",
     )), "{report}");
+    Ok(())
+}
+
+#[test]
+fn rounded_physical_ink_length_is_deterministic_and_direction_free() {
+    let line = |start_um, end_um| NotebookInkLine {
+        page: 1,
+        start_um,
+        end_um,
+        width_um: 250,
+        rgb: [0, 0, 0],
+    };
+    assert_eq!(rounded_ink_segment_length_um(
+        &line((100, 100), (103, 104))).expect("valid line"), 5);
+    assert_eq!(rounded_ink_segment_length_um(
+        &line((0, 0), (1, 1))).expect("valid line"), 1);
+    assert_eq!(rounded_ink_segment_length_um(
+        &line((0, 0), (2, 2))).expect("valid line"), 3);
+    assert_eq!(rounded_ink_segment_length_um(
+        &line((0, 0), (4, 4))).expect("valid line"), 6);
+    assert_eq!(rounded_ink_segment_length_um(
+        &line((0, 0), (3_000_000_000, 4_000_000_000))).expect("valid line"),
+        5_000_000_000);
+    let mut seed = 0xC0FFEEu64;
+    for _ in 0..4096 {
+        seed = seed.wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let dx = ((seed >> 17) % 50_000) as u32;
+        seed = seed.wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let dy = ((seed >> 17) % 50_000) as u32;
+        if dx == 0 && dy == 0 { continue; }
+        let expected = f64::from(dx).hypot(f64::from(dy)).round() as u128;
+        assert_eq!(rounded_ink_segment_length_um(
+            &line((100_000, 100_000),
+                (100_000 + dx, 100_000 + dy))).expect("valid line"),
+            expected, "distance mismatch for {dx}, {dy}");
+        assert_eq!(rounded_ink_segment_length_um(
+            &line((100_000 + dx, 100_000 + dy),
+                (100_000, 100_000))).expect("valid line"),
+            expected, "reversed distance mismatch for {dx}, {dy}");
+    }
+}
+
+#[test]
+fn notebook_ink_length_matches_native_tsv_and_blank_physical_pages()
+-> Result<(), String> {
+    let shared = args(&[
+        "--flow-markdown", "# a\n- ó\n> a", "--heading-style", "marker",
+        "--heading-marker-scale", "95",
+        "--flow-region", "30000", "40000", "32000", "25000",
+        "--glyph-stroke", "a", "500", "600", "1500", "2500",
+        "251", "#123456", "--glyph-stroke", "a", "600", "700",
+        "1600", "3200", "501", "#123456",
+        "--fallback-glyph", "ó", "a",
+    ]);
+    let mut inspect = shared.clone();
+    inspect.extend(args(&[
+        "--inspect-flow", "--inspect-flow-shape-coverage",
+        "--inspect-flow-ink-validation", "--inspect-flow-ink-bounds",
+        "--inspect-flow-ink-palette", "--inspect-flow-ink-widths",
+    ]));
+    let baseline = String::from_utf8(execute_notebook(&inspect)?
+        .ok_or("missing prior ink inspection")?)
+        .map_err(|error| error.to_string())?;
+    inspect.push("--inspect-flow-ink-length".into());
+    let report = String::from_utf8(execute_notebook(&inspect)?
+        .ok_or("missing physical length inspection")?)
+        .map_err(|error| error.to_string())?;
+    let mut emission = shared;
+    emission.push("--emit-ink-file".into());
+    let tsv = String::from_utf8(execute_notebook(&emission)?
+        .ok_or("missing native ink TSV")?)
+        .map_err(|error| error.to_string())?;
+    let mut per_page = [0u128; 2];
+    for row in tsv.lines().skip(1) {
+        let cells: Vec<_> = row.split('\t').collect();
+        let [page, x1, y1, x2, y2, _, _] = cells.as_slice() else {
+            return Err(format!("bad native TSV row: {row:?}"));
+        };
+        let page = page.parse::<usize>()
+            .map_err(|error| error.to_string())?;
+        let coords = [x1, y1, x2, y2].map(|value| value
+            .parse::<u32>().map_err(|error| error.to_string()))
+            .into_iter().collect::<Result<Vec<_>, _>>()?;
+        let dx = coords[0].abs_diff(coords[2]);
+        let dy = coords[1].abs_diff(coords[3]);
+        let length = f64::from(dx).hypot(f64::from(dy)).round() as u128;
+        let Some(total) = per_page.get_mut(page - 1) else {
+            return Err(format!("unexpected ink page: {page}"));
+        };
+        *total += length;
+    }
+    assert!(per_page.iter().all(|length| *length > 0), "{tsv}");
+    let expected = format!(
+        "Validated ink pen-down length: {} um\n\
+         Page 1 validated ink pen-down length: {} um\n\
+         Page 2 validated ink pen-down length: {} um\n",
+        per_page.iter().sum::<u128>(), per_page[0], per_page[1],
+    );
+    assert_eq!(report.strip_prefix(&baseline), Some(expected.as_str()),
+        "{report}");
+
+    let blank = args(&[
+        "--flow-text", "\n\na", "--flow-region", "30000", "40000",
+        "32000", "25000", "--inspect-flow",
+        "--inspect-flow-shape-coverage", "--inspect-flow-ink-validation",
+        "--inspect-flow-ink-length", "--glyph-stroke", "a",
+        "500", "600", "1500", "2500", "251", "#123456",
+    ]);
+    let blank_report = String::from_utf8(execute_notebook(&blank)?
+        .ok_or("missing blank-sheet length")?)
+        .map_err(|error| error.to_string())?;
+    assert!(blank_report.ends_with(concat!(
+        "Validated ink pen-down length: 2147 um\n",
+        "Page 1 validated ink pen-down length: empty\n",
+        "Page 2 validated ink pen-down length: 2147 um\n",
+    )), "{blank_report}");
     Ok(())
 }

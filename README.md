@@ -644,6 +644,27 @@ These are physical straight-segment widths, not line-height measurements or
 an estimate of stroke area, ink consumption or optical contrast. They do not
 include printed paper decorations. The report is opt-in and read-only.
 
+For a geometric **pen-down path-length inventory**, select
+`--inspect-flow-ink-length` after the same required validation flags. The
+Rust inspector sums the straight centerline distance of each actual segment,
+rounded independently to the nearest micrometre using integer arithmetic.
+The report gives the global sum and each physical page's sum, including
+`empty` for sheets without ink. An explicit fallback shape and heading
+ornaments contribute their actual drawn lengths.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --flow-markdown-file notes.md --glyph-file writer.tsv \
+  --inspect-flow --inspect-flow-shape-coverage \
+  --inspect-flow-ink-validation --inspect-flow-ink-length
+```
+
+This is **pen-down centerline length**, not pen-up transit, printing time,
+coverage area, ink volume or a collision-free motion plan. Intersecting ink
+segments each contribute their full length. Paper and printed annotations
+are excluded. The in-memory report does not alter the saved glyph library,
+create an export or change the output of previously available inspections.
+
 This is an in-memory dry run of the current unjoined, non-varied flow ink,
 not a PNG pixel-budget test, a calibrated handwriting inspection or a proof
 of visual quality. Explicit placed ink, joins and seeded variation remain

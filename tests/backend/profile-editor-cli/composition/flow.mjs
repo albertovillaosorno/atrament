@@ -8813,6 +8813,37 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             )).join('');
             assert.equal(widths.stdout.slice(verified.stdout.length),
                 expectedWidths);
+            const lengths = run([
+                '--inspect-flow', '--inspect-flow-inventory',
+                '--inspect-flow-page-inventory',
+                '--inspect-flow-shape-coverage',
+                '--inspect-flow-stroke-demand',
+                '--inspect-flow-ink-validation',
+                '--inspect-flow-ink-length',
+                '--flow-text', source, ...region, ...shape,
+            ]);
+            assert.equal(lengths.status, 0, lengths.stderr);
+            assert.ok(lengths.stdout.startsWith(verified.stdout),
+                'physical lengths are opt-in without report drift');
+            const pageLengths = new Map();
+            for (const line of rows) {
+                const [page, x1, y1, x2, y2] = line.split('\t')
+                    .slice(0, 5).map(Number);
+                const distance = Math.round(Math.hypot(x2 - x1, y2 - y1));
+                pageLengths.set(page,
+                    (pageLengths.get(page) ?? 0) + distance);
+            }
+            const expectedLengths = [
+                `Validated ink pen-down length: ${[...pageLengths.values()]
+                    .reduce((sum, value) => sum + value, 0)} um`,
+                ...[1, 2].map((page) =>
+                    `Page ${page} validated ink pen-down length: `
+                    + `${pageLengths.get(page) ?? 'empty'}`
+                    + `${pageLengths.has(page) ? ' um' : ''}`),
+                '',
+            ].join('\n');
+            assert.equal(lengths.stdout.slice(verified.stdout.length),
+                expectedLengths);
             for (const format of ['pdf', 'png']) {
                 const output = join(dir, `page.${format}`);
                 const exported = run([
@@ -8884,6 +8915,16 @@ test('stroke demand CLI counts borrowed library ink on both native sheets',
             assert.match(invalidInkWidths.stderr,
                 /--inspect-flow-ink-widths requires/);
             assert.doesNotMatch(invalidInkWidths.stderr,
+                /FileIo\(NotFound\)/);
+            const invalidInkLength = run([
+                '--flow-text-file', join(dir, 'nonexistent.md'),
+                '--inspect-flow', '--inspect-flow-shape-coverage',
+                '--inspect-flow-ink-length',
+            ]);
+            assert.notEqual(invalidInkLength.status, 0);
+            assert.match(invalidInkLength.stderr,
+                /--inspect-flow-ink-length requires/);
+            assert.doesNotMatch(invalidInkLength.stderr,
                 /FileIo\(NotFound\)/);
         } finally {
             rmSync(dir, { recursive: true, force: true });
