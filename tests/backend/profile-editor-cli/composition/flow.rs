@@ -8701,6 +8701,104 @@ fn bounded_numeric_join_scan_handles_full_size_number_once()
 }
 
 #[test]
+fn bounded_punctuation_prefix_matches_independent_complete_run_oracle()
+-> Result<(), String> {
+    // The reference intentionally scans the *complete* tied run and then
+    // remeasures each candidate prefix. The production path must not need
+    // either unbounded suffix scan to decide the next physical row.
+    fn reference(
+        glyphs: &[super::MeasuredGrapheme<'_>], joins: &[bool],
+        from: usize, cap: u32,
+    ) -> (usize, usize, usize, u32) {
+        let mut end = from + 1;
+        while end < glyphs.len()
+            && (super::punctuation_pair_stays_together(
+                glyphs[end - 1].0, glyphs[end].0,
+            ) || joins.get(end - 1).copied().unwrap_or(false)) {
+            end += 1;
+        }
+        let mut best = (from + 1, 1, glyphs[from].0.len(), glyphs[from].2);
+        for prefix_end in from + 1..=end {
+            let (mut width, mut extent, mut bytes) = (0u32, 0u32, 0usize);
+            for &(text, advance, slot) in &glyphs[from..prefix_end] {
+                extent = extent.max(width + slot);
+                width += advance;
+                bytes += text.len();
+            }
+            let count = prefix_end - from;
+            if extent > cap || count > super::MAX_LINE_GRAPHEMES
+                || bytes > 384 {
+                break;
+            }
+            best = (prefix_end, count, bytes, extent);
+        }
+        best
+    }
+
+    const FORMS: [&str; 18] = [
+        "a", "1", "2", "3", ".", ",", ":", "/", "⁄", "-", "−",
+        "–", "e", "+", "(", "°", "€", "\u{a0}",
+    ];
+    let mut seed = 0xd65c_2d4d_1681_7787u64;
+    for fixture in 0..6_000usize {
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        let len = (next() % 36 + 1) as usize;
+        let glyphs = (0..len).map(|_| {
+            let text = FORMS[next() as usize % FORMS.len()];
+            let advance = (next() % 17) as u32;
+            let slot = advance.max((next() % 21 + 1) as u32);
+            (text, advance, slot)
+        }).collect::<Vec<_>>();
+        let joins = super::numeric_separator_joins(&glyphs);
+        let cap = (next() % 60) as u32;
+        let from = (next() as usize) % len;
+        let actual = super::next_punctuation_cluster(
+            &glyphs, &joins, from, cap,
+        )?;
+        let expected = reference(&glyphs, &joins, from, cap);
+        assert_eq!(
+            (actual.end, actual.count, actual.bytes, actual.extent_um),
+            expected, "fixture {fixture} from {from} cap {cap}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn long_punctuation_run_exhausts_exact_prefixes_on_narrow_rows()
+-> Result<(), String> {
+    // This is at the actual 4-KiB source ceiling. One-glyph physical rows
+    // still advance without rescanning the entire remaining 4,096-glyph run.
+    for cap in [4_000, 12_000] {
+        let glyphs = (0..4_096).map(|index| {
+            (if index % 2 == 0 { "1" } else { "." }, 4_000, 4_000)
+        }).collect::<Vec<_>>();
+        let joins = super::numeric_separator_joins(&glyphs);
+        let mut from = 0;
+        let mut total = 0;
+        while from < glyphs.len() {
+            let cluster = super::next_punctuation_cluster(
+                &glyphs, &joins, from, cap,
+            )?;
+            assert!(cluster.end > from);
+            assert_eq!(cluster.bytes, cluster.count);
+            assert_eq!(cluster.extent_um, cluster.count as u32 * 4_000);
+            assert_eq!(cluster.count, ((cap / 4_000) as usize)
+                .min(glyphs.len() - from));
+            total += cluster.count;
+            from = cluster.end;
+        }
+        assert_eq!(total, glyphs.len());
+    }
+    Ok(())
+}
+
+#[test]
 fn narrow_paired_rows_retain_exact_unicode_ink_when_pair_cannot_fit()
     -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;

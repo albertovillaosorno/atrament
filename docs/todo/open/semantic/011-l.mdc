@@ -5107,3 +5107,23 @@ valid file bytes unchanged.
 
 This is an export-only CLI pagination improvement, not a parsed numerical
 expression, localized date formatter or saved semantic notebook layout.
+
+## Linear bounded punctuation-prefix selection (partial) — 2026-11-14
+
+The native plain-text and Markdown compositor now stops selecting a
+punctuation-connected or numeric run at the first prefix that cannot fit the
+current physical row. It no longer walks the full remainder of a long joined
+word before measuring each row. Existing grapheme, 384-byte, 96-grapheme and
+physical contour limits still govern the longest fitting prefix; if even the
+first grapheme cannot fit, the existing typed row refusal is preserved.
+
+A 6,000-case deterministic reference oracle independently scans complete
+punctuation runs and remeasures candidate prefixes to compare selected end,
+count, exact UTF-8 bytes and micrometre extent. A second test consumes a
+4,096-character numeric/punctuation chain on one- and three-glyph rows without
+losing or duplicating text. Existing real PDF/PNG manual-ink regressions still
+verify authored Unicode, punctuation and numeric row placement.
+
+This changes only the bounded CLI flow measurement algorithm, not the saved
+semantic notebook model, typography choices or unfinished two-page export
+journey required to close ATR-P2-011.

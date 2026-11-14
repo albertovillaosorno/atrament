@@ -2199,20 +2199,7 @@ fn next_punctuation_cluster(
 ) -> Result<PunctuationCluster, String> {
     let &(first, _, first_extent) = glyphs.get(from)
         .ok_or("flow punctuation start outside word")?;
-    let mut end = from.checked_add(1)
-        .ok_or("flow punctuation offset overflow")?;
     let mut previous = first;
-    while let Some(&(next, _, _)) = glyphs.get(end) {
-        if !punctuation_pair_stays_together(previous, next)
-            && !numeric_joins.get(end - 1).copied().unwrap_or(false) {
-            break;
-        }
-        previous = next;
-        end = end.checked_add(1)
-            .ok_or("flow punctuation offset overflow")?;
-    }
-    let selected = glyphs.get(from..end)
-        .ok_or("flow punctuation cluster boundary refused")?;
     let (mut advance_um, mut extent_um, mut bytes) =
         (0u32, 0u32, 0usize);
     let mut fitting = PunctuationCluster {
@@ -2220,10 +2207,20 @@ fn next_punctuation_cluster(
             .ok_or("flow punctuation fallback offset overflow")?,
         extent_um: first_extent,
     };
-    // Keep the longest physically fitting prefix. Falling all the way
-    // back to one glyph can orphan attached punctuation even when a
-    // shorter two- or three-glyph prefix fits the next row.
-    for (index, &(grapheme, advance, slot)) in selected.iter().enumerate() {
+    // Only the longest *fitting* tied prefix matters. Do not first walk
+    // the entire punctuation run: a long authored number on tiny rows
+    // would otherwise rescan nearly its whole suffix for every row.
+    // Nonnegative physical advances and increasing byte/count totals make
+    // the first non-fitting prefix terminal for this row.
+    for (index, &(grapheme, advance, slot)) in glyphs
+        .get(from..).ok_or("flow punctuation cluster boundary refused")?
+        .iter().enumerate() {
+        if index > 0 && !punctuation_pair_stays_together(
+            previous, grapheme,
+        ) && !numeric_joins.get(from + index - 1)
+            .copied().unwrap_or(false) {
+            break;
+        }
         let next_extent = extent_um.max(advance_um.checked_add(slot)
             .ok_or("flow punctuation contour overflow")?);
         let next_bytes = bytes.checked_add(grapheme.len())
@@ -2243,6 +2240,7 @@ fn next_punctuation_cluster(
                 .ok_or("flow punctuation prefix overflow")?,
             extent_um,
         };
+        previous = grapheme;
     }
     Ok(fitting)
 }
