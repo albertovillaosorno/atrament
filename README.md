@@ -70,7 +70,7 @@ headings belong to the first real notebook-to-PDF journey.
 For the staged, unfinished work see [TODO.md](TODO.md) and the
 [Rust-first local roadmap](docs/technical/rust-cli-localhost-priority.md).
 
-## Current implementation and release status (November 3, 2026)
+## Current implementation and release status (November 15, 2026)
 
 Atrament already has a Rust localhost server and browser workspace,
 authenticated draft transport, physical-page and handwriting domain contracts,
@@ -1590,6 +1590,14 @@ A U+2026 single-glyph ellipsis also stays with the preceding ink when an
 overlong word wraps. This is distinct from three separate ASCII dots;
 it still requires its own explicitly authored glyph, and never creates
 additional marks, synthetic dots or implied trailing content.
+
+Measured numeric compounds keep complete decimal, time, fraction, date,
+range, comparison and scientific-notation groups together when their exact
+authored ink fits. This includes signed, caret and superscript powers of ten
+and parenthesized uncertainties; explicit `+`, `−`, `×`, `÷`, `·`, `⋅`, `∗`
+and `*` stay with a complete following numeric operand. This is physical line
+breaking, not equation parsing or synthesized glyphs. When a compound cannot
+fit, the compiler falls back to measured graphemes without dropping ink.
 
 
 The Markdown subset supports single-line `#` through `######` headings;
