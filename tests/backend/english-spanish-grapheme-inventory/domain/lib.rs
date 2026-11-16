@@ -1,5 +1,5 @@
 // Copyright:
-//   - Copyright \u{a9} 2026 Alberto Villa Osorno.
+//   - Copyright © 2026 Alberto Villa Osorno.
 // SPDX-License-Identifier:
 //   - MIT
 // Confidential:
