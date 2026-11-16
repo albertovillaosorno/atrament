@@ -44,37 +44,30 @@ use atrament_physical_page_profile::{
 use atrament_semantic_notebook::{
     Asset, Block, BlockContent, Constraint, ConstraintKind, ExtensionData,
     Figure, Flow, Formula, FormulaMode, IdentityAllocator, InlineSpan, List,
-    ListItem, Notebook,
-    OutputProfile, Page, PaperProfile, Provenance, ProvenanceKind,
-    SemanticBlockKind, SemanticIdentityDescriptor, SemanticIdentityKind,
-    SemanticIdentityPathEntry, Style,
-    Table, TableCell, TableCellSpan, TableGridError,
-    TableLogicalCellPlacement, TableRow, TableRowRole,
-    UnresolvedBlock, UnresolvedReason, semantic_block, semantic_block_page,
-    semantic_block_identity_is_ambiguous, semantic_duplicate_owner_among,
-    semantic_identity_descriptor, semantic_identity_kind,
-    semantic_identity_path,
+    ListItem, Notebook, OutputProfile, Page, PaperProfile, Provenance,
+    ProvenanceKind, SemanticBlockKind, SemanticIdentityDescriptor,
+    SemanticIdentityKind, SemanticIdentityPathEntry, Style, Table, TableCell,
+    TableCellSpan, TableGridError, TableLogicalCellPlacement, TableRow,
+    TableRowRole, UnresolvedBlock, UnresolvedReason, semantic_block,
+    semantic_block_identity_is_ambiguous, semantic_block_page,
+    semantic_duplicate_owner_among, semantic_identity_descriptor,
+    semantic_identity_kind, semantic_identity_path,
 };
 
-fn grid_cell(
-    id: u32,
-    columns: u32,
-    rows: u32,
-) -> TableCell<u32> {
-    let Some(columns) = NonZeroU32::new(columns) else {
-        panic!("fixture column span must be nonzero");
-    };
-    let Some(rows) = NonZeroU32::new(rows) else {
-        panic!("fixture row span must be nonzero");
-    };
+fn grid_cell(id: u32, columns: u32, rows: u32) -> TableCell<u32> {
+    assert_ne!(columns, 0, "fixture column span must be nonzero");
+    assert_ne!(rows, 0, "fixture row span must be nonzero");
     TableCell {
         blocks: vec![],
         id,
-        span: TableCellSpan { columns, rows },
+        span: TableCellSpan {
+            columns: NonZeroU32::new(columns).unwrap_or(NonZeroU32::MIN),
+            rows: NonZeroU32::new(rows).unwrap_or(NonZeroU32::MIN),
+        },
     }
 }
 
-fn grid_row(id: u32, cells: Vec<TableCell<u32>>) -> TableRow<u32> {
+const fn grid_row(id: u32, cells: Vec<TableCell<u32>>) -> TableRow<u32> {
     TableRow {
         cells,
         id,
@@ -82,78 +75,108 @@ fn grid_row(id: u32, cells: Vec<TableCell<u32>>) -> TableRow<u32> {
     }
 }
 
+// Separate positional oracle for table-grid geometry. All bounds are
+// checked against fixture-owned rows and a typed grid error is returned;
+// malformed spans must not panic before the domain is compared.
 fn grid_oracle_placements(
     table: &Table<u32>,
 ) -> Result<Vec<TableLogicalCellPlacement<u32>>, TableGridError<u32>> {
     let Some(first) = table.rows.first() else {
         return Ok(vec![]);
     };
-    let width: usize = first
-        .cells
-        .iter()
-        .map(|cell| {
-            usize::try_from(cell.span.columns.get()).expect("small width")
-        })
-        .sum();
+    let width = first.cells.iter().try_fold(0usize, |total, cell| {
+        let columns =
+            usize::try_from(cell.span.columns.get()).map_err(|_overflow| {
+                TableGridError::ColumnSpan { cell: cell.id }
+            })?;
+        total
+            .checked_add(columns)
+            .ok_or(TableGridError::ColumnSpan { cell: cell.id })
+    })?;
     let mut occupied = vec![vec![false; width]; table.rows.len()];
     let mut placements = Vec::new();
     for (row_index, row) in table.rows.iter().enumerate() {
         let mut cursor = 0usize;
         for cell in &row.cells {
-            while cursor < width && occupied[row_index][cursor] {
+            while cursor < width
+                && occupied
+                    .get(row_index)
+                    .and_then(|cells| cells.get(cursor))
+                    .copied()
+                    .unwrap_or(false)
+            {
                 cursor = cursor.saturating_add(1);
             }
-            let columns = usize::try_from(cell.span.columns.get())
-                .expect("small columns");
+            let columns = usize::try_from(cell.span.columns.get()).map_err(
+                |_overflow| TableGridError::ColumnSpan { cell: cell.id },
+            )?;
             let rows =
-                usize::try_from(cell.span.rows.get()).expect("small rows");
+                usize::try_from(cell.span.rows.get()).map_err(|_overflow| {
+                    TableGridError::RowSpan { cell: cell.id }
+                })?;
             let Some(end_column) = cursor.checked_add(columns) else {
                 return Err(TableGridError::ColumnSpan { cell: cell.id });
             };
+            let current_row_slots = occupied
+                .get(row_index)
+                .and_then(|cells| cells.get(cursor..end_column));
             if end_column > width
-                || occupied[row_index][cursor..end_column]
-                    .iter()
-                    .any(|slot| *slot)
+                || current_row_slots
+                    .is_none_or(|slots| slots.iter().any(|slot| *slot))
             {
                 return Err(TableGridError::ColumnSpan { cell: cell.id });
             }
             let Some(end_row) = row_index.checked_add(rows) else {
                 return Err(TableGridError::RowSpan { cell: cell.id });
             };
-            if end_row > table.rows.len() {
+            let Some(row_range) = occupied.get(row_index..end_row) else {
                 return Err(TableGridError::RowSpan { cell: cell.id });
-            }
-            if occupied[row_index..end_row].iter().any(|occupied_row| {
-                occupied_row[cursor..end_column]
-                    .iter()
-                    .any(|slot| *slot)
+            };
+            if row_range.iter().any(|row_slots| {
+                row_slots
+                    .get(cursor..end_column)
+                    .is_none_or(|slots| slots.iter().any(|slot| *slot))
             }) {
                 return Err(TableGridError::ColumnSpan { cell: cell.id });
             }
             placements.push(TableLogicalCellPlacement {
                 cell: cell.id,
-                column_start: u64::try_from(cursor).expect("small column"),
+                column_start: u64::try_from(cursor).map_err(|_overflow| {
+                    TableGridError::ColumnSpan { cell: cell.id }
+                })?,
                 row: row.id,
-                row_start: u64::try_from(row_index).expect("small row"),
+                row_start: u64::try_from(row_index).map_err(|_overflow| {
+                    TableGridError::RowSpan { cell: cell.id }
+                })?,
                 span: cell.span,
             });
-            for occupied_row in &mut occupied[row_index..end_row] {
-                for slot in &mut occupied_row[cursor..end_column] {
+            let Some(rows_to_mark) = occupied.get_mut(row_index..end_row)
+            else {
+                return Err(TableGridError::RowSpan { cell: cell.id });
+            };
+            for occupied_row in rows_to_mark {
+                let Some(cells_to_mark) =
+                    occupied_row.get_mut(cursor..end_column)
+                else {
+                    return Err(TableGridError::ColumnSpan { cell: cell.id });
+                };
+                for slot in cells_to_mark {
                     *slot = true;
                 }
             }
             cursor = end_column;
         }
-        if occupied[row_index].iter().any(|slot| !*slot) {
+        if occupied
+            .get(row_index)
+            .is_none_or(|cells| cells.iter().any(|slot| !*slot))
+        {
             return Err(TableGridError::RowWidth { row: row.id });
         }
     }
     Ok(placements)
 }
 
-fn grid_oracle_result(
-    table: &Table<u32>,
-) -> Result<(), TableGridError<u32>> {
+fn grid_oracle_result(table: &Table<u32>) -> Result<(), TableGridError<u32>> {
     grid_oracle_placements(table).map(|_placements| ())
 }
 
@@ -162,7 +185,10 @@ fn grid_oracle_column_count(
 ) -> Result<u64, TableGridError<u32>> {
     drop(grid_oracle_placements(table)?);
     let count = table.rows.first().map_or(0, |row| {
-        row.cells.iter().map(|cell| u64::from(cell.span.columns.get())).sum()
+        row.cells
+            .iter()
+            .map(|cell| u64::from(cell.span.columns.get()))
+            .sum()
     });
     Ok(count)
 }
@@ -251,7 +277,6 @@ fn physical_page_profile() -> PhysicalPageProfile {
     }
 }
 
-
 fn allocate_path_identity(next: &mut u32, targets: &mut Vec<u32>) -> u32 {
     let identity = *next;
     *next = next.checked_add(1).expect("small generated identity space");
@@ -268,7 +293,6 @@ fn path_rule_block(next: &mut u32, targets: &mut Vec<u32>) -> Block<u32> {
         style: None,
     }
 }
-
 
 #[derive(Clone, Copy, Debug, Default)]
 struct GeneratedPathShape {
@@ -317,9 +341,8 @@ fn generated_path_notebook(
                 let before = path_rule_block(&mut next, &mut targets);
                 let after = path_rule_block(&mut next, &mut targets);
                 let position = next_grid_seed(seed) % 3;
-                shape.callout_freeform_positions
-                    [usize::try_from(position).expect("small child position")] =
-                    true;
+                shape.callout_freeform_positions[usize::try_from(position)
+                    .expect("small child position")] = true;
                 let children = match position {
                     0 => vec![block, before, after],
                     1 => vec![before, block, after],
@@ -599,8 +622,7 @@ fn cloned_semantic_state_preserves_stable_identity() {
 
 #[test]
 fn simple_inline_block_kinds_keep_span_ownership() {
-    type InlineBlockConstructor =
-        fn(Vec<InlineSpan<u32>>) -> BlockContent<u32>;
+    type InlineBlockConstructor = fn(Vec<InlineSpan<u32>>) -> BlockContent<u32>;
     let cases: &[(SemanticBlockKind, InlineBlockConstructor)] = &[
         (SemanticBlockKind::Citation, BlockContent::Citation),
         (SemanticBlockKind::Date, BlockContent::Date),
@@ -662,10 +684,9 @@ fn simple_inline_block_kinds_keep_span_ownership() {
                 owner: Some(5),
             }),
         );
-        assert_eq!(
-            semantic_block(&notebook, 5).map(|block| block.id),
-            Some(5),
-        );
+        let looked_up_block =
+            semantic_block(&notebook, 5).map(|block| block.id);
+        assert_eq!(looked_up_block, Some(5));
         assert_eq!(semantic_block(&notebook, 6), None);
         assert_eq!(semantic_block_page(&notebook, 5), Some(3));
         assert_eq!(semantic_block_page(&notebook, 6), None);
@@ -908,8 +929,7 @@ fn semantic_identity_path_matches_descriptor_walk_on_generated_trees() {
         {
             *seen |= present;
         }
-        for (seen, present) in
-            seen_list_slots.iter_mut().zip(shape.list_slots)
+        for (seen, present) in seen_list_slots.iter_mut().zip(shape.list_slots)
         {
             *seen |= present;
         }
@@ -969,11 +989,7 @@ fn semantic_identity_path_matches_descriptor_walk_on_generated_trees() {
     }
     assert!(seen_depths.into_iter().all(|seen| seen));
     assert!(seen_kinds.into_iter().all(|seen| seen));
-    assert!(
-        seen_callout_freeform_positions
-            .into_iter()
-            .all(|seen| seen)
-    );
+    assert!(seen_callout_freeform_positions.into_iter().all(|seen| seen));
     assert!(seen_list_slots.into_iter().all(|seen| seen));
     assert!(seen_list_ordered_states.into_iter().all(|seen| seen));
     assert!(seen_table_slots.into_iter().all(|seen| seen));
@@ -1071,9 +1087,9 @@ fn compact_table_grids_exhaustively_match_naive_occupancy_oracle() {
     let shapes = compact_grid_row_shapes();
     let mut cases = 0usize;
     for row_count in 0..=3usize {
-        let combinations = shapes.len().pow(
-            u32::try_from(row_count).expect("small exhaustive row count"),
-        );
+        let combinations = shapes
+            .len()
+            .pow(u32::try_from(row_count).expect("small exhaustive row count"));
         for mut combination in 0..combinations {
             let mut next_identity = 1u32;
             let mut rows = Vec::with_capacity(row_count);
@@ -1088,10 +1104,7 @@ fn compact_table_grids_exhaustively_match_naive_occupancy_oracle() {
                 rows.push(grid_row(next_identity, cells));
                 next_identity = next_identity.saturating_add(1);
             }
-            let table = Table {
-                id: next_identity,
-                rows,
-            };
+            let table = Table { id: next_identity, rows };
             assert_eq!(
                 table.validate_grid(),
                 grid_oracle_result(&table),
@@ -1611,9 +1624,13 @@ fn ambiguity_fixture_block_mut(
     page: usize,
     block: usize,
 ) -> Option<&mut Block<u32>> {
-    notebook.pages.get_mut(page)?
-        .flows.first_mut()?
-        .blocks.get_mut(block)
+    notebook
+        .pages
+        .get_mut(page)?
+        .flows
+        .first_mut()?
+        .blocks
+        .get_mut(block)
 }
 
 fn verify_block_ambiguity_nested_and_cross_page() -> Result<(), &'static str> {
