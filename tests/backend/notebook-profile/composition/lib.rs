@@ -342,26 +342,34 @@ fn printed_date_round_trips_legacy_and_new_notebook_profiles() {
 
 #[test]
 fn date_metadata_validation_does_not_depend_on_selected_paper() {
-    let mut profile = NotebookProfile::default();
     // A caller can validate known date metadata while source paper bytes
     // remain unavailable; geometry is only checked after the paper loads.
-    profile.paper_json = "unloaded paper profile".into();
+    let mut profile = NotebookProfile {
+        paper_json: "unloaded paper profile".into(),
+        ..NotebookProfile::default()
+    };
     assert!(profile.validate_date_metadata().is_ok());
     assert!(profile.validate().is_err());
     profile.date_style = DateStyle::Line;
-    assert_eq!(profile.validate_date_metadata().unwrap_err(),
-        "date style and placement must both be none or set");
+    assert_eq!(
+        profile.validate_date_metadata().expect_err("invalid date metadata"),
+        "date style and placement must both be none or set",
+    );
     profile.date_placement = DatePlacement::TopLeft;
     profile.date_text = "2026-11-11".into();
     assert!(profile.validate_date_metadata().is_ok());
     profile.date_text = "2026-02-29".into();
-    assert!(profile.validate_date_metadata().unwrap_err()
-        .contains("invalid printed Gregorian date"));
+    assert!(
+        profile.validate_date_metadata().expect_err("invalid date metadata")
+            .contains("invalid printed Gregorian date"),
+    );
     profile.date_style = DateStyle::None;
     profile.date_placement = DatePlacement::None;
     profile.date_text = "2026-11-11".into();
-    assert_eq!(profile.validate_date_metadata().unwrap_err(),
-        "printed date text requires a date placeholder");
+    assert_eq!(
+        profile.validate_date_metadata().expect_err("invalid date metadata"),
+        "printed date text requires a date placeholder",
+    );
 }
 
 #[test]
@@ -474,8 +482,10 @@ fn printable_rectangle_tracks_selected_native_paper_margins() {
 
 #[test]
 fn notebook_ruler_selection_is_export_only_and_profile_stays_canonical() {
-    let mut profile = NotebookProfile::default();
-    profile.page_numbers = true;
+    let mut profile = NotebookProfile {
+        page_numbers: true,
+        ..NotebookProfile::default()
+    };
     let original = profile.canonical_json().expect("canonical metadata");
     let ruler = RulerVariation::from_decimal_mm("17", "0.075")
         .expect("bounded decimal selection");
