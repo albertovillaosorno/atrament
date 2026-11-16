@@ -66,6 +66,27 @@ use atrament_semantic_notebook_port::{
     SemanticCommandScopeLocation,
 };
 
+// An allocation failure is a test failure, never a fabricated identity.
+// Keep the harness unit-returning so every assertion remains executable.
+macro_rules! admitted_id {
+    ($allocation:expr, $reason:literal) => {{
+        let result = $allocation;
+        assert!(result.is_ok(), "{}", $reason);
+        let Ok(identity) = result else {
+            return;
+        };
+        identity
+    }};
+}
+
+static TEST_PROTOCOL_LIMITS: CommandResourceLimits = CommandResourceLimits {
+    commands_per_batch: None,
+    dependency_edges: None,
+    envelope_bytes: None,
+    readable_context_bytes: None,
+    writable_targets: None,
+};
+
 const fn expected_match(matches: bool) -> SemanticCommandContextMatch {
     if matches {
         SemanticCommandContextMatch::Matched
@@ -74,7 +95,7 @@ const fn expected_match(matches: bool) -> SemanticCommandContextMatch {
     }
 }
 
-fn unbounded_limits() -> CommandResourceLimits {
+const fn unbounded_limits() -> CommandResourceLimits {
     CommandResourceLimits {
         commands_per_batch: None,
         dependency_edges: None,
@@ -87,13 +108,21 @@ fn unbounded_limits() -> CommandResourceLimits {
 #[test]
 fn command_context_retains_exact_backend_selected_authority() {
     let identities = IdentityAllocator::new();
-    let notebook = identities.allocate_accepted().expect("notebook identity");
-    let writable = identities.allocate_accepted().expect("writable identity");
-    let constraint = identities
-        .allocate_accepted()
-        .expect("constraint identity");
-    let readable = identities.allocate_accepted().expect("readable identity");
-    let base = identities.allocate_revision().expect("base revision");
+    let notebook = admitted_id!(
+        identities.allocate_accepted(), "notebook identity"
+    );
+    let writable = admitted_id!(
+        identities.allocate_accepted(), "writable identity"
+    );
+    let constraint = admitted_id!(
+        identities.allocate_accepted(), "constraint identity"
+    );
+    let readable = admitted_id!(
+        identities.allocate_accepted(), "readable identity"
+    );
+    let base = admitted_id!(
+        identities.allocate_revision(), "base revision"
+    );
     let context = SemanticCommandContext {
         admitted_families: vec![SemanticCommandFamily::TextContent],
         base,
@@ -117,7 +146,10 @@ fn command_context_retains_exact_backend_selected_authority() {
     assert_eq!(context.context_identity, "context-owned-17");
     assert_eq!(context.base, base);
     assert_eq!(context.notebook, notebook);
-    assert_eq!(context.readable_context[0].0, readable);
+    assert_eq!(
+        context.readable_context.first().map(|(identity, _)| *identity),
+        Some(readable),
+    );
     assert_eq!(context.relevant_constraints, [constraint]);
     assert_eq!(context.requested_intent, "replace body phrase");
     assert_eq!(context.local_preconditions, ["body-text-v3"]);
@@ -126,12 +158,20 @@ fn command_context_retains_exact_backend_selected_authority() {
 #[test]
 fn readable_only_identity_never_becomes_writable_scope() {
     let identities = IdentityAllocator::new();
-    let notebook = identities.allocate_accepted().expect("notebook identity");
-    let writable = identities.allocate_accepted().expect("writable identity");
-    let readable = identities.allocate_accepted().expect("readable identity");
+    let notebook = admitted_id!(
+        identities.allocate_accepted(), "notebook identity"
+    );
+    let writable = admitted_id!(
+        identities.allocate_accepted(), "writable identity"
+    );
+    let readable = admitted_id!(
+        identities.allocate_accepted(), "readable identity"
+    );
     let context = SemanticCommandContext {
         admitted_families: vec![SemanticCommandFamily::TextContent],
-        base: identities.allocate_revision().expect("base revision"),
+        base: admitted_id!(
+            identities.allocate_revision(), "base revision"
+        ),
         behavior_version: CommandBehaviorVersion(94),
         context_identity: "context-1",
         insertion_anchors: Vec::<u8>::new(),
@@ -159,16 +199,20 @@ fn readable_only_identity_never_becomes_writable_scope() {
 #[test]
 fn family_and_location_admission_are_independent_for_targets_and_anchors() {
     let identities = IdentityAllocator::new();
-    let notebook = identities.allocate_accepted().expect("notebook identity");
-    let writable = identities.allocate_accepted().expect("writable identity");
-    let other = identities.allocate_accepted().expect("other identity");
+    let notebook = admitted_id!(
+        identities.allocate_accepted(), "notebook identity"
+    );
+    let writable = admitted_id!(
+        identities.allocate_accepted(), "writable identity"
+    );
+    let other = admitted_id!(identities.allocate_accepted(), "other identity");
     let anchor = String::from("after-body");
     let other_anchor = String::from("after-title");
     let context = SemanticCommandContext {
         admitted_families: vec![SemanticCommandFamily::TextContent],
-        base: identities.allocate_revision().expect("base revision"),
+        base: admitted_id!(identities.allocate_revision(), "base revision"),
         behavior_version: CommandBehaviorVersion(94),
-        context_identity: 17_u8,
+        context_identity: 17u8,
         insertion_anchors: vec![anchor.clone()],
         local_preconditions: Vec::<u8>::new(),
         notebook,
@@ -204,23 +248,21 @@ fn family_and_location_admission_are_independent_for_targets_and_anchors() {
             false,
         ),
     ];
-    for (family, location, family_admitted, location_admitted) in cases {
+    let check = |family, location, family_admitted, location_admitted| {
         let admission = semantic_command_scope_admission(
-            &context,
-            family,
-            &location,
+            &context, family, &location,
         );
-        assert_eq!(
-            admission,
-            SemanticCommandScopeAdmission {
-                family_admitted,
-                location_admitted,
-            },
-        );
+        assert_eq!(admission, SemanticCommandScopeAdmission {
+            family_admitted,
+            location_admitted,
+        });
         assert_eq!(
             family_admitted && location_admitted,
             admission.family_admitted && admission.location_admitted,
         );
+    };
+    for (family, location, family_admitted, location_admitted) in cases {
+        check(family, location, family_admitted, location_admitted);
     }
     let anchor_cases = [
         (
@@ -249,16 +291,9 @@ fn family_and_location_admission_are_independent_for_targets_and_anchors() {
         ),
     ];
     for (family, location, family_admitted, location_admitted) in anchor_cases {
-        assert_eq!(
-            semantic_command_scope_admission(
-                &context,
-                family,
-                &SemanticCommandScopeLocation::Insertion(location),
-            ),
-            SemanticCommandScopeAdmission {
-                family_admitted,
-                location_admitted,
-            },
+        check(
+            family, SemanticCommandScopeLocation::Insertion(location),
+            family_admitted, location_admitted,
         );
     }
 }
@@ -266,14 +301,18 @@ fn family_and_location_admission_are_independent_for_targets_and_anchors() {
 #[test]
 fn all_16_context_binding_match_states_remain_independent() {
     let identities = IdentityAllocator::new();
-    let notebook = identities.allocate_accepted().expect("notebook identity");
-    let other_notebook = identities
-        .allocate_accepted()
-        .expect("other notebook identity");
-    let base = identities.allocate_revision().expect("base revision");
-    let other_base = identities
-        .allocate_revision()
-        .expect("other base revision");
+    let notebook = admitted_id!(
+        identities.allocate_accepted(), "notebook identity"
+    );
+    let other_notebook = admitted_id!(
+        identities.allocate_accepted(), "other notebook identity"
+    );
+    let base = admitted_id!(
+        identities.allocate_revision(), "base revision"
+    );
+    let other_base = admitted_id!(
+        identities.allocate_revision(), "other base revision"
+    );
     let context = SemanticCommandContext {
         admitted_families: Vec::new(),
         base,
@@ -288,8 +327,8 @@ fn all_16_context_binding_match_states_remain_independent() {
         resource_limits: unbounded_limits(),
         writable_targets: Vec::new(),
     };
-    let mut cases = 0_u8;
-    for mask in 0_u8..16 {
+    let mut cases = 0u8;
+    for mask in 0u8..16 {
         let base_matches = mask & 0b0001 != 0;
         let behavior_matches = mask & 0b0010 != 0;
         let context_matches = mask & 0b0100 != 0;
@@ -336,7 +375,16 @@ fn command(
         SemanticCommandFamily::StyleRole => {
             EditableSemanticValue::StyleReference(None)
         },
-        _ => EditableSemanticValue::Text(format!("requested-{id}")),
+        SemanticCommandFamily::AssetReference
+        | SemanticCommandFamily::BlockInsertionAndDeletion
+        | SemanticCommandFamily::DocumentConstraint
+        | SemanticCommandFamily::OrderingAndGrouping
+        | SemanticCommandFamily::Provenance
+        | SemanticCommandFamily::SpatialConstraint
+        | SemanticCommandFamily::StructuredContent
+        | SemanticCommandFamily::TextContent => {
+            EditableSemanticValue::Text(format!("requested-{id}"))
+        },
     };
     DirectEditBatchCommand {
         dependencies: Vec::new(),
@@ -357,9 +405,15 @@ fn command(
 #[test]
 fn parsed_envelope_retains_protocol_retry_binding_and_command_order() {
     let identities = IdentityAllocator::new();
-    let notebook = identities.allocate_accepted().expect("notebook identity");
-    let target = identities.allocate_accepted().expect("target identity");
-    let base = identities.allocate_revision().expect("base revision");
+    let notebook = admitted_id!(
+        identities.allocate_accepted(), "notebook identity"
+    );
+    let target = admitted_id!(
+        identities.allocate_accepted(), "target identity"
+    );
+    let base = admitted_id!(
+        identities.allocate_revision(), "base revision"
+    );
     let envelope = SemanticCommandBatchEnvelope {
         binding: SemanticCommandContextBinding {
             base,
@@ -376,18 +430,26 @@ fn parsed_envelope_retains_protocol_retry_binding_and_command_order() {
     };
     assert_eq!(envelope.protocol_version, SemanticCommandProtocolVersion(7));
     assert_eq!(envelope.retry_identity, "retry-owned-9");
-    assert_eq!(envelope.commands[0].id, 3);
-    assert_eq!(envelope.commands[1].id, 1);
+    assert_eq!(envelope.commands.first().map(|command| command.id), Some(3));
+    assert_eq!(envelope.commands.get(1).map(|command| command.id), Some(1));
     assert_eq!(envelope.binding.context_identity, "context-17");
 }
 
 #[test]
 fn envelope_context_review_preserves_order_and_all_scope_fact_combinations() {
     let identities = IdentityAllocator::new();
-    let notebook = identities.allocate_accepted().expect("notebook identity");
-    let writable = identities.allocate_accepted().expect("writable identity");
-    let other = identities.allocate_accepted().expect("other identity");
-    let base = identities.allocate_revision().expect("base revision");
+    let notebook = admitted_id!(
+        identities.allocate_accepted(), "notebook identity"
+    );
+    let writable = admitted_id!(
+        identities.allocate_accepted(), "writable identity"
+    );
+    let other = admitted_id!(
+        identities.allocate_accepted(), "other identity"
+    );
+    let base = admitted_id!(
+        identities.allocate_revision(), "base revision"
+    );
     let context = SemanticCommandContext {
         admitted_families: vec![SemanticCommandFamily::TextContent],
         base,
@@ -463,11 +525,15 @@ const fn expected_limit(
 ) -> SemanticCommandResourceLimitAdmission {
     match limit {
         None => SemanticCommandResourceLimitAdmission::Unspecified,
-        Some(limit) if actual > limit => {
-            SemanticCommandResourceLimitAdmission::Exceeded { actual, limit }
+        Some(maximum) if actual > maximum => {
+            SemanticCommandResourceLimitAdmission::Exceeded {
+                actual, limit: maximum,
+            }
         },
-        Some(limit) => {
-            SemanticCommandResourceLimitAdmission::Within { actual, limit }
+        Some(maximum) => {
+            SemanticCommandResourceLimitAdmission::Within {
+                actual, limit: maximum,
+            }
         },
     }
 }
@@ -475,10 +541,16 @@ const fn expected_limit(
 #[test]
 fn all_27_count_resource_limit_states_are_independent() {
     let identities = IdentityAllocator::new();
-    let notebook = identities.allocate_accepted().expect("notebook identity");
-    let writable = identities.allocate_accepted().expect("writable identity");
-    let base = identities.allocate_revision().expect("base revision");
-    let mut cases = 0_u8;
+    let notebook = admitted_id!(
+        identities.allocate_accepted(), "notebook identity"
+    );
+    let writable = admitted_id!(
+        identities.allocate_accepted(), "writable identity"
+    );
+    let base = admitted_id!(
+        identities.allocate_revision(), "base revision"
+    );
+    let mut cases = 0u8;
     for command_limit in [None, Some(2), Some(1)] {
         for edge_limit in [None, Some(1), Some(0)] {
             for writable_limit in [None, Some(2), Some(1)] {
@@ -541,14 +613,6 @@ fn all_27_count_resource_limit_states_are_independent() {
     assert_eq!(cases, 27);
 }
 
-static TEST_PROTOCOL_LIMITS: CommandResourceLimits = CommandResourceLimits {
-    commands_per_batch: None,
-    dependency_edges: None,
-    envelope_bytes: None,
-    readable_context_bytes: None,
-    writable_targets: None,
-};
-
 fn protocol_snapshot(
     versions: &'static [SemanticCommandProtocolVersion],
 ) -> SemanticCommandCapabilitySnapshot {
@@ -579,7 +643,7 @@ fn protocol_admission_is_exact_membership_without_downgrade_guessing() {
             version: SemanticCommandProtocolVersion(7),
         },
     );
-    for requested in [6_u32, 8, 10] {
+    for requested in [6u32, 8, 10] {
         assert_eq!(
             semantic_command_protocol_admission(
                 &snapshot,
@@ -595,7 +659,7 @@ fn protocol_admission_is_exact_membership_without_downgrade_guessing() {
 #[test]
 fn empty_protocol_snapshot_rejects_every_requested_version() {
     let snapshot = protocol_snapshot(&[]);
-    for requested in [0_u32, 1, 7, u32::MAX] {
+    for requested in [0u32, 1, 7, u32::MAX] {
         assert_eq!(
             semantic_command_protocol_admission(
                 &snapshot,
@@ -707,9 +771,15 @@ fn envelope_preflight_composes_all_current_admission_facts() {
         SemanticCommandProtocolVersion(7),
     ];
     let identities = IdentityAllocator::new();
-    let notebook = identities.allocate_accepted().expect("notebook identity");
-    let target = identities.allocate_accepted().expect("target identity");
-    let base = identities.allocate_revision().expect("base revision");
+    let notebook = admitted_id!(
+        identities.allocate_accepted(), "notebook identity"
+    );
+    let target = admitted_id!(
+        identities.allocate_accepted(), "target identity"
+    );
+    let base = admitted_id!(
+        identities.allocate_revision(), "base revision"
+    );
     let mut snapshot = protocol_snapshot(&PROTOCOLS);
     snapshot.admitted_applications = &APPLICATIONS;
     let context = SemanticCommandContext {
@@ -789,19 +859,52 @@ fn envelope_preflight_composes_all_current_admission_facts() {
     );
 }
 
+fn assert_simultaneous_resource_failures(
+    resources: SemanticCommandResourceAdmission,
+) {
+    assert_eq!(
+        resources,
+        SemanticCommandResourceAdmission {
+            commands_per_batch:
+                SemanticCommandResourceLimitAdmission::Exceeded {
+                    actual: 1,
+                    limit: 0,
+                },
+            dependency_edges: SemanticCommandResourceLimitAdmission::Within {
+                actual: 0,
+                limit: 0,
+            },
+            writable_targets:
+                SemanticCommandResourceLimitAdmission::Exceeded {
+                    actual: 1,
+                    limit: 0,
+                },
+        },
+        "all independent resource-limit failures must remain visible",
+    );
+}
+
 #[test]
 fn envelope_preflight_preserves_simultaneous_independent_failures() {
     let identities = IdentityAllocator::new();
-    let notebook = identities.allocate_accepted().expect("notebook identity");
-    let other_notebook = identities
-        .allocate_accepted()
-        .expect("other notebook identity");
-    let target = identities.allocate_accepted().expect("target identity");
-    let other_target = identities.allocate_accepted().expect("other target");
-    let base = identities.allocate_revision().expect("base revision");
-    let other_base = identities
-        .allocate_revision()
-        .expect("other base revision");
+    let notebook = admitted_id!(
+        identities.allocate_accepted(), "notebook identity"
+    );
+    let other_notebook = admitted_id!(
+        identities.allocate_accepted(), "other notebook identity"
+    );
+    let target = admitted_id!(
+        identities.allocate_accepted(), "target identity"
+    );
+    let other_target = admitted_id!(
+        identities.allocate_accepted(), "other target"
+    );
+    let base = admitted_id!(
+        identities.allocate_revision(), "base revision"
+    );
+    let other_base = admitted_id!(
+        identities.allocate_revision(), "other base revision"
+    );
     let mut snapshot = protocol_snapshot(&[]);
     snapshot.behavior_version = CommandBehaviorVersion(95);
     let context = SemanticCommandContext {
@@ -881,25 +984,7 @@ fn envelope_preflight_preserves_simultaneous_independent_failures() {
             location_admitted: false,
         }],
     );
-    assert_eq!(
-        admission.resources,
-        SemanticCommandResourceAdmission {
-            commands_per_batch:
-                SemanticCommandResourceLimitAdmission::Exceeded {
-                    actual: 1,
-                    limit: 0,
-                },
-            dependency_edges: SemanticCommandResourceLimitAdmission::Within {
-                actual: 0,
-                limit: 0,
-            },
-            writable_targets:
-                SemanticCommandResourceLimitAdmission::Exceeded {
-                    actual: 1,
-                    limit: 0,
-                },
-        },
-    );
+    assert_simultaneous_resource_failures(admission.resources);
 }
 
 #[test]
@@ -925,6 +1010,155 @@ fn capability_behavior_admission_detects_stale_context_version() {
     );
 }
 
+fn assert_preflight_result_class_mask(
+    result_facts: &SemanticCommandEnvelopeResultClassFacts<'_, u8>,
+    mask: u8,
+) {
+    let behavior_matches = mask & 0b00_0001 != 0;
+    let application_admitted = mask & 0b00_0010 != 0;
+    let protocol_admitted = mask & 0b00_0100 != 0;
+    let family_admitted = mask & 0b00_1000 != 0;
+    let target_admitted = mask & 0b01_0000 != 0;
+    let command_limit_admitted = mask & 0b10_0000 != 0;
+    assert_eq!(
+        result_facts.application,
+        (!application_admitted).then_some(
+            SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+        ),
+        "application result class mismatch for mask {mask:#08b}",
+    );
+    assert_eq!(
+        result_facts.capability,
+        (!behavior_matches).then_some(
+            SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+        ),
+        "capability result class mismatch for mask {mask:#08b}",
+    );
+    assert_eq!(result_facts.context, None, "context mask {mask:#08b}");
+    assert_eq!(
+        result_facts.protocol,
+        (!protocol_admitted).then_some(
+            SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+        ),
+        "protocol result class mismatch for mask {mask:#08b}",
+    );
+    assert_eq!(
+        result_facts.resources,
+        (!command_limit_admitted).then_some(
+            SemanticCommandResultClass::ResourceLimitRejection,
+        ),
+        "resource result class mismatch for mask {mask:#08b}",
+    );
+    assert_eq!(
+        result_facts.commands,
+        vec![SemanticCommandEnvelopeCommandResultClassFacts {
+            command: &3,
+            family: (!family_admitted).then_some(
+                SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+            ),
+            location: (!target_admitted).then_some(
+                SemanticCommandResultClass::WritableScopeViolation,
+            ),
+        }],
+        "command result classes mismatch for mask {mask:#08b}",
+    );
+}
+
+fn assert_preflight_admission_mask(
+    admission: &SemanticCommandEnvelopeAdmission<'_, u8>,
+    snapshot: SemanticCommandCapabilitySnapshot,
+    mask: u8,
+) {
+    let behavior_matches = mask & 0b00_0001 != 0;
+    let application_admitted = mask & 0b00_0010 != 0;
+    let protocol_admitted = mask & 0b00_0100 != 0;
+    let family_admitted = mask & 0b00_1000 != 0;
+    let target_admitted = mask & 0b01_0000 != 0;
+    let command_limit_admitted = mask & 0b10_0000 != 0;
+    assert_eq!(
+        admission.capability,
+        if behavior_matches {
+            CommandCapabilityCompatibilityOutcome::Compatible { snapshot }
+        } else {
+            CommandCapabilityCompatibilityOutcome::Mismatch {
+                current: CommandBehaviorVersion(95),
+                expected: CommandBehaviorVersion(94),
+            }
+        },
+        "capability mismatch for mask {mask:#08b}",
+    );
+    assert_eq!(
+        admission.application,
+        if application_admitted {
+            SemanticCommandApplicationAdmission::Admitted {
+                capability: CommandApplicationCapability::Validate,
+            }
+        } else {
+            SemanticCommandApplicationAdmission::Unsupported {
+                requested: CommandApplicationCapability::Validate,
+            }
+        },
+        "application mismatch for mask {mask:#08b}",
+    );
+    assert_eq!(
+        admission.protocol,
+        if protocol_admitted {
+            SemanticCommandProtocolAdmission::Admitted {
+                version: SemanticCommandProtocolVersion(7),
+            }
+        } else {
+            SemanticCommandProtocolAdmission::Unsupported {
+                requested: SemanticCommandProtocolVersion(7),
+            }
+        },
+        "protocol mismatch for mask {mask:#08b}",
+    );
+    assert_eq!(
+        admission.context.binding,
+        SemanticCommandContextBindingAdmission {
+            base: SemanticCommandContextMatch::Matched,
+            behavior: SemanticCommandContextMatch::Matched,
+            context: SemanticCommandContextMatch::Matched,
+            notebook: SemanticCommandContextMatch::Matched,
+        },
+        "binding mismatch for mask {mask:#08b}",
+    );
+    assert_eq!(
+        admission.context.commands,
+        vec![SemanticCommandEnvelopeCommandAdmission {
+            command: &3,
+            family_admitted,
+            location_admitted: target_admitted,
+        }],
+        "scope mismatch for mask {mask:#08b}",
+    );
+    assert_eq!(
+        admission.resources.commands_per_batch,
+        if command_limit_admitted {
+            SemanticCommandResourceLimitAdmission::Within {
+                actual: 1,
+                limit: 1,
+            }
+        } else {
+            SemanticCommandResourceLimitAdmission::Exceeded {
+                actual: 1,
+                limit: 0,
+            }
+        },
+        "resource mismatch for mask {mask:#08b}",
+    );
+    assert_eq!(
+        admission.resources.dependency_edges,
+        SemanticCommandResourceLimitAdmission::Unspecified,
+        "dependency mask {mask:#08b}",
+    );
+    assert_eq!(
+        admission.resources.writable_targets,
+        SemanticCommandResourceLimitAdmission::Unspecified,
+        "writable mask {mask:#08b}",
+    );
+}
+
 #[test]
 fn all_64_envelope_preflight_axis_masks_match_independent_oracle() {
     static APPLICATIONS: [CommandApplicationCapability; 1] = [
@@ -934,11 +1168,17 @@ fn all_64_envelope_preflight_axis_masks_match_independent_oracle() {
         SemanticCommandProtocolVersion(7),
     ];
     let identities = IdentityAllocator::new();
-    let notebook = identities.allocate_accepted().expect("notebook identity");
-    let target = identities.allocate_accepted().expect("target identity");
-    let base = identities.allocate_revision().expect("base revision");
-    let mut cases = 0_u8;
-    for mask in 0_u8..64 {
+    let notebook = admitted_id!(
+        identities.allocate_accepted(), "notebook identity"
+    );
+    let target = admitted_id!(
+        identities.allocate_accepted(), "target identity"
+    );
+    let base = admitted_id!(
+        identities.allocate_revision(), "base revision"
+    );
+    let mut cases = 0u8;
+    for mask in 0u8..64 {
         let behavior_matches = mask & 0b00_0001 != 0;
         let application_admitted = mask & 0b00_0010 != 0;
         let protocol_admitted = mask & 0b00_0100 != 0;
@@ -976,11 +1216,7 @@ fn all_64_envelope_preflight_axis_masks_match_independent_oracle() {
             relevant_constraints: Vec::new(),
             requested_intent: (),
             resource_limits: CommandResourceLimits {
-                commands_per_batch: Some(if command_limit_admitted {
-                    1
-                } else {
-                    0
-                }),
+                commands_per_batch: Some(usize::from(command_limit_admitted)),
                 dependency_edges: None,
                 envelope_bytes: None,
                 readable_context_bytes: None,
@@ -1015,128 +1251,8 @@ fn all_64_envelope_preflight_axis_masks_match_independent_oracle() {
         );
         let result_facts =
             semantic_command_envelope_result_class_facts(&admission);
-        assert_eq!(
-            result_facts.application,
-            (!application_admitted).then_some(
-                SemanticCommandResultClass::UnsupportedProtocolOrCapability,
-            ),
-            "application result class mismatch for mask {mask:#08b}",
-        );
-        assert_eq!(
-            result_facts.capability,
-            (!behavior_matches).then_some(
-                SemanticCommandResultClass::UnsupportedProtocolOrCapability,
-            ),
-            "capability result class mismatch for mask {mask:#08b}",
-        );
-        assert_eq!(result_facts.context, None);
-        assert_eq!(
-            result_facts.protocol,
-            (!protocol_admitted).then_some(
-                SemanticCommandResultClass::UnsupportedProtocolOrCapability,
-            ),
-            "protocol result class mismatch for mask {mask:#08b}",
-        );
-        assert_eq!(
-            result_facts.resources,
-            (!command_limit_admitted).then_some(
-                SemanticCommandResultClass::ResourceLimitRejection,
-            ),
-            "resource result class mismatch for mask {mask:#08b}",
-        );
-        assert_eq!(
-            result_facts.commands,
-            vec![SemanticCommandEnvelopeCommandResultClassFacts {
-                command: &3,
-                family: (!family_admitted).then_some(
-                    SemanticCommandResultClass::UnsupportedProtocolOrCapability,
-                ),
-                location: (!target_admitted).then_some(
-                    SemanticCommandResultClass::WritableScopeViolation,
-                ),
-            }],
-            "command result classes mismatch for mask {mask:#08b}",
-        );
-        assert_eq!(
-            admission.capability,
-            if behavior_matches {
-                CommandCapabilityCompatibilityOutcome::Compatible { snapshot }
-            } else {
-                CommandCapabilityCompatibilityOutcome::Mismatch {
-                    current: CommandBehaviorVersion(95),
-                    expected: CommandBehaviorVersion(94),
-                }
-            },
-            "capability mismatch for mask {mask:#08b}",
-        );
-        assert_eq!(
-            admission.application,
-            if application_admitted {
-                SemanticCommandApplicationAdmission::Admitted {
-                    capability: CommandApplicationCapability::Validate,
-                }
-            } else {
-                SemanticCommandApplicationAdmission::Unsupported {
-                    requested: CommandApplicationCapability::Validate,
-                }
-            },
-            "application mismatch for mask {mask:#08b}",
-        );
-        assert_eq!(
-            admission.protocol,
-            if protocol_admitted {
-                SemanticCommandProtocolAdmission::Admitted {
-                    version: SemanticCommandProtocolVersion(7),
-                }
-            } else {
-                SemanticCommandProtocolAdmission::Unsupported {
-                    requested: SemanticCommandProtocolVersion(7),
-                }
-            },
-            "protocol mismatch for mask {mask:#08b}",
-        );
-        assert_eq!(
-            admission.context.binding,
-            SemanticCommandContextBindingAdmission {
-                base: SemanticCommandContextMatch::Matched,
-                behavior: SemanticCommandContextMatch::Matched,
-                context: SemanticCommandContextMatch::Matched,
-                notebook: SemanticCommandContextMatch::Matched,
-            },
-            "binding mismatch for mask {mask:#08b}",
-        );
-        assert_eq!(
-            admission.context.commands,
-            vec![SemanticCommandEnvelopeCommandAdmission {
-                command: &3,
-                family_admitted,
-                location_admitted: target_admitted,
-            }],
-            "scope mismatch for mask {mask:#08b}",
-        );
-        assert_eq!(
-            admission.resources.commands_per_batch,
-            if command_limit_admitted {
-                SemanticCommandResourceLimitAdmission::Within {
-                    actual: 1,
-                    limit: 1,
-                }
-            } else {
-                SemanticCommandResourceLimitAdmission::Exceeded {
-                    actual: 1,
-                    limit: 0,
-                }
-            },
-            "resource mismatch for mask {mask:#08b}",
-        );
-        assert_eq!(
-            admission.resources.dependency_edges,
-            SemanticCommandResourceLimitAdmission::Unspecified,
-        );
-        assert_eq!(
-            admission.resources.writable_targets,
-            SemanticCommandResourceLimitAdmission::Unspecified,
-        );
+        assert_preflight_result_class_mask(&result_facts, mask);
+        assert_preflight_admission_mask(&admission, snapshot, mask);
         cases = cases.saturating_add(1);
     }
     assert_eq!(cases, 64);
@@ -1151,9 +1267,15 @@ fn envelope_preflight_preserves_invalid_graph_for_graph_validator() {
         SemanticCommandProtocolVersion(7),
     ];
     let identities = IdentityAllocator::new();
-    let notebook = identities.allocate_accepted().expect("notebook identity");
-    let target = identities.allocate_accepted().expect("target identity");
-    let base = identities.allocate_revision().expect("base revision");
+    let notebook = admitted_id!(
+        identities.allocate_accepted(), "notebook identity"
+    );
+    let target = admitted_id!(
+        identities.allocate_accepted(), "target identity"
+    );
+    let base = admitted_id!(
+        identities.allocate_revision(), "base revision"
+    );
     let mut snapshot = protocol_snapshot(&PROTOCOLS);
     snapshot.admitted_applications = &APPLICATIONS;
     let context = SemanticCommandContext {
@@ -1199,8 +1321,14 @@ fn envelope_preflight_preserves_invalid_graph_for_graph_validator() {
         &envelope,
     );
     assert_eq!(admission.context.commands.len(), 2);
-    assert_eq!(admission.context.commands[0].command, &5);
-    assert_eq!(admission.context.commands[1].command, &5);
+    assert_eq!(
+        admission.context.commands.first().map(|command| command.command),
+        Some(&5),
+    );
+    assert_eq!(
+        admission.context.commands.get(1).map(|command| command.command),
+        Some(&5),
+    );
     assert!(admission.context.commands.iter().all(|command| {
         command.family_admitted && command.location_admitted
     }));
@@ -1226,13 +1354,21 @@ fn envelope_preflight_preserves_invalid_graph_for_graph_validator() {
 #[test]
 fn envelope_result_class_facts_preserve_simultaneous_failures() {
     let identities = IdentityAllocator::new();
-    let notebook = identities.allocate_accepted().expect("notebook identity");
-    let target = identities.allocate_accepted().expect("target identity");
-    let other_target = identities.allocate_accepted().expect("other target");
-    let base = identities.allocate_revision().expect("base revision");
-    let other_base = identities
-        .allocate_revision()
-        .expect("other base revision");
+    let notebook = admitted_id!(
+        identities.allocate_accepted(), "notebook identity"
+    );
+    let target = admitted_id!(
+        identities.allocate_accepted(), "target identity"
+    );
+    let other_target = admitted_id!(
+        identities.allocate_accepted(), "other target"
+    );
+    let base = admitted_id!(
+        identities.allocate_revision(), "base revision"
+    );
+    let other_base = admitted_id!(
+        identities.allocate_revision(), "other base revision"
+    );
     let mut snapshot = protocol_snapshot(&[]);
     snapshot.behavior_version = CommandBehaviorVersion(95);
     let context = SemanticCommandContext {
