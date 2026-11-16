@@ -422,6 +422,22 @@ function selectedCandidatePenPath(
     });
 }
 
+// Joining needs the ordinal index so it can locate the following path.
+function candidatePenPathIndex(
+    paths: readonly CandidatePenPath[], ordinal: number,
+): number {
+    return paths.findIndex((path) =>
+        ordinal >= path.first && ordinal <= path.last);
+}
+
+// A curved bridge requires one deliberate, nonzero, bounded transverse bend.
+// The separate gap-direction test below rejects collinear suggestions.
+function validCurvedBend(bendX: number, bendY: number): boolean {
+    return [bendX, bendY].every((value) =>
+        Number.isSafeInteger(value) && Math.abs(value) <= 600)
+        && (bendX !== 0 || bendY !== 0);
+}
+
 // One-time, explicit copy of exactly one candidate pen path to another
 // Unicode identity. A pre-existing target keeps all its authored lines;
 // the selected source's directed order and original interleaved rows stay.
@@ -570,9 +586,7 @@ export function closeCandidatePathCurved(
         || selectedIndex < 0 || strokes[selectedIndex]?.grapheme !== grapheme) {
         throw new Error("Curved closure needs a selected exact glyph stroke");
     }
-    if (![bendX, bendY].every((value) =>
-        Number.isSafeInteger(value) && Math.abs(value) <= 600)
-        || (bendX === 0 && bendY === 0)) {
+    if (!validCurvedBend(bendX, bendY)) {
         throw new Error("Curved closure needs nonzero -600..600 µm bend");
     }
     encodeGlyphLibrary([...strokes]);
@@ -622,8 +636,7 @@ export function joinNextCandidatePath(
     const positions = glyphStrokeIndices(strokes, grapheme);
     const ordinal = positions.indexOf(selectedIndex) + 1;
     const paths = candidatePenPaths(strokes, grapheme);
-    const index = paths.findIndex((candidate) =>
-        ordinal >= candidate.first && ordinal <= candidate.last);
+    const index = candidatePenPathIndex(paths, ordinal);
     const current = paths[index];
     const following = paths[index + 1];
     if (!current || !following) {
@@ -711,17 +724,14 @@ export function joinNextCandidatePathCurved(
         || selectedIndex < 0 || strokes[selectedIndex]?.grapheme !== grapheme) {
         throw new Error("Curved joining needs a selected exact glyph stroke");
     }
-    if (![bendX, bendY].every((n) =>
-        Number.isSafeInteger(n) && Math.abs(n) <= 600)
-        || (bendX === 0 && bendY === 0)) {
+    if (!validCurvedBend(bendX, bendY)) {
         throw new Error("Curved join needs nonzero -600..600 µm bend");
     }
     encodeGlyphLibrary([...strokes]);
     const positions = glyphStrokeIndices(strokes, grapheme);
     const ordinal = positions.indexOf(selectedIndex) + 1;
     const paths = candidatePenPaths(strokes, grapheme);
-    const index = paths.findIndex((path) =>
-        ordinal >= path.first && ordinal <= path.last);
+    const index = candidatePenPathIndex(paths, ordinal);
     const current = paths[index];
     const following = paths[index + 1];
     if (!current || !following) {
