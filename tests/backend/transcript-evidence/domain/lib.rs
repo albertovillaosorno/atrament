@@ -51,10 +51,10 @@ fn transcript_keeps_original_media_job_and_replaceable_engine_identity() {
         unresolved_fragments:
             Vec::<UnresolvedTranscriptFragment<u8, &str, (u32, u32)>>::new(),
         words: vec![TranscriptWord {
-            confidence: Some(93_u8),
+            confidence: Some(93u8),
             speaker: Some("speaker-a"),
             text: "hola",
-            time_range: Some((1_200_u32, 1_430_u32)),
+            time_range: Some((1_200u32, 1_430u32)),
         }],
     };
     assert_eq!(transcript.origin.media_identity, "original-video-4");
@@ -80,9 +80,9 @@ fn word_timing_confidence_and_speaker_remain_optional() {
 #[test]
 fn unresolved_fragment_is_not_promoted_to_resolved_word() {
     let unresolved = UnresolvedTranscriptFragment {
-        confidence: Some(18_u8),
+        confidence: Some(18u8),
         text: "[inaudible syllables]",
-        time_range: Some((4_000_u32, 4_600_u32)),
+        time_range: Some((4_000u32, 4_600u32)),
     };
     let transcript = TranscriptEvidence {
         origin: TranscriptOrigin {

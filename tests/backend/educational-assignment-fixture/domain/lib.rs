@@ -69,8 +69,8 @@ fn all_six_subjects_have_stable_distinct_bilingual_source_artifacts() {
     {
         assert_eq!(fixture.subject, subject);
         assert_eq!(fixture.artifact_identity, artifact_identity);
-        assert!(!fixture.english_source.trim().is_empty());
-        assert!(!fixture.spanish_source.trim().is_empty());
+        assert_ne!(fixture.english_source.trim().len(), 0);
+        assert_ne!(fixture.spanish_source.trim().len(), 0);
         assert_ne!(fixture.english_source, fixture.spanish_source);
     }
 }

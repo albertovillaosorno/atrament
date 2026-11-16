@@ -99,7 +99,7 @@ fn taxonomy_has_exactly_11_core_result_classes() {
 
 #[test]
 fn all_33_operation_result_pairs_match_independent_oracle() {
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for operation in ALL_OPERATIONS {
         for result in ALL_RESULT_CLASSES {
             assert_eq!(
@@ -143,7 +143,7 @@ fn all_11_result_classes_have_exact_effect_disposition() {
 
 #[test]
 fn all_33_operation_result_pairs_project_effect_only_when_applicable() {
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for operation in ALL_OPERATIONS {
         for result in ALL_RESULT_CLASSES {
             let expected = reference_applies(operation, result)
@@ -170,7 +170,7 @@ fn all_nine_cancellation_observations_preserve_output_effect_boundaries() {
         ApplicationCancellationObservation::RequestOnly,
         ApplicationCancellationObservation::TookEffectBeforeBoundary,
     ];
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for operation in ALL_OPERATIONS {
         for observation in OBSERVATIONS {
             let expected = match observation {

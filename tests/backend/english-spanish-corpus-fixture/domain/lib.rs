@@ -73,7 +73,7 @@ fn scenario_fixture_order_and_identities_remain_explicit() {
     for (fixture, (scenario, artifact_identity)) in fixtures {
         assert_eq!(fixture.scenario, scenario);
         assert_eq!(fixture.artifact_identity, artifact_identity);
-        assert!(!fixture.text.is_empty());
+        assert_ne!(fixture.text.len(), 0);
     }
 }
 

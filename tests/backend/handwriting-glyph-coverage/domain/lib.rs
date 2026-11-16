@@ -173,7 +173,7 @@ fn admitted_compositional_rule_removes_query_from_missing_report() {
         grapheme: &composed,
         matched_compositional_rule: Some(&rule),
     }];
-    assert!(missing_handwriting_coverage(&profile, &queries).is_empty());
+    assert_eq!(missing_handwriting_coverage(&profile, &queries).len(), 0);
 }
 
 #[test]
@@ -323,5 +323,5 @@ fn required_bilingual_inventory_is_never_omitted_from_missing_report() {
     };
     let complete_missing =
         missing_handwriting_coverage(&complete_profile, &queries);
-    assert!(complete_missing.is_empty());
+    assert_eq!(complete_missing.len(), 0);
 }
