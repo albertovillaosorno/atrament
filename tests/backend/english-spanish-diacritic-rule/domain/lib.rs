@@ -60,13 +60,16 @@ fn all_fourteen_decomposed_inventory_entries_have_exact_rule_evidence()
             Some(EnglishSpanishDiacriticRule::Acute) => acute += 1,
             Some(EnglishSpanishDiacriticRule::Diaeresis) => diaeresis += 1,
             Some(EnglishSpanishDiacriticRule::Tilde) => tilde += 1,
-            None => return Err(format!("missing rule for {:?}", required.grapheme)),
+            None => return Err(format!(
+                "missing rule for {:?}", required.grapheme,
+            )),
         }
         total += 1;
     }
     if (acute, diaeresis, tilde, total) != (10, 2, 2, 14) {
         return Err(format!(
-            "unexpected diacritic counts: {acute}, {diaeresis}, {tilde}, {total}",
+            "unexpected diacritic counts: {}, {}, {}, {}",
+            acute, diaeresis, tilde, total,
         ));
     }
     Ok(())

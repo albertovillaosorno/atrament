@@ -1489,7 +1489,9 @@ impl GlyphOverlay {
         };
         let step = match (self.variation, self.word_baseline_step_um) {
             (Some(variation), Some(maximum_um)) =>
-                variation.word_baseline_step(run_index, word_index, maximum_um)?,
+                variation.word_baseline_step(
+                    run_index, word_index, maximum_um,
+                )?,
             _ => 0i32,
         };
         let slope = i64::from(step).checked_mul(i64::from(letter_index))
@@ -1611,7 +1613,8 @@ impl GlyphOverlay {
                 "Glyph: \"{}\" [{}]\n",
                 "Strokes: {}\nPaths: {}\nPen lifts: {}\n{}",
             ),
-            escape_report_grapheme(grapheme), codepoints, selected.len(), paths.len(),
+            escape_report_grapheme(grapheme), codepoints,
+            selected.len(), paths.len(),
             paths.len().saturating_sub(1), details,
         ).into_bytes())
     }
