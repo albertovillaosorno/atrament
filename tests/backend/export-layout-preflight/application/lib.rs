@@ -200,7 +200,7 @@ fn real_six_mm_fixed_overflow_blocks_export_layout_preflight() {
     assert_eq!(layout.revision(), fixture.revision);
     assert_eq!(
         layout.writable(),
-        geometry(20_000).writable_region().expect("fixture writable region"),
+        admitted!(geometry(20_000).writable_region()),
     );
     assert_eq!(
         layout.rectangle(),
@@ -220,7 +220,7 @@ fn real_six_mm_fixed_overflow_blocks_export_layout_preflight() {
         fixture.revision,
         admitted!(RevisionLayoutDiagnostics::bind(
             fixture.revision,
-            &diagnostics,
+            diagnostics,
         )),
     ));
     assert_eq!(

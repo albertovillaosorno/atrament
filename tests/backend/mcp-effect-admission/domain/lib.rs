@@ -59,7 +59,7 @@ const EFFECTS: [McpApplicationEffectClass; 7] = [
     McpApplicationEffectClass::ReadOnlyCandidateSimulation,
 ];
 
-fn expected_effect(
+const fn expected_effect(
     capability: McpApplicationCapabilityClass,
 ) -> McpApplicationEffectClass {
     match capability {
@@ -90,13 +90,13 @@ fn expected_effect(
 
 #[test]
 fn all_1024_effect_masks_and_capabilities_match_exact_membership() {
-    let mut cases = 0_usize;
-    for mask in 0_u8..128 {
+    let mut cases = 0usize;
+    for mask in 0u8..128 {
         let admitted: Vec<_> = EFFECTS
             .into_iter()
             .enumerate()
             .filter_map(|(index, effect)| {
-                (mask & (1_u8 << index) != 0).then_some(effect)
+                (mask & (1u8 << index) != 0).then_some(effect)
             })
             .collect();
         for capability in CAPABILITIES {
