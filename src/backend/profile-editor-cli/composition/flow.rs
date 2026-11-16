@@ -2378,6 +2378,7 @@ fn parenthesized_uncertainty_end(
 // separators, clock colons, digit fractions/dates and numeric ranges) is one
 // advisory ink cluster when it fits. Numeric comparison prefixes also bind the
 // following number, including leading decimals and complete exponents.
+// Explicit +, −, × and ÷ also keep a complete following numeric operand.
 // Authored numeric caret and Unicode superscript powers also bind a base.
 // Ordinary numeric separators require ASCII digits on either side;
 // uncertainty signs (±/∓) also accept a leading decimal without zero.
@@ -2396,14 +2397,20 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
         // An omitted leading zero is still an authored decimal. Recognize
         // .5 and ,5 only at a numeric boundary, never after sentence
         // punctuation in ordinary prose (a.5, 1..5).
-        // Mathematical comparisons are prefixes of the following
-        // complete number, not trailing ink on the preceding prose row.
-        // Include the two ASCII characters of <=, >=, != and ==.
-        let comparison_start = cursor.checked_sub(1)
+        // Comparisons and explicit algebraic operators stay with their
+        // following complete numeric operand, never the left-hand word.
+        // Keep ASCII hyphens ambiguous and exclude C++17-style doubled
+        // plus signs; only authored ×, ÷ and mathematical − are treated
+        // as unambiguous operator prefixes beyond ordinary +.
+        // Include both ASCII characters of <=, >=, != and ==.
+        let numeric_prefix_start = cursor.checked_sub(1)
             .filter(|&index| glyphs.get(index).is_some_and(|item| {
                 matches!(item.0,
                     "=" | "<" | ">" | "\u{2264}" | "\u{2265}"
-                    | "\u{2248}" | "\u{2260}")
+                    | "\u{2248}" | "\u{2260}" | "+"
+                    | "\u{2212}" | "\u{d7}" | "\u{f7}")
+                    && !(item.0 == "+" && index > 0
+                        && glyphs[index - 1].0 == "+")
             }))
             .map(|index| {
                 if glyphs[index].0 == "=" && index > 0
@@ -2416,7 +2423,7 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
                 }
             });
         let numeric_boundary = cursor == 0
-            || comparison_start.is_some()
+            || numeric_prefix_start.is_some()
             || glyphs.get(cursor.saturating_sub(1))
                 .is_some_and(|item| matches!(item.0,
                     "(" | "[" | "$" | "\u{20ac}"
@@ -2433,6 +2440,10 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
         let unary_sign = (numeric_boundary
             && matches!(grapheme, "+" | "-" | "\u{2212}")
             || matches!(grapheme, "\u{b1}" | "\u{2213}"))
+            // A doubled plus is one authored language/version token,
+            // not two sequential algebraic numeric prefixes.
+            && !(grapheme == "+" && cursor > 0
+                && glyphs[cursor - 1].0 == "+")
             && (glyphs.get(cursor.saturating_add(1))
                 .is_some_and(|item| ascii_digit(item.0))
                 || decimal_start(cursor.saturating_add(1)));
@@ -2440,7 +2451,7 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
             cursor = cursor.saturating_add(1);
             continue;
         }
-        let start = comparison_start.unwrap_or(cursor);
+        let start = numeric_prefix_start.unwrap_or(cursor);
         if unary_sign {
             cursor = cursor.saturating_add(1);
         }
@@ -2454,7 +2465,7 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
         // Even a bare multi-digit integer should move as one measured
         // token when it fits. A shorter real region still allows exact
         // single-grapheme fallback instead of refusing the number.
-        let mut has_separator = comparison_start.is_some()
+        let mut has_separator = numeric_prefix_start.is_some()
             || unary_sign || leading_decimal
             || cursor.saturating_sub(start) > 1;
         while let Some(&(separator, _, _)) = glyphs.get(cursor) {

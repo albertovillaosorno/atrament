@@ -9696,6 +9696,70 @@ fn fitting_bare_integer_ink_moves_intact_before_wrapping()
 }
 
 #[test]
+fn algebraic_operator_numeric_operands_keep_measured_ink()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    for source in [
+        "x+12", "x−.5", "x×2e3", "x÷1.5", "a+3(2)",
+        "1+2", "1−2", "x÷.25", "x×10³",
+    ] {
+        let glyphs = super::measured_word(source, None)?.0;
+        let ties = super::numeric_separator_joins(&glyphs);
+        let operator = source.chars().position(|ch| {
+            matches!(ch, '+' | '−' | '×' | '÷')
+        }).ok_or("missing operator")?;
+        assert!(ties[operator..].iter().all(|tie| *tie),
+            "{source:?} detached the numeric operand: {ties:?}");
+    }
+    for (source, boundary) in [
+        ("x+abc", 1), ("x×word", 1), ("x÷.", 1),
+        ("x−.a", 1), ("x-12", 1), ("C++17", 2),
+    ] {
+        let glyphs = super::measured_word(source, None)?.0;
+        let ties = super::numeric_separator_joins(&glyphs);
+        assert!(!ties[boundary],
+            "{source:?} acquired a nonnumeric operator tie: {ties:?}");
+    }
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 33_000, height: 90_000,
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        for (source, first, last) in [
+            ("abcde+12", "abcde", "+12"),
+            ("abcde−.5", "abcde", "−.5"),
+            ("abcde×2e3", "abcde", "×2e3"),
+            ("abcde÷1.5", "abcde", "÷1.5"),
+        ] {
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            assert_eq!(pages, 1, "{source}");
+            assert!(marks.is_empty(), "{source}");
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>(), [first, last],
+                "{source} {format:?}");
+        }
+        let narrow = super::FlowRegion {
+            width: 9_000, height: 120_000, ..region
+        };
+        for source in ["+12", "−.5", "×2e3", "÷1.5"] {
+            let (rows, _, _) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(narrow),
+            )?;
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<String>(), source, "{source} {format:?}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn bounded_numeric_join_scan_handles_full_size_number_once()
 -> Result<(), String> {
     // The 4,096-byte source cap permits a single long numeric word.

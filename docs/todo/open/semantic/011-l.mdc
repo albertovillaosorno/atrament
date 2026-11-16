@@ -5383,3 +5383,24 @@ authored strokes, including missing-glyph refusal without overwriting a valid
 export. This is only advisory physical line breaking: no mathematical value
 is parsed, no glyph shapes are generated, and the full persisted notebook
 Export journey remains unfinished.
+
+## Algebraic numeric operand wrapping (partial) — 2026-11-15
+
+The export-only Rust flow compositor now keeps an explicitly authored `+`,
+mathematical minus `−`, multiplication `×` or division `÷` with a following
+complete numeric operand when its exact ink fits the row. Signed, decimal,
+scientific and measured uncertainty values keep their existing grouping.
+The ASCII hyphen remains ambiguous text punctuation, and doubled plus signs
+(such as `C++17`) do not acquire an algebraic-operand tie. Incomplete
+operators and nonnumeric words remain literal ink without additional ties.
+
+The Rust regression first reproduced `x+12` splitting the operator from
+its operand, then verified exact physical rows in both source modes,
+nonnumeric negative cases and one-grapheme-wide fallback. A real-process
+regression checks all four operators against separately authored native
+PDF and transparent PNG ink in both modes, including refusal when a
+required glyph is absent without overwriting an accepted output file.
+
+This is advisory measured line breaking only, not a parsed equation,
+generated mathematical glyph or persisted notebook semantic block. The
+complete saved-notebook Export journey remains open.
