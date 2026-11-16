@@ -2317,6 +2317,19 @@ fn invalid_notebook_export_flags_refuse_without_file_changes() {
 }
 
 #[test]
+fn exact_report_labels_preserve_decomposed_latin_ink_across_compilers() {
+    let display = escape_report_grapheme;
+    assert_eq!(display("a\u{34f}"), "a\\u{34f}");
+    assert_eq!(display("n\u{303}"), "n\u{303}");
+    assert_eq!(display("o\u{301}"), "o\u{301}");
+    assert_eq!(display("a\u{300}\u{301}"), "a\u{300}\u{301}");
+    assert_eq!(display("\u{303}"), "\\u{303}");
+    assert_eq!(display("a\n"), "a\\n");
+    assert_eq!(display("a\""), "a\\\"");
+    assert_eq!(display("👩\u{200d}🔬"), "👩\\u{200d}🔬");
+}
+
+#[test]
 fn inventory_cli_reports_full_bilingual_text_baseline_without_render_claim() {
     let sample = REQUIRED_TEXT_GRAPHEMES
         .iter()
@@ -3676,7 +3689,7 @@ fn large_unicode_glyph_audit_keeps_exact_source_order_and_counts()
         )).collect::<Vec<_>>().join(" ");
         expected.push_str(&format!(
             "\"{}\" [{codes}]: 4 authored strokes\n",
-            key.escape_debug(),
+            escape_report_grapheme(key),
         ));
     }
     expected.push_str("\"¿\" [U+00BF]: missing authored strokes\n");
@@ -3723,7 +3736,7 @@ fn saved_full_unicode_glyph_library_audit_replays_exact_cli_report()
         }).collect::<Vec<_>>().join(" ");
         expected.push_str(&format!(
             "\"{}\" [{codepoints}]: 1024 authored strokes\n",
-            key.escape_debug(),
+            escape_report_grapheme(key),
         ));
     }
     expected.push_str("\"∞\" [U+221E]: missing authored strokes\n");

@@ -1098,6 +1098,23 @@ fn remove_glyph_option(
         .map_err(|error| format!("statistics refused: {error:?}"))
 }
 
+// Keep the admitted Latin decomposed accents readable in exact-grapheme
+// reports across Rust versions. Rust 1.100 began escaping these marks from
+// str::escape_debug; older native reports printed them literally. Other
+// characters retain debug escaping for quotes, controls and format joiners.
+fn escape_report_grapheme(grapheme: &str) -> String {
+    let mut escaped = String::new();
+    for (index, character) in grapheme.chars().enumerate() {
+        if index > 0 && character != '\u{034f}'
+            && matches!(character, '\u{0300}'..='\u{036f}') {
+            escaped.push(character);
+        } else {
+            escaped.extend(character.escape_debug());
+        }
+    }
+    escaped
+}
+
 // Match FlowSource: only one leading UTF-8 BOM is transport metadata.
 // The original source still determines the 4096-byte admission limit.
 fn strip_leading_source_bom(source: &str) -> &str {
@@ -1501,7 +1518,7 @@ fn inventory_handwriting(
         let _written = writeln!(
             descriptions,
             "\"{}\": {} / {} [{codepoints}]",
-            grapheme.escape_debug(),
+            escape_report_grapheme(grapheme),
             if listed {
                 "text-baseline"
             } else {
@@ -1541,7 +1558,7 @@ fn preview_handwriting(
             "Grapheme: \"{}\"\nSeed: {}\nOccurrence: {}\n",
             "Median and exact population moments are not reproduced.\n",
         ),
-        grapheme.escape_debug(),
+        escape_report_grapheme(grapheme),
         profile.seed,
         occurrence,
     );

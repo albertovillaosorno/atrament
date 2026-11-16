@@ -57,6 +57,7 @@ use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 use super::{
     export_integer, is_non_ink_audit_grapheme, strip_leading_source_bom,
     GlyphFallback, GlyphOverlay, GlyphStroke, TextRun, MAX_GLYPH_LIBRARY_BYTES,
+    escape_report_grapheme,
 };
 
 const ADVANCE_UM: u32 = 4_000;
@@ -691,7 +692,7 @@ impl GlyphOverlay {
                 .collect::<Vec<_>>().join(" ");
             let _written = writeln!(
                 details, "\"{}\" [{codepoints}]: {}",
-                grapheme.escape_debug(),
+                escape_report_grapheme(grapheme),
                 if strokes == 0 {
                     String::from("missing authored strokes")
                 } else {
@@ -1610,7 +1611,7 @@ impl GlyphOverlay {
                 "Glyph: \"{}\" [{}]\n",
                 "Strokes: {}\nPaths: {}\nPen lifts: {}\n{}",
             ),
-            grapheme.escape_debug(), codepoints, selected.len(), paths.len(),
+            escape_report_grapheme(grapheme), codepoints, selected.len(), paths.len(),
             paths.len().saturating_sub(1), details,
         ).into_bytes())
     }
@@ -1637,7 +1638,7 @@ impl GlyphOverlay {
                 "Glyph: \"{}\" [{}]\n",
                 "Strokes: {}\n",
             ),
-            grapheme.escape_debug(), codepoints, selected.len(),
+            escape_report_grapheme(grapheme), codepoints, selected.len(),
         );
         for (index, stroke) in selected.into_iter().enumerate() {
             let _written = writeln!(
@@ -3466,7 +3467,7 @@ impl GlyphOverlay {
             {
                 return Err(format!(
                     "fallback target has no authored strokes: \"{}\"",
-                    fallback.authored.escape_debug(),
+                    escape_report_grapheme(&fallback.authored),
                 ));
             }
         }
@@ -4094,7 +4095,7 @@ fn missing_shapes_error(missing: &[&str]) -> String {
             .map(|ch| format!("U+{:04X}", u32::from(ch)))
             .collect::<Vec<_>>().join(" ");
         let _written = write!(
-            message, " \"{}\" [{codepoints}]", grapheme.escape_debug(),
+            message, " \"{}\" [{codepoints}]", escape_report_grapheme(grapheme),
         );
     }
     message
