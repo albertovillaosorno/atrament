@@ -183,6 +183,30 @@ function validateInsertedBridge(stroke: Stroke): void {
     }
 }
 
+// Signed path offsets and sampled bends use their own native UI bounds.
+// Shared admission prevents copy, translation and curve gestures drifting.
+function signedPathOffset(raw: string, maximum: number): number {
+    if (!/^-?[0-9]+$/.test(raw)) {
+        throw new Error("Path offset needs a whole micrometre");
+    }
+    const value = Number(raw);
+    if (!Number.isSafeInteger(value) || Math.abs(value) > maximum) {
+        throw new Error("Path offset outside native bounds");
+    }
+    return value;
+}
+
+function curvedPathBend(raw: string): number {
+    if (!/^-?[0-9]+$/.test(raw)) {
+        throw new Error("Curved bend requires whole micrometres");
+    }
+    const value = Number(raw);
+    if (!Number.isSafeInteger(value) || Math.abs(value) > 600) {
+        throw new Error("Curved bend outside native bounds");
+    }
+    return value;
+}
+
 export function parseGlyphLibrary(text: string): Stroke[] {
     if (new TextEncoder().encode(text).length > MAX_BYTES
         || !text.endsWith("\n") || text.includes("\r")) {
@@ -5045,6 +5069,38 @@ export function createGlyphStrokeEditor(): {
         }
         return value;
     };
+    // Preview and Apply consume the same admitted input snapshot. Neither
+    // mutates accepted strokes before its caller explicitly commits.
+    const heightCandidate = (glyph: string): Stroke[] => {
+        const percent = decimalWhole(heightPercent.value);
+        const baseline = decimalWhole(heightBaseline.value);
+        return scaleGlyphHeight(strokes, glyph, percent, baseline);
+    };
+    const widthCandidate = (glyph: string): Stroke[] => {
+        const percent = decimalWhole(widthPercent.value);
+        const anchor = decimalWhole(widthAnchor.value);
+        return scaleGlyphWidth(strokes, glyph, percent, anchor);
+    };
+    const inkCandidate = (glyph: string): Stroke[] => {
+        const percent = decimalWhole(inkPercent.value);
+        return scaleGlyphInk(strokes, glyph, percent);
+    };
+    const rotationCandidate = (glyph: string): Stroke[] => {
+        const angle = decimalWhole(rotateAngle.value, true);
+        const x = decimalWhole(rotatePivotX.value);
+        const y = decimalWhole(rotatePivotY.value);
+        return rotateGlyphStrokes(strokes, glyph, angle, x, y);
+    };
+    const reflectionCandidate = (glyph: string): Stroke[] => {
+        const axis = reflectAxis.value as "x" | "y";
+        const pivot = decimalWhole(reflectPivot.value);
+        return reflectGlyphStrokes(strokes, glyph, axis, pivot);
+    };
+    const positionCandidate = (glyph: string): Stroke[] => {
+        const dx = decimalWhole(moveX.value, true);
+        const dy = decimalWhole(moveY.value, true);
+        return translateGlyphStrokes(strokes, glyph, dx, dy);
+    };
     // Read the original decimal DOM text before Number() can coerce
     // hexadecimal, exponent, plus-prefixed or whitespace-padded values.
     const starterGeometry = (): [number, number, number, number, string] => [
@@ -5801,9 +5857,7 @@ export function createGlyphStrokeEditor(): {
             if (authored.length > 128) {
                 throw new Error("Preview limited to 128 authored segments");
             }
-            const candidate = scaleGlyphHeight(strokes, target,
-                decimalWhole(heightPercent.value),
-                decimalWhole(heightBaseline.value));
+            const candidate = heightCandidate(target);
             const lines = previewGlyphStrokes(candidate, target);
             heightPreview.replaceChildren(...lines);
             heightPreviewStatus.textContent = `${lines.length} proposed `
@@ -5835,9 +5889,7 @@ export function createGlyphStrokeEditor(): {
             if (authored.length > 128) {
                 throw new Error("Preview limited to 128 authored segments");
             }
-            const candidate = scaleGlyphWidth(strokes, target,
-                decimalWhole(widthPercent.value),
-                decimalWhole(widthAnchor.value));
+            const candidate = widthCandidate(target);
             const lines = previewGlyphStrokes(candidate, target);
             widthPreview.replaceChildren(...lines);
             widthPreviewStatus.textContent = `${lines.length} proposed `
@@ -5868,8 +5920,7 @@ export function createGlyphStrokeEditor(): {
             if (authored.length > 128) {
                 throw new Error("Preview limited to 128 authored segments");
             }
-            const candidate = scaleGlyphInk(strokes, target,
-                decimalWhole(inkPercent.value));
+            const candidate = inkCandidate(target);
             const lines = previewGlyphStrokes(candidate, target);
             inkPreview.replaceChildren(...lines);
             inkPreviewStatus.textContent = `${lines.length} proposed `
@@ -5901,10 +5952,7 @@ export function createGlyphStrokeEditor(): {
             if (authored.length > 128) {
                 throw new Error("Preview limited to 128 authored segments");
             }
-            const candidate = rotateGlyphStrokes(strokes, target,
-                decimalWhole(rotateAngle.value, true),
-                decimalWhole(rotatePivotX.value),
-                decimalWhole(rotatePivotY.value));
+            const candidate = rotationCandidate(target);
             const lines = previewGlyphStrokes(candidate, target);
             rotatePreview.replaceChildren(...lines);
             rotatePreviewStatus.textContent = `${lines.length} proposed `
@@ -5935,9 +5983,7 @@ export function createGlyphStrokeEditor(): {
             if (authored.length > 128) {
                 throw new Error("Preview limited to 128 authored segments");
             }
-            const candidate = reflectGlyphStrokes(strokes, target,
-                reflectAxis.value as "x" | "y",
-                decimalWhole(reflectPivot.value));
+            const candidate = reflectionCandidate(target);
             const lines = previewGlyphStrokes(candidate, target);
             reflectPreview.replaceChildren(...lines);
             reflectPreviewStatus.textContent = `${lines.length} proposed `
@@ -5968,9 +6014,7 @@ export function createGlyphStrokeEditor(): {
             if (authored.length > 128) {
                 throw new Error("Preview limited to 128 authored segments");
             }
-            const candidate = translateGlyphStrokes(strokes, target,
-                decimalWhole(moveX.value, true),
-                decimalWhole(moveY.value, true));
+            const candidate = positionCandidate(target);
             const lines = previewGlyphStrokes(candidate, target);
             movePreview.replaceChildren(...lines);
             movePreviewStatus.textContent = `${lines.length} proposed `
@@ -6479,6 +6523,14 @@ export function createGlyphStrokeEditor(): {
             choose(selection);
         }
     };
+    // All selected-path operations commit both the new ink and its row
+    // selection as one undoable edit; never accidentally drop the selection.
+    const commitPathEdit = (
+        changed: { strokes: Stroke[]; selectedIndex: number },
+        glyph: string, kind: EditKind,
+    ): void => {
+        commitInkEdit(changed.strokes, glyph, kind, changed.selectedIndex);
+    };
     const applyGlyphTransform = (
         next: Stroke[], target: string, kind: TransformKind,
     ): void => commitInkEdit(next, target, kind, null);
@@ -6515,9 +6567,7 @@ export function createGlyphStrokeEditor(): {
                 throw new Error("Choose a height percent and baseline");
             }
             const target = character.value;
-            const next = scaleGlyphHeight(strokes, target,
-                decimalWhole(heightPercent.value),
-                decimalWhole(heightBaseline.value));
+            const next = heightCandidate(target);
             applyGlyphTransform(next, target, "height");
             message(`Resized all authored ${target} height; unsaved`);
         } catch (error) {
@@ -6534,9 +6584,7 @@ export function createGlyphStrokeEditor(): {
                 throw new Error("Choose a width percent and anchor");
             }
             const target = character.value;
-            const next = scaleGlyphWidth(strokes, target,
-                decimalWhole(widthPercent.value),
-                decimalWhole(widthAnchor.value));
+            const next = widthCandidate(target);
             applyGlyphTransform(next, target, "width");
             message(`Resized all authored ${target} width; unsaved`);
         } catch (error) {
@@ -6554,10 +6602,7 @@ export function createGlyphStrokeEditor(): {
                 throw new Error("Choose angle and both rotation pivots");
             }
             const target = character.value;
-            const next = rotateGlyphStrokes(strokes, target,
-                decimalWhole(rotateAngle.value, true),
-                decimalWhole(rotatePivotX.value),
-                decimalWhole(rotatePivotY.value));
+            const next = rotationCandidate(target);
             applyGlyphTransform(next, target, "rotation");
             message(`Rotated all authored ${target} strokes; unsaved`);
         } catch (error) {
@@ -6574,9 +6619,7 @@ export function createGlyphStrokeEditor(): {
                 throw new Error("Choose a reflection pivot");
             }
             const target = character.value;
-            const next = reflectGlyphStrokes(strokes, target,
-                reflectAxis.value as "x" | "y",
-                decimalWhole(reflectPivot.value));
+            const next = reflectionCandidate(target);
             applyGlyphTransform(next, target, "reflection");
             message(`Reflected all authored ${target} strokes; unsaved`);
         } catch (error) {
@@ -6593,9 +6636,7 @@ export function createGlyphStrokeEditor(): {
                 throw new Error("Choose horizontal and vertical offsets");
             }
             const target = character.value;
-            const next = translateGlyphStrokes(strokes, target,
-                decimalWhole(moveX.value, true),
-                decimalWhole(moveY.value, true));
+            const next = positionCandidate(target);
             applyGlyphTransform(next, target, "move");
             message(`Moved all authored ${target} strokes; unsaved`);
         } catch (error) {
@@ -6612,8 +6653,7 @@ export function createGlyphStrokeEditor(): {
                 throw new Error("Choose an ink percent");
             }
             const target = character.value;
-            const next = scaleGlyphInk(strokes, target,
-                decimalWhole(inkPercent.value));
+            const next = inkCandidate(target);
             applyGlyphTransform(next, target, "ink");
             message(`Resized all authored ${target} pen thickness; unsaved`);
         } catch (error) {
@@ -7135,8 +7175,7 @@ export function createGlyphStrokeEditor(): {
             const glyph = character.value;
             const changed = reverseCandidatePath(strokes, glyph, selectedIndex);
             encodeGlyphLibrary(changed.strokes);
-            commitInkEdit(changed.strokes, glyph, "pen path direction",
-                changed.selectedIndex);
+            commitPathEdit(changed, glyph, "pen path direction");
             message("Reversed selected continuous pen path; unsaved");
         } catch (error) {
             message(String(error));
@@ -7148,8 +7187,7 @@ export function createGlyphStrokeEditor(): {
             const changed = rotateClosedCandidatePath(
                 strokes, character.value, selectedIndex,
             );
-            commitInkEdit(changed.strokes, character.value,
-                "pen path start", changed.selectedIndex);
+            commitPathEdit(changed, character.value, "pen path start");
             message("Changed closed pen loop starting stroke; unsaved");
         } catch (error) {
             message(String(error));
@@ -7160,8 +7198,7 @@ export function createGlyphStrokeEditor(): {
         try {
             const glyph = character.value;
             const changed = closeCandidatePath(strokes, glyph, selectedIndex);
-            commitInkEdit(changed.strokes, glyph, "pen path closure",
-                changed.selectedIndex);
+            commitPathEdit(changed, glyph, "pen path closure");
             message("Closed selected pen path with a short bridge; unsaved");
         } catch (error) {
             message(String(error));
@@ -7171,22 +7208,12 @@ export function createGlyphStrokeEditor(): {
         if (!active || selectedIndex === null || drawing !== null) return;
         try {
             const glyph = character.value;
-            const bend = (raw: string): number => {
-                if (!/^-?[0-9]+$/.test(raw)) {
-                    throw new Error("Curved bend requires whole micrometres");
-                }
-                const value = Number(raw);
-                if (!Number.isSafeInteger(value) || Math.abs(value) > 600) {
-                    throw new Error("Curved bend outside native bounds");
-                }
-                return value;
-            };
             const changed = closeCandidatePathCurved(
                 strokes, glyph, selectedIndex,
-                bend(curvedBendX.value), bend(curvedBendY.value),
+                curvedPathBend(curvedBendX.value),
+                curvedPathBend(curvedBendY.value),
             );
-            commitInkEdit(changed.strokes, glyph,
-                "curved pen path closure", changed.selectedIndex);
+            commitPathEdit(changed, glyph, "curved pen path closure");
             message("Closed selected pen path with four curved segments;"
                 + " unsaved");
         } catch (error) {
@@ -7199,8 +7226,7 @@ export function createGlyphStrokeEditor(): {
             const glyph = character.value;
             const changed = joinNextCandidatePath(
                 strokes, glyph, selectedIndex);
-            commitInkEdit(changed.strokes, glyph, "pen path join",
-                changed.selectedIndex);
+            commitPathEdit(changed, glyph, "pen path join");
             message("Joined neighboring same-pen paths; unsaved");
         } catch (error) {
             message(String(error));
@@ -7210,22 +7236,12 @@ export function createGlyphStrokeEditor(): {
         if (!active || selectedIndex === null || drawing !== null) return;
         try {
             const glyph = character.value;
-            const bend = (raw: string): number => {
-                if (!/^-?[0-9]+$/.test(raw)) {
-                    throw new Error("Curved bend requires whole micrometres");
-                }
-                const value = Number(raw);
-                if (!Number.isSafeInteger(value) || Math.abs(value) > 600) {
-                    throw new Error("Curved bend outside native bounds");
-                }
-                return value;
-            };
             const changed = joinNextCandidatePathCurved(
                 strokes, glyph, selectedIndex,
-                bend(curvedBendX.value), bend(curvedBendY.value),
+                curvedPathBend(curvedBendX.value),
+                curvedPathBend(curvedBendY.value),
             );
-            commitInkEdit(changed.strokes, glyph, "curved pen path join",
-                changed.selectedIndex);
+            commitPathEdit(changed, glyph, "curved pen path join");
             message("Joined neighboring pen paths with four curved segments;"
                 + " unsaved");
         } catch (error) {
@@ -7253,20 +7269,9 @@ export function createGlyphStrokeEditor(): {
         try {
             const glyph = character.value;
             const target = pathCopyTarget.value;
-            const signed = (raw: string, maximum: number): number => {
-                if (!/^-?[0-9]+$/.test(raw)) {
-                    throw new Error("Path offset needs a whole micrometre");
-                }
-                const value = Number(raw);
-                if (!Number.isSafeInteger(value)
-                    || Math.abs(value) > maximum) {
-                    throw new Error("Path offset outside native bounds");
-                }
-                return value;
-            };
             const next = copyShiftedCandidatePath(strokes, glyph,
-                selectedIndex, target, signed(pathDx.value, 3500),
-                signed(pathDy.value, 4500));
+                selectedIndex, target, signedPathOffset(pathDx.value, 3500),
+                signedPathOffset(pathDy.value, 4500));
             const added = next.length - strokes.length;
             commitInkEdit(next, glyph, "pen path shifted copy", selectedIndex);
             message(`Copied ${added} shifted path strokes to `
@@ -7295,8 +7300,7 @@ export function createGlyphStrokeEditor(): {
                 strokes, character.value, selectedIndex,
                 decimalWhole(numeric.width.value), color.value,
             );
-            commitInkEdit(changed.strokes, character.value,
-                "pen path pen style", changed.selectedIndex);
+            commitPathEdit(changed, character.value, "pen path pen style");
             message("Restyled selected continuous pen path; unsaved");
         } catch (error) {
             message(String(error));
@@ -7305,23 +7309,12 @@ export function createGlyphStrokeEditor(): {
     translatePath.addEventListener("click", () => {
         if (!active || selectedIndex === null) return;
         try {
-            const signed = (raw: string, maximum: number): number => {
-                if (!/^-?[0-9]+$/.test(raw)) {
-                    throw new Error("Path offset needs a whole micrometre");
-                }
-                const value = Number(raw);
-                if (!Number.isSafeInteger(value)
-                    || Math.abs(value) > maximum) {
-                    throw new Error("Path offset outside native bounds");
-                }
-                return value;
-            };
             const changed = translateCandidatePath(
                 strokes, character.value, selectedIndex,
-                signed(pathDx.value, 3500), signed(pathDy.value, 4500),
+                signedPathOffset(pathDx.value, 3500),
+                signedPathOffset(pathDy.value, 4500),
             );
-            commitInkEdit(changed.strokes, character.value,
-                "pen path move", changed.selectedIndex);
+            commitPathEdit(changed, character.value, "pen path move");
             message("Translated selected continuous pen path; unsaved");
         } catch (error) {
             message(String(error));
@@ -7336,8 +7329,7 @@ export function createGlyphStrokeEditor(): {
                 decimalWhole(pathRotatePivotX.value),
                 decimalWhole(pathRotatePivotY.value),
             );
-            commitInkEdit(changed.strokes, character.value,
-                "pen path rotation", changed.selectedIndex);
+            commitPathEdit(changed, character.value, "pen path rotation");
             message("Rotated selected continuous pen path; unsaved");
         } catch (error) {
             message(String(error));
@@ -7351,8 +7343,7 @@ export function createGlyphStrokeEditor(): {
                 decimalWhole(pathShearDegrees.value, true),
                 decimalWhole(pathShearBaseline.value),
             );
-            commitInkEdit(changed.strokes, character.value,
-                "pen path slant", changed.selectedIndex);
+            commitPathEdit(changed, character.value, "pen path slant");
             message("Slanted selected continuous pen path; unsaved");
         } catch (error) {
             message(String(error));
@@ -7366,8 +7357,7 @@ export function createGlyphStrokeEditor(): {
                 pathReflectAxis.value as "x" | "y",
                 decimalWhole(pathReflectPivot.value),
             );
-            commitInkEdit(changed.strokes, character.value,
-                "pen path reflection", changed.selectedIndex);
+            commitPathEdit(changed, character.value, "pen path reflection");
             message("Reflected selected continuous pen path; unsaved");
         } catch (error) {
             message(String(error));
@@ -7380,8 +7370,7 @@ export function createGlyphStrokeEditor(): {
                 strokes, character.value, selectedIndex,
                 decimalWhole(pathScaleX.value), decimalWhole(pathScaleY.value),
             );
-            commitInkEdit(changed.strokes, character.value,
-                "pen path scale", changed.selectedIndex);
+            commitPathEdit(changed, character.value, "pen path scale");
             message("Scaled selected continuous pen path; unsaved");
         } catch (error) {
             message(String(error));
@@ -7396,8 +7385,7 @@ export function createGlyphStrokeEditor(): {
                 strokes, glyph, index, direction,
             );
             encodeGlyphLibrary(changed.strokes);
-            commitInkEdit(changed.strokes, glyph, "pen path order",
-                changed.selectedIndex);
+            commitPathEdit(changed, glyph, "pen path order");
             message("Reordered selected continuous pen path; unsaved");
         } catch (error) {
             message(String(error));
