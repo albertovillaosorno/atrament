@@ -1,5 +1,5 @@
 // Copyright:
-//   - Copyright © 2026 Alberto Villa Osorno.
+//   - Copyright \u{a9} 2026 Alberto Villa Osorno.
 // SPDX-License-Identifier:
 //   - MIT
 // Confidential:
@@ -56,11 +56,11 @@ fn values_for(category: EnglishSpanishGraphemeCategory) -> Vec<&'static str> {
 #[test]
 fn inventory_has_exact_category_sizes_and_no_duplicate_spellings() {
     let mut unique = BTreeSet::new();
-    let mut basic_letters = 0_usize;
-    let mut numerals = 0_usize;
-    let mut punctuation = 0_usize;
-    let mut decomposed = 0_usize;
-    let mut precomposed = 0_usize;
+    let mut basic_letters = 0usize;
+    let mut numerals = 0usize;
+    let mut punctuation = 0usize;
+    let mut decomposed = 0usize;
+    let mut precomposed = 0usize;
 
     for required in REQUIRED_TEXT_GRAPHEMES {
         assert!(
@@ -100,8 +100,8 @@ fn basic_latin_letters_are_complete_in_uppercase_then_lowercase() {
         .map(|character| character.to_string())
         .collect::<Vec<_>>();
     assert_eq!(letters.len(), expected.len());
-    for (actual, expected) in letters.iter().zip(expected.iter()) {
-        assert_eq!(*actual, expected);
+    for (actual, expected_letter) in letters.iter().zip(expected.iter()) {
+        assert_eq!(*actual, expected_letter);
     }
 }
 
@@ -111,8 +111,11 @@ fn spanish_precomposed_and_decomposed_forms_are_both_exact_requirements() {
     let decomposed = values_for(SpanishDecomposedEquivalent);
     assert_eq!(
         precomposed,
-        "ÁÉÍÑÓÚÜáéíñóúü"
-            .chars()
+        concat!(
+            "\u{c1}\u{c9}\u{cd}\u{d1}\u{d3}\u{da}\u{dc}",
+            "\u{e1}\u{e9}\u{ed}\u{f1}\u{f3}\u{fa}\u{fc}",
+        )
+        .chars()
             .map(|character| character.to_string())
             .collect::<Vec<_>>(),
     );
@@ -135,9 +138,11 @@ fn spanish_precomposed_and_decomposed_forms_are_both_exact_requirements() {
             concat!("u", "\u{308}"),
         ],
     );
-    for (normalized, decomposed) in precomposed.iter().zip(decomposed.iter()) {
-        assert_ne!(normalized, decomposed);
-        assert!(decomposed.chars().count() > 1);
+    for (normalized, decomposed_form) in
+        precomposed.iter().zip(decomposed.iter())
+    {
+        assert_ne!(normalized, decomposed_form);
+        assert!(decomposed_form.chars().count() > 1);
     }
 }
 
@@ -152,8 +157,12 @@ fn numerals_and_named_language_punctuation_remain_explicit() {
     );
     assert_eq!(
         values_for(Punctuation),
-        ".,;:?!¿¡\"'“”‘’«»…–—-()[]"
-            .chars()
+        concat!(
+            ".,;:?!\u{bf}\u{a1}\"'",
+            "\u{201c}\u{201d}\u{2018}\u{2019}\u{ab}\u{bb}",
+            "\u{2026}\u{2013}\u{2014}-()[]",
+        )
+        .chars()
             .map(|character| character.to_string())
             .collect::<Vec<_>>(),
     );
@@ -165,7 +174,9 @@ fn mathematical_symbols_are_not_redefined_by_language_inventory() {
         .iter()
         .map(|entry| entry.grapheme)
         .collect::<BTreeSet<_>>();
-    for mathematical in ["∫", "√", "≤", "α", "∞"] {
+    for mathematical in [
+        "\u{222b}", "\u{221a}", "\u{2264}", "\u{3b1}", "\u{221e}",
+    ] {
         assert!(
             !required.contains(mathematical),
             "mathematical authority leaked into textual inventory: \
@@ -177,7 +188,7 @@ fn mathematical_symbols_are_not_redefined_by_language_inventory() {
 #[test]
 fn required_graphemes_are_nonempty_and_never_whitespace_only() {
     for required in REQUIRED_TEXT_GRAPHEMES {
-        assert!(!required.grapheme.is_empty());
+        assert_ne!(required.grapheme, "");
         assert!(
             required
                 .grapheme
