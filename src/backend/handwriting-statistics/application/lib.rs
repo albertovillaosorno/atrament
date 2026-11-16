@@ -44,6 +44,11 @@ pub use preview::preview_value;
 
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 
+// Integration tests require the concrete Unicode boundary fixture; library
+// tests keep its dev-dependency visible to the strict unused-crate lint.
+#[cfg(test)]
+use atrament_unicode_grapheme_segmentation as _;
+
 /// Version of this manual statistical profile, separate from `.atrament` ZIP.
 pub const STATISTICS_PROFILE_VERSION: &str =
     "atrament.handwriting.statistics.v1";

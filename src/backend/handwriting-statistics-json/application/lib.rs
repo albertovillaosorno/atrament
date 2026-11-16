@@ -48,6 +48,11 @@ use atrament_profile_json_syntax::{
 };
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 
+// Integration tests require the concrete Unicode boundary fixture; library
+// tests keep its dev-dependency visible to the strict unused-crate lint.
+#[cfg(test)]
+use atrament_unicode_grapheme_segmentation as _;
+
 /// Maximum bytes in an independently editable handwriting JSON file.
 pub const MAXIMUM_STATISTICS_JSON_BYTES: usize = 1_048_576;
 
