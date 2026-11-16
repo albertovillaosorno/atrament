@@ -488,7 +488,7 @@ fn manifest_only_archive_admits_zero_byte_budget_without_payload_leak() {
         &mut names,
     ).expect("a zero-entry declaration consumes no payload budget");
     assert_eq!(verified.verified_entry_count(), 0);
-    assert!(verified.manifest().entries.is_empty());
+    assert_eq!(verified.manifest().entries.len(), 0);
     assert_eq!(verified.verified_entry_bytes("manifest.json"), None);
     assert_eq!(verified.verified_entry_bytes(MEMBER), None);
     assert_eq!(names, ["manifest.json", "untouched"]);
