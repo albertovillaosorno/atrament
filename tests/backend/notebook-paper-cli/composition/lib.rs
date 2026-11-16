@@ -41,6 +41,8 @@
 use super::*;
 use crate::cli::{execute, parse_options, read_profile};
 use std::env;
+use std::process;
+use std::slice::from_ref;
 
 #[test]
 fn grid_page_contains_physical_media_box_and_vector_marks() {
@@ -375,10 +377,10 @@ fn paper_profile_preflights_later_options_before_selected_source_io() {
     let error = parse_options(&["--profile", ""].map(str::to_owned))
         .expect_err("empty selected profile path refuses in preflight");
     assert!(error.contains("--profile requires one explicit file path"));
-    let error = parse_options(&["--profile", nonexistent, "--help"]
-        .map(str::to_owned))
-        .expect_err("mixed help refuses before a selected source read");
-    assert!(error.contains("--help must be the only argument"));
+    let mixed_help_error = parse_options(
+        &["--profile", nonexistent, "--help"].map(str::to_owned),
+    ).expect_err("mixed help refuses before a selected source read");
+    assert!(mixed_help_error.contains("--help must be the only argument"));
 }
 
 #[test]
@@ -864,32 +866,33 @@ fn assert_png_checksums(bytes: &[u8]) {
     let mut chunk_types = Vec::new();
     let mut raw = Vec::new();
     while offset < bytes.len() {
-        let length = u32::from_be_bytes(
-            bytes.get(offset..offset + 4).expect("PNG chunk length")
+        let chunk_length = u32::from_be_bytes(
+            bytes.get(offset..offset.saturating_add(4))
+                .expect("PNG chunk length")
                 .try_into().expect("four bytes"),
         );
-        let length = usize::try_from(length).expect("bounded PNG chunk");
-        let tag = bytes.get(offset + 4..offset + 8)
+        let length = usize::try_from(chunk_length).expect("bounded PNG chunk");
+        let tag = bytes.get(offset.saturating_add(4)..offset.saturating_add(8))
             .expect("PNG chunk tag");
-        let end = offset.checked_add(8 + length).expect("chunk limit");
-        let content = bytes.get(offset + 4..end)
+        let end = offset.checked_add(length.saturating_add(8)).expect("limit");
+        let content = bytes.get(offset.saturating_add(4)..end)
             .expect("complete chunk data");
         let recorded_crc = u32::from_be_bytes(
-            bytes.get(end..end + 4).expect("PNG chunk CRC")
+            bytes.get(end..end.saturating_add(4)).expect("PNG chunk CRC")
                 .try_into().expect("four bytes"),
         );
         let mut crc = !0u32;
         for byte in content {
             crc ^= u32::from(*byte);
-            for _ in 0..8 {
-                crc = (crc >> 1) ^ (0xedb8_8320u32 &
+            for _ in 0u8..8 {
+                crc = (crc >> 1u32) ^ (0xedb8_8320u32 &
                     0u32.wrapping_sub(crc & 1));
             }
         }
-        assert_eq!(!crc, recorded_crc, "PNG {:?} CRC", tag);
+        assert_eq!(!crc, recorded_crc, "PNG {tag:?} CRC");
         chunk_types.push(tag.to_vec());
         if tag == b"IDAT" {
-            let stream = bytes.get(offset + 8..end)
+            let stream = bytes.get(offset.saturating_add(8)..end)
                 .expect("complete zlib stream");
             assert_eq!(stream.get(..2), Some(&[0x78, 0x01][..]));
             let mut position = 2usize;
@@ -897,19 +900,22 @@ fn assert_png_checksums(bytes: &[u8]) {
                 let header = *stream.get(position)
                     .expect("stored DEFLATE block header");
                 assert_eq!(header & !1u8, 0, "stored block only");
-                let length = u16::from_le_bytes(
-                    stream.get(position + 1..position + 3)
+                let block_length = u16::from_le_bytes(
+                    stream.get(position.saturating_add(1)..
+                        position.saturating_add(3))
                         .expect("block length").try_into()
                         .expect("two bytes"),
                 );
                 let complement = u16::from_le_bytes(
-                    stream.get(position + 3..position + 5)
+                    stream.get(position.saturating_add(3)..
+                        position.saturating_add(5))
                         .expect("block complement").try_into()
                         .expect("two bytes"),
                 );
-                assert_eq!(complement, !length, "stored block length");
-                position += 5;
-                let block_end = position + usize::from(length);
+                assert_eq!(complement, !block_length, "stored block length");
+                position = position.saturating_add(5);
+                let block_end = position
+                    .saturating_add(usize::from(block_length));
                 raw.extend_from_slice(stream.get(position..block_end)
                     .expect("whole stored block"));
                 position = block_end;
@@ -918,34 +924,42 @@ fn assert_png_checksums(bytes: &[u8]) {
                 }
             }
             let recorded_adler = u32::from_be_bytes(
-                stream.get(position..position + 4)
+                stream.get(position..position.saturating_add(4))
                     .expect("zlib Adler checksum").try_into()
                     .expect("four bytes"),
             );
-            assert_eq!(position + 4, stream.len(), "zlib stream boundary");
-            let (mut a, mut b) = (1u32, 0u32);
+            assert_eq!(position.saturating_add(4), stream.len(),
+                "zlib stream boundary");
+            let (mut adler_low, mut adler_high) = (1u32, 0u32);
             for chunk in raw.chunks(2_000) {
                 for value in chunk {
-                    a += u32::from(*value);
-                    b += a;
+                    adler_low = adler_low.checked_add(u32::from(*value))
+                        .expect("bounded independent Adler sum");
+                    adler_high = adler_high.checked_add(adler_low)
+                        .expect("bounded independent Adler accumulator");
                 }
-                a %= 65_521;
-                b %= 65_521;
+                adler_low = adler_low.checked_rem(65_521)
+                    .expect("nonzero Adler divisor");
+                adler_high = adler_high.checked_rem(65_521)
+                    .expect("nonzero Adler divisor");
             }
-            assert_eq!((b << 16) | a, recorded_adler,
+            assert_eq!((adler_high << 16u32) | adler_low, recorded_adler,
                 "independent zlib Adler checksum");
         }
-        offset = end + 4;
+        offset = end.saturating_add(4);
     }
     assert_eq!(offset, bytes.len(), "no trailing PNG bytes");
     assert_eq!(chunk_types, [b"IHDR", b"pHYs", b"IDAT", b"IEND"]);
     let width = usize::try_from(u32::from_be_bytes(
-        bytes[16..20].try_into().expect("width"),
+        bytes.get(16..20).expect("admitted PNG width")
+            .try_into().expect("width"),
     )).expect("bounded width");
     let height = usize::try_from(u32::from_be_bytes(
-        bytes[20..24].try_into().expect("height"),
+        bytes.get(20..24).expect("admitted PNG height")
+            .try_into().expect("height"),
     )).expect("bounded height");
-    assert_eq!(raw.len(), (4 * width + 1) * height,
+    assert_eq!(raw.len(), 4usize.saturating_mul(width).saturating_add(1)
+            .saturating_mul(height),
         "decoded stored bytes match full RGBA scanlines");
 }
 
@@ -1315,7 +1329,7 @@ fn png_export_flags_and_resource_limits_fail_closed() {
         vec!["--format", "png", "--dpi", "x"],
         vec!["--format", "png", "--dpi", "+150"],
         vec!["--format", "png", "--dpi", "-150"],
-        vec!["--format", "png", "--dpi", "１５０"],
+        vec!["--format", "png", "--dpi", "\u{ff11}\u{ff15}\u{ff10}"],
         vec!["--dpi", "150"],
         vec!["--format", "png", "--pages", "1"],
         vec!["--format", "png", "--emit-profile"],
@@ -2265,6 +2279,21 @@ fn paper_margin_clearance_matches_pdf_at_both_png_dpi_extremes() {
 // each axis is scaled by 2 * DPI, so a pixel center has coordinate
 // (2 * pixel + 1) * 25_400 and each authored endpoint is integral. The
 // half-pixel antialiasing allowance is integral at the same scale.
+fn oracle_mul(lhs: i128, rhs: i128) -> i128 {
+    lhs.checked_mul(rhs)
+        .expect("bounded independent 128-bit pen geometry")
+}
+
+fn oracle_add(lhs: i128, rhs: i128) -> i128 {
+    lhs.checked_add(rhs)
+        .expect("bounded independent 128-bit pen geometry")
+}
+
+fn oracle_sub(lhs: i128, rhs: i128) -> i128 {
+    lhs.checked_sub(rhs)
+        .expect("bounded independent 128-bit pen geometry")
+}
+
 fn integer_pen_pixel_covers(
     x: usize,
     y: usize,
@@ -2273,50 +2302,130 @@ fn integer_pen_pixel_covers(
     end: PdfPoint,
     width_um: u32,
 ) -> bool {
-    let scale = i128::from(dpi) * 2;
+    let scale = oracle_mul(i128::from(dpi), 2);
     let (px, py) = (
-        (i128::try_from(x).expect("bounded pixel x") * 2 + 1) * 25_400,
-        (i128::try_from(y).expect("bounded pixel y") * 2 + 1) * 25_400,
+        oracle_mul(oracle_add(
+            oracle_mul(i128::try_from(x).expect("bounded pixel x"), 2), 1,
+        ), 25_400),
+        oracle_mul(oracle_add(
+            oracle_mul(i128::try_from(y).expect("bounded pixel y"), 2), 1,
+        ), 25_400),
     );
     let (ax, ay) = (
-        i128::from(start.x_um) * scale,
-        i128::from(start.y_um) * scale,
+        oracle_mul(i128::from(start.x_um), scale),
+        oracle_mul(i128::from(start.y_um), scale),
     );
     let (dx, dy) = (
-        (i128::from(end.x_um) - i128::from(start.x_um)) * scale,
-        (i128::from(end.y_um) - i128::from(start.y_um)) * scale,
+        oracle_mul(oracle_sub(
+            i128::from(end.x_um), i128::from(start.x_um),
+        ), scale),
+        oracle_mul(oracle_sub(
+            i128::from(end.y_um), i128::from(start.y_um),
+        ), scale),
     );
-    let (from_x, from_y) = (px - ax, py - ay);
-    let length_squared = dx * dx + dy * dy;
+    let (from_x, from_y) = (oracle_sub(px, ax), oracle_sub(py, ay));
+    let length_squared = oracle_add(oracle_mul(dx, dx), oracle_mul(dy, dy));
     assert!(length_squared > 0, "oracle requires directed pen length");
-    let projection = from_x * dx + from_y * dy;
-    let threshold = i128::from(width_um) * i128::from(dpi) + 25_400;
-    let threshold_squared = threshold * threshold;
+    let projection = oracle_add(oracle_mul(from_x, dx), oracle_mul(from_y, dy));
+    let threshold = oracle_add(oracle_mul(
+        i128::from(width_um), i128::from(dpi),
+    ), 25_400);
+    let threshold_squared = oracle_mul(threshold, threshold);
     if projection <= 0 {
-        from_x * from_x + from_y * from_y <= threshold_squared
+        oracle_add(
+            oracle_mul(from_x, from_x), oracle_mul(from_y, from_y),
+        ) <= threshold_squared
     } else if projection >= length_squared {
-        let (to_x, to_y) = (from_x - dx, from_y - dy);
-        to_x * to_x + to_y * to_y <= threshold_squared
+        let (to_x, to_y) = (oracle_sub(from_x, dx), oracle_sub(from_y, dy));
+        oracle_add(oracle_mul(to_x, to_x), oracle_mul(to_y, to_y))
+            <= threshold_squared
     } else {
-        let cross = from_x * dy - from_y * dx;
-        cross * cross <= threshold_squared * length_squared
+        let cross = oracle_sub(oracle_mul(from_x, dy), oracle_mul(from_y, dx));
+        oracle_mul(cross, cross)
+            <= oracle_mul(threshold_squared, length_squared)
+    }
+}
+
+fn verify_integer_pen_pixel_samples(
+    segments: &[(PdfPoint, PdfPoint)], color: PdfRgb,
+) {
+    const SHEET_UM: u32 = 24_000;
+    let pen_widths = [80u32, 125, 250, 700, 1_500];
+    for dpi in [72, 150, 300] {
+        for (index, (start, end)) in segments.iter().enumerate() {
+            let width_um = *pen_widths.get(index.checked_rem(pen_widths.len())
+                .expect("nonempty pen widths"))
+                .expect("known cycle index");
+            let pen = PdfVectorPath {
+                commands: vec![
+                    PdfPathCommand::MoveTo(*start),
+                    PdfPathCommand::LineTo(*end),
+                ],
+                paint: PdfPathPaint::Stroke { color, width_um },
+            };
+            let png =
+                png::render_paper_png(SHEET_UM, SHEET_UM, dpi, &[pen], 0, None)
+                    .expect("physical round-capped PNG must render");
+            let (width, height, raw) = stored_png_pixels(&png);
+            assert_eq!(
+                width,
+                usize::try_from(
+                    u64::from(SHEET_UM)
+                        .saturating_mul(u64::from(dpi)).div_ceil(25_400)
+                )
+                .expect("bounded PNG width")
+            );
+            assert_eq!(width, height);
+            let row_bytes = width.saturating_mul(4).saturating_add(1);
+            let mut ink_count = 0usize;
+            for y in 0..height {
+                assert_eq!(*raw.get(y.saturating_mul(row_bytes))
+                    .expect("bounded PNG row header"), 0, "unfiltered PNG row");
+                for x in 0..width {
+                    let offset = y.saturating_mul(row_bytes)
+                        .saturating_add(1)
+                        .saturating_add(x.saturating_mul(4));
+                    let actual = raw.get(offset..offset.saturating_add(4))
+                        .expect("bounded PNG RGBA pixel");
+                    let covers = integer_pen_pixel_covers(
+                        x, y, dpi, *start, *end, width_um,
+                    );
+                    let expected = if covers {
+                        ink_count = ink_count.saturating_add(1);
+                        [color.red, color.green, color.blue, 255]
+                    } else {
+                        [0, 0, 0, 0]
+                    };
+                    assert_eq!(
+                        actual, expected,
+                        "{dpi} DPI case {index} pixel ({x},{y}), \
+                         width {width_um}, {start:?} to {end:?}"
+                    );
+                }
+            }
+            if index < 6 {
+                assert!(
+                    ink_count > 0,
+                    "extended pen must paint in {dpi} DPI case {index}"
+                );
+            }
+        }
     }
 }
 
 #[test]
 fn authored_round_pen_pixels_match_independent_integer_geometry_oracle() {
-    const SHEET_UM: u32 = 24_000;
     let color = PdfRgb {
         red: 19,
         green: 107,
         blue: 233,
     };
-    let mut seed = 0x943a_f872_70c9_7e51u64;
+    let mut random_seed = 0x943a_f872_70c9_7e51u64;
     let random = |seed: &mut u64| -> u32 {
         *seed = seed
             .wrapping_mul(6_364_136_223_846_793_005)
             .wrapping_add(1_442_695_040_888_963_407);
-        u32::try_from(*seed >> 32).expect("high word fits in u32")
+        u32::try_from(*seed >> 32u32).expect("high word fits in u32")
     };
     let mut segments = vec![
         (PdfPoint { x_um: 3_000, y_um: 3_000 }, PdfPoint {
@@ -2360,87 +2469,42 @@ fn authored_round_pen_pixels_match_independent_integer_geometry_oracle() {
             },
         ),
     ];
-    for _ in 0..65 {
+    for _ in 0u8..65 {
         let start = PdfPoint {
-            x_um: i32::try_from(2_000 + random(&mut seed) % 20_000)
+            x_um: i32::try_from(2_000u32.saturating_add(
+                random(&mut random_seed).checked_rem(20_000)
+                    .expect("nonzero bound")))
                 .expect("bounded x"),
-            y_um: i32::try_from(2_000 + random(&mut seed) % 20_000)
+            y_um: i32::try_from(2_000u32.saturating_add(
+                random(&mut random_seed).checked_rem(20_000)
+                    .expect("nonzero bound")))
                 .expect("bounded y"),
         };
         let mut end = PdfPoint {
-            x_um: i32::try_from(2_000 + random(&mut seed) % 20_000)
+            x_um: i32::try_from(2_000u32.saturating_add(
+                random(&mut random_seed).checked_rem(20_000)
+                    .expect("nonzero bound")))
                 .expect("bounded x"),
-            y_um: i32::try_from(2_000 + random(&mut seed) % 20_000)
+            y_um: i32::try_from(2_000u32.saturating_add(
+                random(&mut random_seed).checked_rem(20_000)
+                    .expect("nonzero bound")))
                 .expect("bounded y"),
         };
         if end == start {
-            end.x_um += 1;
+            end.x_um = end.x_um.saturating_add(1);
         }
         segments.push((start, end));
     }
-    let pen_widths = [80, 125, 250, 700, 1_500];
-    for dpi in [72, 150, 300] {
-        for (index, (start, end)) in segments.iter().enumerate() {
-            let width_um = pen_widths[index % pen_widths.len()];
-            let pen = PdfVectorPath {
-                commands: vec![
-                    PdfPathCommand::MoveTo(*start),
-                    PdfPathCommand::LineTo(*end),
-                ],
-                paint: PdfPathPaint::Stroke { color, width_um },
-            };
-            let png =
-                png::render_paper_png(SHEET_UM, SHEET_UM, dpi, &[pen], 0, None)
-                    .expect("physical round-capped PNG must render");
-            let (width, height, raw) = stored_png_pixels(&png);
-            assert_eq!(
-                width,
-                usize::try_from(
-                    (u64::from(SHEET_UM) * u64::from(dpi)).div_ceil(25_400)
-                )
-                .expect("bounded PNG width")
-            );
-            assert_eq!(width, height);
-            let row_bytes = width * 4 + 1;
-            let mut ink_count = 0usize;
-            for y in 0..height {
-                assert_eq!(raw[y * row_bytes], 0, "unfiltered PNG row");
-                for x in 0..width {
-                    let offset = y * row_bytes + 1 + x * 4;
-                    let actual = &raw[offset..offset + 4];
-                    let covers = integer_pen_pixel_covers(
-                        x, y, dpi, *start, *end, width_um,
-                    );
-                    let expected = if covers {
-                        ink_count += 1;
-                        [color.red, color.green, color.blue, 255]
-                    } else {
-                        [0, 0, 0, 0]
-                    };
-                    assert_eq!(
-                        actual, expected,
-                        "{dpi} DPI case {index} pixel ({x},{y}), \
-                         width {width_um}, {start:?} to {end:?}"
-                    );
-                }
-            }
-            if index < 6 {
-                assert!(
-                    ink_count > 0,
-                    "extended pen must paint in {dpi} DPI case {index}"
-                );
-            }
-        }
-    }
+    verify_integer_pen_pixel_samples(&segments, color);
 }
 
-// Use independent integer PDF millipoints here, rather than consulting the
-// exported stroke-clearance predicate, so this also catches an accidental
-// weakening of PNG admission when PDF coordinates are rounded for printing.
 #[test]
 fn png_stroke_edge_admission_matches_three_decimal_pdf_coordinates() {
     const PAGE: u32 = 24_000;
-    let millipoints = |um: u32| -> u64 { (u64::from(um) * 360 + 63) / 127 };
+    let millipoints = |um: u32| -> u64 {
+        u64::from(um).saturating_mul(360).saturating_add(63)
+            .checked_div(127).expect("fixed denominator")
+    };
     let page_points = millipoints(PAGE);
     let widths = [80u32, 92, 104, 116, 128, 140, 250, 700, 1_500];
     for pen_width in widths {
@@ -2448,17 +2512,17 @@ fn png_stroke_edge_admission_matches_three_decimal_pdf_coordinates() {
         let offsets = [
             half.saturating_sub(1),
             half,
-            half + 1,
-            half + 2,
-            half + 3,
-            half + 4,
+            half.saturating_add(1),
+            half.saturating_add(2),
+            half.saturating_add(3),
+            half.saturating_add(4),
         ];
         for edge in 0..4u8 {
             for distance in offsets {
                 let position = if edge.is_multiple_of(2) {
                     distance
                 } else {
-                    PAGE - distance
+                    PAGE.saturating_sub(distance)
                 };
                 let mut at = PdfPoint {
                     x_um: 12_000,
@@ -2466,7 +2530,7 @@ fn png_stroke_edge_admission_matches_three_decimal_pdf_coordinates() {
                 };
                 match edge {
                     0 | 1 => {
-                        at.x_um = i32::try_from(position).expect("bounded x")
+                        at.x_um = i32::try_from(position).expect("bounded x");
                     },
                     _ => at.y_um = i32::try_from(position).expect("bounded y"),
                 }
@@ -2475,11 +2539,12 @@ fn png_stroke_edge_admission_matches_three_decimal_pdf_coordinates() {
                     y_um: 12_000,
                 };
                 let coordinate = position;
-                let opposite_edge = PAGE - position;
+                let opposite_edge = PAGE.saturating_sub(position);
                 let physical = coordinate >= half && opposite_edge >= half;
                 let x_points = millipoints(coordinate);
                 let serialized = millipoints(pen_width)
-                    <= 2 * x_points.min(page_points - x_points);
+                    <= 2u64.saturating_mul(x_points.min(
+                        page_points.saturating_sub(x_points)));
                 let expected = physical && serialized;
                 for dpi in [72, 150, 300] {
                     let path = PdfVectorPath {
@@ -2514,31 +2579,12 @@ fn png_stroke_edge_admission_matches_three_decimal_pdf_coordinates() {
     }
 }
 
-#[test]
-fn actual_vector_pdf_and_transparent_png_refuse_same_rounded_edge_ink() {
-    use atrament_pdf_composition_plan::{
-        PdfCompositionPlan, PdfPagePlan, SearchableSemanticText,
-    };
-    use atrament_pdf_vector_serializer::{
-        PdfVectorColorIntent, PdfVectorError, PdfVectorLimits,
-        PdfVectorPageBox, serialize_vector_pdf,
-    };
-
+fn assert_pdf_png_rounded_edge_parity(
+    page_box: PdfVectorPageBox, limits: PdfVectorLimits,
+) {
+    use atrament_pdf_vector_serializer::PdfVectorError;
     const PAGE: u32 = 24_000;
-    let middle = PdfPoint {
-        x_um: 12_000,
-        y_um: 12_000,
-    };
-    let page_box = PdfVectorPageBox {
-        width_um: PAGE,
-        height_um: PAGE,
-    };
-    let limits = PdfVectorLimits {
-        maximum_pages: 1,
-        maximum_paths_per_page: 1,
-        maximum_commands_per_page: 2,
-        maximum_pdf_bytes: 5_000,
-    };
+    let middle = PdfPoint { x_um: 12_000, y_um: 12_000 };
     for (edge, clipped, safe) in [
         ("left", PdfPoint { x_um: 40, y_um: 12_000 }, PdfPoint {
             x_um: 41,
@@ -2608,7 +2654,7 @@ fn actual_vector_pdf_and_transparent_png_refuse_same_rounded_edge_ink() {
                     PAGE,
                     PAGE,
                     dpi,
-                    &[line.clone()],
+                    from_ref(&line),
                     0,
                     None,
                 );
@@ -2629,6 +2675,22 @@ fn actual_vector_pdf_and_transparent_png_refuse_same_rounded_edge_ink() {
     }
 }
 
+#[test]
+fn actual_vector_pdf_and_transparent_png_refuse_same_rounded_edge_ink() {
+    const PAGE: u32 = 24_000;
+    let page_box = PdfVectorPageBox {
+        width_um: PAGE,
+        height_um: PAGE,
+    };
+    let limits = PdfVectorLimits {
+        maximum_pages: 1,
+        maximum_paths_per_page: 1,
+        maximum_commands_per_page: 2,
+        maximum_pdf_bytes: 5_000,
+    };
+    assert_pdf_png_rounded_edge_parity(page_box, limits);
+}
+
 fn sampled_rule_points(path: &PdfVectorPath) -> Vec<PdfPoint> {
     path.commands
         .iter()
@@ -2636,7 +2698,8 @@ fn sampled_rule_points(path: &PdfVectorPath) -> Vec<PdfPoint> {
             PdfPathCommand::MoveTo(point) | PdfPathCommand::LineTo(point) => {
                 *point
             },
-            _ => panic!("paper ruling only uses drawn line segments"),
+            PdfPathCommand::Close | PdfPathCommand::CubicTo(..) =>
+                panic!("paper ruling only uses drawn line segments"),
         })
         .collect()
 }
@@ -2655,9 +2718,9 @@ fn seeded_ruler_marks_preserve_nominal_endpoints_and_writable_bounds() {
         let nominal = paper_paths(opts).expect("exact nominal paper");
         let varied = paper_paths_with_ruler(opts, Some(selected), 1)
             .expect("selected physical ruler geometry");
-        assert_eq!(varied.len(), nominal.len() * 4);
+        assert_eq!(varied.len(), nominal.len().saturating_mul(4));
         let mut changed = 0usize;
-        for (base, bent) in nominal.iter().zip(varied.chunks_exact(4)) {
+        for (base, bent) in nominal.iter().zip(varied.as_chunks::<4>().0) {
             let anchor = sampled_rule_points(base);
             let mut samples = Vec::with_capacity(5);
             for (index, segment) in bent.iter().enumerate() {
@@ -2707,9 +2770,10 @@ fn seeded_ruler_marks_preserve_nominal_endpoints_and_writable_bounds() {
                 };
                 assert!((first..=last).contains(&along));
                 assert!(normal.abs_diff(nominal_normal) <= 250);
-                assert!((20_000..=196_000).contains(&point.x_um));
-                assert!((22_000..=281_000).contains(&point.y_um));
-                changed += usize::from(normal != nominal_normal);
+                assert!((20_000i32..=196_000i32).contains(&point.x_um));
+                assert!((22_000i32..=281_000i32).contains(&point.y_um));
+                changed = changed.saturating_add(usize::from(
+                    normal != nominal_normal));
             }
         }
         assert!(changed > 20, "{style:?} varied physical samples");
@@ -2882,7 +2946,7 @@ fn refused_ruler_export_preserves_selected_pdf_and_png() {
     use std::fs;
     let directory = env::temp_dir().join(format!(
         "atrament-paper-ruler-refusal-{}",
-        std::process::id(),
+        process::id(),
     ));
     fs::create_dir_all(&directory).expect("test-owned directory");
     for (format, file) in [("pdf", "selected.pdf"), ("png", "selected.png")] {
@@ -2922,7 +2986,7 @@ fn ruler_variation_uses_saved_ruled_profile_without_mutating_source() {
 
     let selected = env::temp_dir().join(format!(
         "atrament-ruler-saved-source-{}.json",
-        std::process::id(),
+        process::id(),
     ));
     let path = selected.to_str().expect("test-owned UTF-8 profile path");
     let ruled = encode_profile(Options {
