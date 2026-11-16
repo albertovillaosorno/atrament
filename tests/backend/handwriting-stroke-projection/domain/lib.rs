@@ -991,3 +991,129 @@ fn projected_slanted_pen_joins_match_exact_endpoint_distance() {
     }
     assert_eq!(inspected, 1_440);
 }
+
+#[test]
+fn unsigned_coordinate_extremes_join_against_wide_distance_oracle() {
+    // Two u32-extreme displacements squared and added still fit u128, but
+    // not u64. The caller can deliberately choose an even larger u64 gap.
+    // Compare actual endpoint arithmetic with an independent signed oracle.
+    let boundary = u32::MAX;
+    let coordinates = [
+        (0, 0),
+        (boundary, 0),
+        (0, boundary),
+        (boundary, boundary),
+        (17, 31),
+        (boundary - 17, boundary - 31),
+        (boundary >> 1u32, boundary >> 1u32),
+    ];
+    let limits = [0u64, 1, 1_200, u64::from(boundary), u64::MAX];
+    let mut checked = 0usize;
+    for start in coordinates {
+        for end in coordinates {
+            let preceding = PhysicalInkSegment {
+                page: 4,
+                start_um: (start.0 ^ 1, start.1),
+                end_um: start,
+                width_um: 300,
+                rgb: [6, 5, 4],
+            };
+            let following = PhysicalInkSegment {
+                page: 4,
+                start_um: end,
+                end_um: (end.0 ^ 1, end.1),
+                ..preceding
+            };
+            let dx = i128::from(start.0) - i128::from(end.0);
+            let dy = i128::from(start.1) - i128::from(end.1);
+            let exact_square =
+                dx.unsigned_abs().pow(2) + dy.unsigned_abs().pow(2);
+            for limit in limits {
+                let expected = if exact_square == 0 {
+                    Ok(None)
+                } else if exact_square <= u128::from(limit) * u128::from(limit)
+                {
+                    Ok(Some(PhysicalInkSegment {
+                        start_um: start,
+                        end_um: end,
+                        ..preceding
+                    }))
+                } else {
+                    Err(if limit == 1_200 {
+                        "text join gap exceeds 1200 um"
+                    } else {
+                        "text join gap exceeds configured maximum"
+                    })
+                };
+                assert_eq!(
+                    connect_ink_segments(preceding, following, limit),
+                    expected,
+                    "start {start:?}, end {end:?}, limit {limit}",
+                );
+                checked += 1;
+            }
+        }
+    }
+    assert_eq!(
+        checked,
+        coordinates.len() * coordinates.len() * limits.len(),
+    );
+}
+
+#[test]
+fn signed_origin_and_unscaled_coordinate_extremes_refuse_without_wrapping() {
+    let source = AuthoredInkSegment {
+        start_um: (u32::MAX, 0),
+        end_um: (u32::MAX - 1, 1),
+        ..ORIGINAL
+    };
+    // A legitimate unsigned maximum must be kept exactly, with no hidden
+    // clipping at the nominal glyph-cell bounds in this geometry engine.
+    assert_eq!(
+        project_ink_segment(source, InkPlacement {
+            origin_um: (0, 0),
+            ..placement()
+        }),
+        Ok(PhysicalInkSegment {
+            page: 1,
+            start_um: (u32::MAX, 0),
+            end_um: (u32::MAX - 1, 1),
+            width_um: ORIGINAL.width_um,
+            rgb: ORIGINAL.rgb,
+        }),
+    );
+    assert_eq!(
+        project_ink_segment(source, InkPlacement {
+            origin_um: (1, 0),
+            ..placement()
+        }),
+        Err("glyph placement needs nonnegative coordinates"),
+    );
+    assert_eq!(
+        project_ink_segment(source, InkPlacement {
+            origin_um: (i64::MAX, 0),
+            ..placement()
+        }),
+        Err("glyph placement overflow"),
+    );
+    assert_eq!(
+        project_ink_segment(source, InkPlacement {
+            origin_um: (i64::MIN, 0),
+            ..placement()
+        }),
+        Err("glyph placement needs nonnegative coordinates"),
+    );
+    assert_eq!(
+        project_ink_segment(source, InkPlacement {
+            origin_um: (0, 0),
+            dimensions: Some(MeasuredGlyphDimensions {
+                width_um: u32::MAX,
+                height_um: 4_500,
+                ink_thickness_um: 300,
+                slant_millidegrees: 0,
+            }),
+            ..placement()
+        }),
+        Err("glyph scale too large"),
+    );
+}

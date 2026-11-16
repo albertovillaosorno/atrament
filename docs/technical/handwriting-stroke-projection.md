@@ -123,6 +123,11 @@ fitted pen-contact response. Those remain separate research/future contracts.
   segments using `i128` squared endpoint distances, checking exact caller
   limits and rejecting cross-page or cross-color joins; the checks concern
   geometry authority, not printable page bounds or generated glyphs.
+  An additional 245-case wide-distance oracle checks unsigned coordinate
+  extrema, exact coincidence, diagonal over-limit refusal, and all-u64 gap
+  bounds without squared-distance wrapping. A companion boundary regression
+  checks exact u32 endpoint admission, signed-origin refusal and overlarge
+  mean-scale refusal before ink reaches either exporter.
 - `tests/backend/profile-editor-cli/composition/lib.rs`: actual Rust CLI
   regression tests for profile means, glyph placement and PDF/PNG output.
 - `tests/backend/profile-editor-cli/composition/joined-varied-handwriting.mjs`:
