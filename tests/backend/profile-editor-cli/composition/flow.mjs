@@ -10164,6 +10164,74 @@ test('scientific power-of-ten products retain exact native PDF/PNG ink',
     }
 });
 
+test('exponent uncertainties retain exact native PDF/PNG ink', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-power-uncertainty-'));
+    try {
+        const region = ['--flow-region', '30000', '40000',
+            '33000', '90000'];
+        const cases = [
+            ['abc1e3±2', 'abc', '1e3±2', '±', 'U+00B1'],
+            ['a1e3∓2e2', 'a', '1e3∓2e2', '∓', 'U+2213'],
+            ['a1×10³±2', 'a', '1×10³±2', '×', 'U+00D7'],
+            ['a1⋅10³∓2', 'a', '1⋅10³∓2', '⋅', 'U+22C5'],
+        ];
+        const stroke = (glyph) => [
+            '--glyph-stroke', glyph, '600', '500', '1800',
+            '3000', '250', '#123456',
+        ];
+        for (const [source, first, second, omitted, codepoint] of cases) {
+            const glyphs = [...new Set([...source].filter(
+                (glyph) => glyph !== 'a'))];
+            const authored = glyphs.flatMap(stroke);
+            const incomplete = glyphs.filter(
+                (glyph) => glyph !== omitted).flatMap(stroke);
+            for (const flag of ['--flow-text', '--flow-markdown']) {
+                const inspected = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    'notebook', '--inspect-flow', ...region, flag, source,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(inspected.status, 0, inspected.stderr);
+                assert.ok(inspected.stdout.includes(
+                    `Page 1 x=32500 um y=42500 um: "${first}"`), source);
+                assert.ok(inspected.stdout.includes(
+                    `Page 1 x=32500 um y=51500 um: "${second}"`), source);
+                for (const format of ['pdf', 'png']) {
+                    const manualPath = join(dir, `power-${format}`);
+                    const manual = spawnSync(cargo, [
+                        'run', '--offline', '--quiet',
+                        '-p', 'atrament_profile_editor_cli', '--',
+                        ...base, ...authored,
+                        '--place-text', '1', '32500', '42500', first,
+                        '--place-text', '1', '32500', '51500', second,
+                        '--export-paper', format,
+                        ...(format === 'png' ? ['--dpi', '72'] : []),
+                        '--output', manualPath, '--replace',
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(manual.status, 0, manual.stderr);
+                    const expected = readFileSync(manualPath);
+                    const flowed = render(dir, source, format,
+                        [...region, ...authored], flag);
+                    assert.equal(flowed.result.status, 0,
+                        flowed.result.stderr);
+                    assert.deepEqual(readFileSync(flowed.output), expected,
+                        `${source} ${flag} ${format}: exact exponent ink`);
+                    const refused = render(dir, source, format,
+                        [...region, ...incomplete], flag);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.match(refused.result.stderr,
+                        /missing authored glyph|no authored strokes/i);
+                    assert.ok(refused.result.stderr.includes(codepoint));
+                    assert.deepEqual(readFileSync(refused.output), expected,
+                        'missing scientific ink cannot overwrite valid export');
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 test('fitting bare integer rows retain exact native PDF/PNG ink', () => {
     const dir = mkdtempSync(join(root, '.temp/flow-bare-integer-'));
     try {

@@ -9515,6 +9515,67 @@ fn scientific_uncertainties_keep_complete_measured_numeric_ink()
 }
 
 #[test]
+fn complete_scientific_uncertainties_attach_to_exponent_ink()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    for source in [
+        "1e3±2", "1E-3∓.2", "1.2e+3±2e2", "1^2±3",
+        "1×10³±2", "1·10^-3∓2", "1⋅10^(2)±.2",
+    ] {
+        let glyphs = super::measured_word(source, None)?.0;
+        let ties = super::numeric_separator_joins(&glyphs);
+        assert!(ties.iter().all(|tied| *tied),
+            "{source:?}: a fitting numeric uncertainty was detached: {ties:?}");
+    }
+    for (source, boundary) in [
+        ("1e3±x", 2), ("1e3∓.", 2), ("1E-3±", 3),
+        ("1×10³±x", 4), ("1^2∓x", 2),
+    ] {
+        let glyphs = super::measured_word(source, None)?.0;
+        let ties = super::numeric_separator_joins(&glyphs);
+        assert!(ties[..boundary].iter().all(|tied| *tied),
+            "{source:?}: incomplete uncertainty changed exponent");
+        assert!(!ties[boundary],
+            "{source:?}: incomplete uncertainty joined the sign");
+    }
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 33_000, height: 90_000,
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        for (source, first, second) in [
+            ("abc1e3±2", "abc", "1e3±2"),
+            ("a1e3∓2e2", "a", "1e3∓2e2"),
+            ("a1×10³±2", "a", "1×10³±2"),
+            ("a1⋅10³∓2", "a", "1⋅10³∓2"),
+        ] {
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            assert_eq!(pages, 1, "{source}");
+            assert!(marks.is_empty(), "{source}");
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>(), [first, second],
+                "{source} {format:?}");
+        }
+        let narrow = super::FlowRegion {
+            width: 9_000, height: 140_000, ..region
+        };
+        let source = "1e3±2";
+        let (rows, _, _) = super::layout_flow_with_region(
+            &FlowSource::new(format, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(), Some(narrow),
+        )?;
+        assert_eq!(rows.iter().map(|row| row.text.as_str())
+            .collect::<String>(), source);
+    }
+    Ok(())
+}
+
+#[test]
 fn uncertainty_ties_require_a_complete_numeric_neighbor() {
     let joins = |source: &str| {
         let glyphs = source.chars().map(|character| {

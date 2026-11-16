@@ -2540,6 +2540,21 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
                 ties.fill(true);
             }
         }
+        // A complete exponent ends the first numeric scan before an
+        // attached uncertainty sign. Join the sign to this preceding
+        // number; the next scan already validates and binds its signed
+        // right-hand number, including another complete exponent.
+        // Incomplete uncertainties remain separate authored ink.
+        if has_separator
+            && glyphs.get(cursor).is_some_and(|item| {
+                matches!(item.0, "\u{b1}" | "\u{2213}")
+            })
+            && (glyphs.get(cursor.saturating_add(1))
+                .is_some_and(|item| ascii_digit(item.0))
+                || decimal_start(cursor.saturating_add(1)))
+            && let Some(tie) = joins.get_mut(cursor.saturating_sub(1)) {
+            *tie = true;
+        }
     }
     mark_authored_script_joins(glyphs, &mut joins);
     joins

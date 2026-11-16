@@ -5348,3 +5348,21 @@ four uncertainty expressions in both modes. Omitting the sign glyph refuses
 without overwriting an accepted export. The behavior invents neither math
 syntax nor font positioning, and does not persist semantic notebook state.
 The full saved-content render/export journey remains open.
+
+## Exponent-adjacent uncertainty grouping (partial) — 2026-11-15
+
+The CLI-only measured wrapping now keeps an authored uncertainty attached to
+an already complete exponent: `1e3±2`, `1E-3∓.2`, `1^2±3` and full
+power-of-ten products such as `1×10³±2`. The right-hand uncertainty may
+itself contain a complete scientific exponent (`1e3∓2e2`). The existing
+numeric scanner still validates the right-hand digits; an absent number
+(`1e3±x`) never joins the sign, and a too-narrow physical row keeps the
+previous grapheme-by-grapheme fallback.
+
+A new Rust regression passed after first reproducing the detached `±` and
+covers complete/incomplete expressions, exact page rows in plain-text and
+Markdown, and narrow-row identity. The native-process acceptance verifies
+independently positioned PDF and transparent PNG pen strokes for both source
+modes, plus missing-glyph refusal without replacing accepted output.
+This is advisory print layout, not interpreted mathematics, a generated glyph,
+or persisted semantic notebook content.
