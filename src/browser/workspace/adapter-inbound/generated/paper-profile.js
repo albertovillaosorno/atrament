@@ -53,6 +53,17 @@ const SHEET_PRESETS = {
 // PNGs even after a successful authenticated HTTP 200. A partial response
 // must never become a downloadable or previewable paper layer.
 const MAX_PAPER_EXPORT_BYTES = 24_000_000;
+// Keep refusal and status strings stable across paper and notebook flows.
+const PAPER_MESSAGES = {
+    stalled: "Native paper export stalled on empty chunks",
+    declared: "Native paper export exceeds declared byte count",
+    actionRefused: "Paper action rejected or unavailable; no file saved.",
+    loaded: "Paper profile loaded · edit fields, then save or export.",
+    unavailable: "Paper profile unavailable; check the local backend.",
+    filename: "Choose a simple .json filename (max 64 characters)",
+    stale: "Local notebook changed; reopen before saving. No overwrite.",
+    disabled: "Local files disabled; launch Rust with --profiles-dir.",
+};
 export async function readBoundedPaperExport(response, mime) {
     const declared = response.headers.get("content-length");
     if (declared !== null && (!/^[0-9]+$/.test(declared)
@@ -79,7 +90,7 @@ export async function readBoundedPaperExport(response, mime) {
             if (value.byteLength === 0) {
                 emptyChunks += 1;
                 if (emptyChunks > 64) {
-                    throw new Error("Native paper export stalled on empty chunks");
+                    throw new Error(PAPER_MESSAGES.stalled);
                 }
                 continue;
             }
@@ -91,7 +102,7 @@ export async function readBoundedPaperExport(response, mime) {
                 throw new Error("Native paper export exceeds byte limit");
             }
             if (declared !== null && received > Number(declared)) {
-                throw new Error("Native paper export exceeds declared byte count");
+                throw new Error(PAPER_MESSAGES.declared);
             }
             parts.push(new Uint8Array(value));
         }
@@ -200,8 +211,12 @@ export function createPaperProfileEditor(context) {
                 slider.value = input.value;
             }
         }
-        preset.value = Object.entries(SHEET_PRESETS).find(([, dimensions]) => dimensions[0] === profile.width_um
-            && dimensions[1] === profile.height_um)?.[0] ?? "custom";
+        const presets = Object.entries(SHEET_PRESETS);
+        const matchingPreset = presets.find(([, dimensions]) => {
+            const widthMatches = dimensions[0] === profile.width_um;
+            return widthMatches && dimensions[1] === profile.height_um;
+        });
+        preset.value = matchingPreset?.[0] ?? "custom";
         syncControls();
     }
     function proposedJson() {
@@ -259,7 +274,8 @@ export function createPaperProfileEditor(context) {
         if (!response.ok) {
             throw new Error("Rust rejected the paper profile");
         }
-        if (!response.headers.get("content-type")?.startsWith("application/json")) {
+        const contentType = response.headers.get("content-type");
+        if (!contentType?.startsWith("application/json")) {
             throw new Error("Unexpected paper profile response");
         }
         const acceptedJson = await response.text();
@@ -270,6 +286,9 @@ export function createPaperProfileEditor(context) {
             json: acceptedJson,
             profile: readCanonicalProfile(acceptedJson),
         };
+    }
+    function paperDownloadBlob(result) {
+        return new Blob([result.json], { type: "application/json" });
     }
     function offerDownload(blob, filename) {
         if (downloadUrl !== null) {
@@ -302,7 +321,7 @@ export function createPaperProfileEditor(context) {
         }
         catch {
             if (isCurrent(secret, observed)) {
-                setStatus("Paper action rejected or unavailable; no file saved.");
+                setStatus(PAPER_MESSAGES.actionRefused);
             }
         }
         finally {
@@ -339,11 +358,11 @@ export function createPaperProfileEditor(context) {
                 throw new Error("Oversized default paper profile");
             }
             showProfile(readCanonicalProfile(json));
-            setStatus("Paper profile loaded · edit fields, then save or export.");
+            setStatus(PAPER_MESSAGES.loaded);
         }
         catch {
             if (isCurrent(secret, observed)) {
-                setStatus("Paper profile unavailable; check the local backend.");
+                setStatus(PAPER_MESSAGES.unavailable);
             }
         }
         finally {
@@ -431,14 +450,16 @@ export function createPaperProfileEditor(context) {
             const result = await canonicalize(secret, proposedJson());
             if (isCurrent(secret, observed)) {
                 showProfile(result.profile);
-                offerDownload(new Blob([result.json], { type: "application/json" }), "atrament-paper.json");
+                const blob = paperDownloadBlob(result);
+                offerDownload(blob, "atrament-paper.json");
                 setStatus("Validated paper JSON downloaded.");
             }
         });
     });
     exportButton.addEventListener("click", () => {
         void action(async (secret, observed) => {
-            const response = await requestPaper(secret, "/api/paper/pdf", proposedJson());
+            const body = proposedJson();
+            const response = await requestPaper(secret, "/api/paper/pdf", body);
             if (!isCurrent(secret, observed)) {
                 return;
             }
@@ -450,7 +471,8 @@ export function createPaperProfileEditor(context) {
                 !== "application/pdf") {
                 throw new Error("Rust PDF export refused");
             }
-            const pdf = await readBoundedPaperExport(response, "application/pdf");
+            const pdfMime = "application/pdf";
+            const pdf = await readBoundedPaperExport(response, pdfMime);
             if (isCurrent(secret, observed)) {
                 offerDownload(pdf, "atrament-paper.pdf");
                 setStatus("Rust PDF downloaded · paper only.");
@@ -467,7 +489,9 @@ export function createPaperProfileEditor(context) {
                 || !Number.isSafeInteger(dpi) || dpi < 72 || dpi > 300) {
                 throw new Error("PNG DPI must be 72 through 300");
             }
-            const response = await requestPaper(secret, "/api/paper/png", proposedJson(), dpi);
+            const body = proposedJson();
+            const endpoint = "/api/paper/png";
+            const response = await requestPaper(secret, endpoint, body, dpi);
             if (!isCurrent(secret, observed)) {
                 return;
             }
@@ -542,10 +566,11 @@ function readNotebook(json) {
         throw new Error("Missing canonical notebook profile");
     }
     const value = parsed;
+    const placements = ["none", "top-left", "top-right"];
     if (Object.keys(value).length !== 8
         || value.schema !== "atrament.notebook.v1"
         || !["none", "line", "box"].includes(String(value.date_style))
-        || !["none", "top-left", "top-right"].includes(String(value.date_placement))
+        || !placements.includes(String(value.date_placement))
         || typeof value.date_text !== "string"
         || !(value.date_text === ""
             || /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value.date_text)
@@ -606,7 +631,7 @@ export function createNotebookProfileEditor(context) {
         if (value.length > 64
             || !/^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.json$/.test(value)
             || value.includes("..")) {
-            throw new Error("Choose a simple .json filename (max 64 characters)");
+            throw new Error(PAPER_MESSAGES.filename);
         }
         return value;
     }
@@ -804,9 +829,8 @@ export function createNotebookProfileEditor(context) {
         }
         catch (error) {
             if (active(secret, observed)) {
-                const staleMessage = "Local notebook changed; reopen before saving. " +
-                    "No overwrite.";
-                const disabledMessage = "Local files disabled; launch Rust with --profiles-dir.";
+                const staleMessage = PAPER_MESSAGES.stale;
+                const disabledMessage = PAPER_MESSAGES.disabled;
                 status.textContent = error instanceof Error
                     && error.message === "stale-file"
                     ? staleMessage
@@ -909,7 +933,8 @@ export function createNotebookProfileEditor(context) {
             const result = await fileRequest(secret, name);
             if (!active(secret, observed))
                 return;
-            const canonicalProfile = await canonical(secret, JSON.stringify(result.profile));
+            const fileJson = JSON.stringify(result.profile);
+            const canonicalProfile = await canonical(secret, fileJson);
             if (!active(secret, observed))
                 return;
             display(canonicalProfile.profile);
@@ -922,11 +947,13 @@ export function createNotebookProfileEditor(context) {
     localSave.addEventListener("click", () => {
         void action(async (secret, observed) => {
             const name = selectedName();
-            const canonicalProfile = await canonical(secret, JSON.stringify(proposal()));
+            const proposedJson = JSON.stringify(proposal());
+            const canonicalProfile = await canonical(secret, proposedJson);
             if (!active(secret, observed))
                 return;
             const revision = trackedName === name ? trackedRevision : "new";
-            const result = await fileRequest(secret, name, canonicalProfile.json, revision);
+            const json = canonicalProfile.json;
+            const result = await fileRequest(secret, name, json, revision);
             if (!active(secret, observed))
                 return;
             display(canonicalProfile.profile);
