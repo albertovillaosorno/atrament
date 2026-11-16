@@ -265,6 +265,45 @@ test(
     }
 });
 
+test("native numeric previews must fit exact authored glyph envelopes",
+    async () => {
+    const b = mountBackend();
+    try {
+        await b.editor.start("private-session-credential");
+        edit(b.elements, "handwriting-dimension", "height", "change");
+        edit(b.elements, "handwriting-minimum", "2000");
+        edit(b.elements, "handwriting-maximum", "3500");
+        edit(b.elements, "handwriting-standard_deviation", "100");
+        edit(b.elements, "handwriting-scope", "glyph", "change");
+        edit(b.elements, "handwriting-new-glyph", "ñ");
+        b.elements.get("handwriting-add-glyph").dispatch("click");
+        edit(b.elements, "handwriting-minimum", "2500");
+        edit(b.elements, "handwriting-maximum", "2600");
+        edit(b.elements, "handwriting-mean", "2550");
+        edit(b.elements, "handwriting-median", "2550");
+        edit(b.elements, "handwriting-standard_deviation", "10");
+        edit(b.elements, "handwriting-sample-glyph", "ñ");
+        b.elements.get("handwriting-sample").dispatch("click");
+        await tick();
+        assert.equal(b.elements.get("handwriting-sample-result").textContent,
+            "No numeric sample requested.",
+            "response inside global envelope but outside ñ is impossible");
+        assert.match(b.elements.get("handwriting-status").textContent,
+            /no file saved/);
+        const sample = b.requests.at(-1);
+        assert.equal(sample.endpoint, "./api/handwriting/preview");
+        assert.equal(JSON.parse(sample.body).grapheme, "ñ");
+        edit(b.elements, "handwriting-sample-glyph", "a");
+        b.elements.get("handwriting-sample").dispatch("click");
+        await tick();
+        assert.match(b.elements.get("handwriting-sample-result").textContent,
+            /3000 micrometres/,
+            "a inherits the wider unsaved global envelope");
+    } finally {
+        b.restore();
+    }
+});
+
 test("statistics glyph checks reuse segmentation and refuse its loss",
     async () => {
         const original = Intl.Segmenter;
@@ -706,7 +745,7 @@ test(
                 return nativeResponse(nativeProfileJson(maximum));
             }
             if (endpoint === "./api/handwriting/preview") {
-                return Response.json({value: 3000});
+                return Response.json({value: 0});
             }
             return nativeResponse(init.body);
         },

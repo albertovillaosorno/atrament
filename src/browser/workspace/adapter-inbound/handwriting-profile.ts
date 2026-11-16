@@ -818,7 +818,8 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
             }
             const dim = selectedDimension();
             if (dim === undefined) throw new Error("Missing native dimension");
-            const body = '{"profile":' + encodeProfile(candidate())
+            const proposal = candidate();
+            const body = '{"profile":' + encodeProfile(proposal)
                 + ',"grapheme":' + JSON.stringify(grapheme)
                 + ',"dimension":' + JSON.stringify(dim.key)
                 + ',"occurrence":' + occurrence + '}';
@@ -829,7 +830,22 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
             const json = await fetchJson(secret, endpoint, body);
             if (!isCurrent(secret, observed)) return;
             const result = record(boundedJson(json, 128));
-            if (!keysMatch(result, ["value"]) || !safeInteger(result.value)) {
+            const matchesGlyph = (glyph: Glyph): boolean =>
+                glyph.grapheme === grapheme;
+            const matchesDimension = (entry: Parameter): boolean =>
+                entry.dimension === dim.key;
+            const sampledGlyph = proposal.glyphs.find(matchesGlyph);
+            const glyphParameters = sampledGlyph?.parameters;
+            const glyphStatistics = glyphParameters?.find(matchesDimension);
+            const globalStatistics = proposal.globals.find(matchesDimension);
+            const statistics = glyphStatistics ?? globalStatistics;
+            // Rust clamps numeric previews to the exact glyph's authored
+            // envelope (or global values when no override exists). Never
+            // display an impossible server response as a legitimate sample.
+            if (!keysMatch(result, ["value"]) || !safeInteger(result.value)
+                || statistics === undefined
+                || result.value < statistics.minimum
+                || result.value > statistics.maximum) {
                 throw new Error("Invalid native numerical sample response");
             }
             sampleResult.textContent = `Rust numeric example for `
