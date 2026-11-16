@@ -9702,12 +9702,13 @@ fn algebraic_operator_numeric_operands_keep_measured_ink()
 
     for source in [
         "x+12", "x−.5", "x×2e3", "x÷1.5", "a+3(2)",
-        "1+2", "1−2", "x÷.25", "x×10³",
+        "1+2", "1−2", "x÷.25", "x×10³", "x·12", "x⋅2e3",
+        "x∗.25", "x*3.5",
     ] {
         let glyphs = super::measured_word(source, None)?.0;
         let ties = super::numeric_separator_joins(&glyphs);
         let operator = source.chars().position(|ch| {
-            matches!(ch, '+' | '−' | '×' | '÷')
+            matches!(ch, '+' | '−' | '×' | '÷' | '·' | '⋅' | '∗' | '*')
         }).ok_or("missing operator")?;
         assert!(ties[operator..].iter().all(|tie| *tie),
             "{source:?} detached the numeric operand: {ties:?}");
@@ -9731,6 +9732,10 @@ fn algebraic_operator_numeric_operands_keep_measured_ink()
             ("abcde−.5", "abcde", "−.5"),
             ("abcde×2e3", "abcde", "×2e3"),
             ("abcde÷1.5", "abcde", "÷1.5"),
+            ("abcde·12", "abcde", "·12"),
+            ("abcde⋅2e3", "abcde", "⋅2e3"),
+            ("abcde∗.5", "abcde", "∗.5"),
+            ("abcde*1.5", "abcde", "*1.5"),
         ] {
             let (rows, marks, pages) = super::layout_flow_with_region(
                 &FlowSource::new(format, source)?,
@@ -9746,7 +9751,8 @@ fn algebraic_operator_numeric_operands_keep_measured_ink()
         let narrow = super::FlowRegion {
             width: 9_000, height: 120_000, ..region
         };
-        for source in ["+12", "−.5", "×2e3", "÷1.5"] {
+        for source in ["+12", "−.5", "×2e3", "÷1.5",
+            "·12", "⋅2e3", "∗.5", "*1.5"] {
             let (rows, _, _) = super::layout_flow_with_region(
                 &FlowSource::new(format, source)?,
                 &NotebookProfile::default(), None,

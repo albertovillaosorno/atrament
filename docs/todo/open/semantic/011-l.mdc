@@ -5404,3 +5404,19 @@ required glyph is absent without overwriting an accepted output file.
 This is advisory measured line breaking only, not a parsed equation,
 generated mathematical glyph or persisted notebook semantic block. The
 complete saved-notebook Export journey remains open.
+
+### Authored multiplication operands (partial) — 2026-11-15
+
+The CLI-only numeric wrapping preference also recognizes the authored middle
+`·` (U+00B7), dot `⋅` (U+22C5), asterisk operator `∗` (U+2217) and ASCII
+`*` before a complete numeric operand, matching existing `×` behavior.
+A fitting expression such as `x⋅2e3` moves its operator with the number;
+incomplete operands and doubled ASCII stars (`x**17`) do not gain an
+operator-to-number tie. Narrow physical rows keep exact grapheme fallback.
+
+A red-to-green native Rust regression covers both plain and Markdown row
+boundaries, invalid operand contexts and narrow-region preservation. The
+native PDF and transparent PNG process tests compare four new operator cases
+with independently placed authored ink, plus missing-shape refusal without
+replacing a valid output. This does not interpret multiplication, invent glyph
+shapes, save semantic content or complete notebook Export.

@@ -2400,17 +2400,18 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
         // Comparisons and explicit algebraic operators stay with their
         // following complete numeric operand, never the left-hand word.
         // Keep ASCII hyphens ambiguous and exclude C++17-style doubled
-        // plus signs; only authored ×, ÷ and mathematical − are treated
-        // as unambiguous operator prefixes beyond ordinary +.
+        // plus and x**2-style doubled stars. Authored multiplication marks
+        // bind numeric operands, not arbitrary following words.
         // Include both ASCII characters of <=, >=, != and ==.
         let numeric_prefix_start = cursor.checked_sub(1)
             .filter(|&index| glyphs.get(index).is_some_and(|item| {
                 matches!(item.0,
                     "=" | "<" | ">" | "\u{2264}" | "\u{2265}"
-                    | "\u{2248}" | "\u{2260}" | "+"
-                    | "\u{2212}" | "\u{d7}" | "\u{f7}")
-                    && !(item.0 == "+" && index > 0
-                        && glyphs[index - 1].0 == "+")
+                    | "\u{2248}" | "\u{2260}" | "+" | "*"
+                    | "\u{2212}" | "\u{d7}" | "\u{f7}"
+                    | "\u{b7}" | "\u{22c5}" | "\u{2217}")
+                    && !(matches!(item.0, "+" | "*") && index > 0
+                        && glyphs[index - 1].0 == item.0)
             }))
             .map(|index| {
                 if glyphs[index].0 == "=" && index > 0

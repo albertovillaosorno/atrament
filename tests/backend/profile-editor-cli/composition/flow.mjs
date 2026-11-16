@@ -10449,6 +10449,10 @@ test('algebraic numeric operands preserve exact native PDF/PNG ink', () => {
             ['abcde−.5', 'abcde', '−.5', '−', 'U+2212'],
             ['abcde×2e3', 'abcde', '×2e3', '×', 'U+00D7'],
             ['abcde÷1.5', 'abcde', '÷1.5', '÷', 'U+00F7'],
+            ['abcde·12', 'abcde', '·12', '·', 'U+00B7'],
+            ['abcde⋅2e3', 'abcde', '⋅2e3', '⋅', 'U+22C5'],
+            ['abcde∗.5', 'abcde', '∗.5', '∗', 'U+2217'],
+            ['abcde*1.5', 'abcde', '*1.5', '*', 'U+002A'],
         ];
         const stroke = (glyph) => [
             '--glyph-stroke', glyph, '600', '500', '1800',
