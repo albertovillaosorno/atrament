@@ -73,7 +73,6 @@ mod linux {
         }
     }
 
-    #[expect(clippy::missing_trait_methods, reason = "test fixture cleanup")]
     impl Drop for OwnedDir {
         fn drop(&mut self) {
             fs::remove_dir_all(&self.0).expect("remove test-owned dir");

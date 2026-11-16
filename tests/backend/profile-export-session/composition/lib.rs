@@ -66,7 +66,6 @@ mod linux {
         "linux::relative_retry_does_not_recover_identical_bytes_in_other_cwd";
 
     struct OwnedDir(PathBuf);
-    #[expect(clippy::missing_trait_methods, reason = "fixture cleanup only")]
     impl Drop for OwnedDir {
         fn drop(&mut self) {
             fs::remove_dir_all(&self.0).expect("remove owned fixture");
@@ -801,7 +800,7 @@ mod linux {
             |verified| {
                 assert_eq!(verified.path().path(), chosen);
                 assert_eq!(verified.verified_entry_count(), 0);
-                assert!(verified.manifest().entries.is_empty());
+                assert_eq!(verified.manifest().entries.len(), 0);
                 verified.manifest().profile_identity.clone()
             },
         );

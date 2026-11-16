@@ -95,10 +95,6 @@ impl Fixture {
 }
 
 #[cfg(target_os = "linux")]
-#[expect(
-    clippy::missing_trait_methods,
-    reason = "unstable pin_drop cannot be implemented on stable Rust"
-)]
 impl Drop for Fixture {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.0).expect("clean test-owned directory");
