@@ -19,9 +19,14 @@ const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const runner = fileURLToPath(new URL('./flow-shards.mjs', import.meta.url));
 const flow = fileURLToPath(new URL('./flow.mjs', import.meta.url));
 
+// Nested node --test inherits this marker and refuses to run any files.
+// The acceptance child is intentionally independent of this test harness.
+const childEnv = { ...process.env };
+delete childEnv.NODE_TEST_CONTEXT;
+
 function run(...args) {
     const result = spawnSync(process.execPath, [runner, ...args], {
-        cwd: root, encoding: 'utf8', timeout: 20_000,
+        cwd: root, encoding: 'utf8', timeout: 20_000, env: childEnv,
     });
     assert.equal(result.error, undefined, result.error?.message);
     return result;
@@ -89,4 +94,29 @@ test('flow shard receipts refuse zero matches and partial TAP results', () => {
     }
     assert.equal(completeShardTap('', 3), false);
     assert.equal(completeShardTap(accepted, 2), false);
+});
+
+test('shards build and run the native CLI with complete selected receipts',
+    () => {
+    const result = run('--shard', '1');
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Flow shard 1\/60 \(3 cases\)/);
+    assert.ok(completeShardTap(result.stdout, 3));
+    assert.match(result.stdout, /Passed 3 selected native flow cases\./);
+});
+
+test('prebuilt CLI selection cannot silently fall back to Cargo', () => {
+    const result = spawnSync(process.execPath, [
+        '--test', '--test-reporter=tap', '--test-name-pattern',
+        '^stdout nominal flow rows predict independently authored PDF/PNG ink$',
+        flow,
+    ], { cwd: root, encoding: 'utf8', timeout: 20_000,
+        env: { ...childEnv,
+            ATRAMENT_FLOW_TEST_CLI: '/nonexistent/atrament-flow-test-cli' },
+    });
+    assert.equal(result.error, undefined, result.error?.message);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /null !== 0/);
+    assert.doesNotMatch(result.stdout, /Finished .*target/);
+    assert.equal(completeShardTap(result.stdout, 1), false);
 });

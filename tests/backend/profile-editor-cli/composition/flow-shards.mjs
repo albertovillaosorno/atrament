@@ -16,6 +16,42 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
+const cargo = join(root, '.dependencies/rust/1.99.1/bin/cargo');
+const profileCli = 'atrament_profile_editor_cli';
+
+// Cargo's machine-readable artifact points at this exact checked build,
+// including when target-dir, target triple or config defaults change. Never
+// infer a potentially stale executable from a guessed debug path.
+function buildCli() {
+    const result = spawnSync(cargo, [
+        'build', '--locked', '--offline', '-p', profileCli,
+        '--message-format=json',
+    ], { cwd: root, encoding: 'utf8', timeout: 120_000,
+        maxBuffer: 8 * 1024 * 1024 });
+    if (result.status !== 0 || result.error) {
+        process.stderr.write(result.stderr ?? '');
+        console.error('Flow CLI build failed:',
+            result.error?.message ?? result.signal ?? result.status);
+        return null;
+    }
+    try {
+        const messages = result.stdout.trimEnd().split('\n').map(JSON.parse);
+        const executables = messages.filter((message) =>
+            message.reason === 'compiler-artifact'
+            && message.target?.name === 'atrament-profiles'
+            && message.target?.kind?.includes('bin')
+            && typeof message.executable === 'string')
+            .map((message) => message.executable);
+        if (executables.length === 1 && messages.some((message) =>
+            message.reason === 'build-finished' && message.success === true)) {
+            return executables[0];
+        }
+    } catch {
+        // Invalid Cargo receipts must not select a presumed/stale binary.
+    }
+    console.error('Flow CLI build omitted an exact executable receipt');
+    return null;
+}
 const file = join(root,
     'tests/backend/profile-editor-cli/composition/flow.mjs');
 const source = readFileSync(file, 'utf8');
@@ -86,6 +122,11 @@ function run() {
                     return;
                 }
             }
+            const binary = buildCli();
+            if (binary === null) {
+                process.exitCode = 1;
+                return;
+            }
             const shards = selectedShard === null
                 ? Array.from({ length: shardCount }, (_, index) => index)
                 : [selectedShard - 1];
@@ -102,6 +143,7 @@ function run() {
                 ], {
                     cwd: root, encoding: 'utf8', timeout: 240_000,
                     maxBuffer: 8 * 1024 * 1024,
+                    env: { ...process.env, ATRAMENT_FLOW_TEST_CLI: binary },
                 });
                 process.stdout.write(result.stdout ?? '');
                 process.stderr.write(result.stderr ?? '');

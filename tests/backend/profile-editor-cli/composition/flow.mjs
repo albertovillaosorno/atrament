@@ -9,7 +9,7 @@
 // Real native PDF/PNG acceptance for bounded Markdown heading syntax.
 // Run: node --test tests/backend/profile-editor-cli/composition/flow.mjs
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawnSync as spawnProcessSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,26 @@ import test from 'node:test';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const cargo = join(root, '.dependencies/rust/1.99.1/bin/cargo');
+// The sharded runner builds the exact Rust CLI before starting any test.
+// Running that binary avoids thousands of redundant Cargo metadata checks;
+// unsharded execution still uses Cargo to compile the current source.
+const prebuiltCli = process.env.ATRAMENT_FLOW_TEST_CLI;
+function spawnSync(command, args, options) {
+    if (command !== cargo || prebuiltCli === undefined) {
+        return spawnProcessSync(command, args, options);
+    }
+    const delimiter = args.indexOf('--');
+    const prefix = args.slice(0, delimiter);
+    const permitted = [
+        ['run', '--quiet', '-p', 'atrament_profile_editor_cli'],
+        ['run', '--offline', '--quiet', '-p', 'atrament_profile_editor_cli'],
+    ];
+    assert.ok(delimiter >= 0 && permitted.some((expected) =>
+        expected.length === prefix.length && expected.every((part, index) =>
+            part === prefix[index])),
+    'only admitted Rust CLI Cargo run arguments may use a prebuilt binary');
+    return spawnProcessSync(prebuiltCli, args.slice(delimiter + 1), options);
+}
 const base = [
     'notebook', '--printed-sheet', 'false',
     '--glyph-stroke', 'a', '600', '500', '1800', '3000', '250', '#123456',
