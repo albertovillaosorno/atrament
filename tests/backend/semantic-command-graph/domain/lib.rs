@@ -32,24 +32,65 @@
 
 //! Semantic command graph regression tests.
 
-use std::cmp::Ordering;
 use std::collections::BTreeSet;
+use std::ptr;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 use atrament_semantic_command_graph::{
     BatchLocalHandleDeclaration, BatchLocalHandleError,
     BatchLocalHandleReference, BoundedDependencyRequirementsError,
     CommandDependencyNode, CommandGraphError, CommandGraphLimitError,
-    CommandGraphLimits,
-    CommandGraphSize, CommandNode, DependencyRequirementsError,
-    DependencySelectionError, DependencySelectionSummary,
-    DependencySummaryError, MissingDependencyRequirement, command_graph_size,
+    CommandGraphLimits, CommandGraphSize, CommandNode,
+    DependencyRequirementsError, DependencySelectionError,
+    DependencySelectionSummary, DependencySummaryError,
+    MissingDependencyRequirement, ValidatedCommandGraph, command_graph_size,
     dependency_selection_requirements,
     dependency_selection_requirements_bounded, dependency_selection_summary,
     validate_batch_local_handles, validate_command_graph,
     validate_command_graph_limits, validate_command_graph_view,
     validate_dependency_closed_selection,
 };
+
+// The counter is exercised by one test; the ordered identity itself has no
+// interior mutability, so it remains safe as a BTreeSet key.
+static COUNTING_IDENTITY_CLONES: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct CountingIdentity(u32);
+
+impl Clone for CountingIdentity {
+    fn clone(&self) -> Self {
+        let _previous =
+            COUNTING_IDENTITY_CLONES.fetch_add(1, AtomicOrdering::Relaxed);
+        Self(self.0)
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        *self = source.clone();
+    }
+}
+
+#[derive(Clone, Copy)]
+struct BorrowedNode<'graph> {
+    dependencies: &'graph [u32],
+    id: &'graph u32,
+}
+
+impl CommandDependencyNode for BorrowedNode<'_> {
+    type Identity = u32;
+
+    fn dependencies(&self) -> &[Self::Identity] {
+        self.dependencies
+    }
+
+    fn id(&self) -> &Self::Identity {
+        self.id
+    }
+}
+
+const fn counting_identity(value: u32) -> CountingIdentity {
+    CountingIdentity(value)
+}
 
 fn node(id: u32, dependencies: &[u32]) -> CommandNode<u32> {
     CommandNode {
@@ -199,29 +240,30 @@ fn invalid_graph_precedes_batch_local_handle_checks() {
     );
 }
 
-fn expected_handle_case(
-    declared: bool,
-    duplicate: bool,
-    referenced: bool,
-    dependent: bool,
+const fn expected_handle_case(
+    mask: u8,
 ) -> Result<(), BatchLocalHandleError<u32, u8>> {
+    let declared = mask & 0b0001 != 0;
+    let duplicate = mask & 0b0010 != 0;
+    let referenced = mask & 0b0100 != 0;
+    let dependent = mask & 0b1000 != 0;
     if declared && duplicate {
         return Err(BatchLocalHandleError::DuplicateHandle {
             first_command: 1,
-            handle: 7_u8,
+            handle: 7u8,
             second_command: 1,
         });
     }
     if referenced && !declared {
         return Err(BatchLocalHandleError::UndeclaredHandle {
             command: 2,
-            handle: 7_u8,
+            handle: 7u8,
         });
     }
     if referenced && !dependent {
         return Err(BatchLocalHandleError::RequiredDependencyMissing {
             command: 2,
-            handle: 7_u8,
+            handle: 7u8,
             producer: 1,
         });
     }
@@ -230,63 +272,58 @@ fn expected_handle_case(
 
 #[test]
 fn all_16_handle_declaration_reference_dependency_states_match_oracle() {
-    let mut cases = 0_u8;
-    for mask in 0_u8..16 {
+    let mut cases = 0u8;
+    for mask in 0u8..16 {
         let declared = mask & 0b0001 != 0;
         let duplicate = mask & 0b0010 != 0;
         let referenced = mask & 0b0100 != 0;
         let dependent = mask & 0b1000 != 0;
         let nodes = [
             node(1, &[]),
-            node(2, if dependent { &[1] } else { &[] }),
+            node(
+                2,
+                if dependent {
+                    &[1]
+                } else {
+                    &[]
+                },
+            ),
         ];
         let mut declarations = Vec::new();
         if declared {
-            declarations.push(BatchLocalHandleDeclaration {
-                command: 1,
-                handle: 7_u8,
-            });
+            declarations
+                .push(BatchLocalHandleDeclaration { command: 1, handle: 7u8 });
             if duplicate {
                 declarations.push(BatchLocalHandleDeclaration {
                     command: 1,
-                    handle: 7_u8,
+                    handle: 7u8,
                 });
             }
         }
-        let references = referenced
-            .then_some(BatchLocalHandleReference {
-                command: 2,
-                handle: 7_u8,
-            })
+        let handle_references = referenced
+            .then_some(BatchLocalHandleReference { command: 2, handle: 7u8 })
             .into_iter()
             .collect::<Vec<_>>();
         assert_eq!(
             validate_batch_local_handles(
                 &nodes,
                 &declarations,
-                &references,
+                &handle_references,
             ),
-            expected_handle_case(
-                declared,
-                duplicate,
-                referenced,
-                dependent,
-            ),
+            expected_handle_case(mask),
             "handle-state mask {mask:#06b}",
         );
-        let validated = validate_command_graph_view(&nodes)
-            .expect("handle oracle graph seals");
+        let view_result = validate_command_graph_view(&nodes);
+        assert!(view_result.is_ok(), "handle oracle graph seals");
+        let Ok(validated) = view_result else {
+            return;
+        };
         assert_eq!(
             validated.validate_batch_local_handles(
                 &declarations,
-                &references,
+                &handle_references,
             ),
-            expected_handle_case(
-                declared,
-                duplicate,
-                referenced,
-                dependent,
-            ),
+            expected_handle_case(mask),
             "sealed handle-state mask {mask:#06b}",
         );
         cases = cases.saturating_add(1);
@@ -397,7 +434,7 @@ fn duplicate_dependency_edges_do_not_invent_a_new_error_class() {
 fn one_hundred_thousand_command_chain_is_iterative() {
     let mut nodes = Vec::with_capacity(100_000);
     nodes.push(node(0, &[]));
-    for id in 1_u32..100_000_u32 {
+    for id in 1u32..100_000u32 {
         nodes.push(node(id, &[id.saturating_sub(1)]));
     }
     assert_eq!(validate_command_graph(&nodes), Ok(()));
@@ -601,13 +638,16 @@ fn dependency_requirements_reject_unknown_selection_and_invalid_graph() {
 fn one_hundred_thousand_selection_requirements_are_iterative() {
     let mut nodes = Vec::with_capacity(100_000);
     nodes.push(node(0, &[]));
-    for id in 1_u32..100_000_u32 {
+    for id in 1u32..100_000u32 {
         nodes.push(node(id, &[id.saturating_sub(1)]));
     }
     let selected = BTreeSet::from([99_999]);
     let before = selected.clone();
-    let missing = dependency_selection_requirements(&nodes, &selected)
-        .expect("valid chain requirements");
+    let missing_result = dependency_selection_requirements(&nodes, &selected);
+    assert!(missing_result.is_ok(), "valid chain requirements");
+    let Ok(missing) = missing_result else {
+        return;
+    };
     assert_eq!(missing.len(), 99_999);
     assert_eq!(
         missing.first(),
@@ -722,66 +762,24 @@ fn bounded_dependency_requirements_reject_before_pair_materialization() {
     );
 }
 
-#[derive(Debug)]
-struct CountingIdentity<'counter> {
-    clones: &'counter AtomicUsize,
-    value: u32,
-}
-
-impl Clone for CountingIdentity<'_> {
-    fn clone(&self) -> Self {
-        let _previous = self.clones.fetch_add(1, AtomicOrdering::Relaxed);
-        Self {
-            clones: self.clones,
-            value: self.value,
-        }
-    }
-}
-
-impl Eq for CountingIdentity<'_> {}
-
-impl Ord for CountingIdentity<'_> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.value.cmp(&other.value)
-    }
-}
-
-impl PartialEq for CountingIdentity<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
-    }
-}
-
-impl PartialOrd for CountingIdentity<'_> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-fn counting_identity(clones: &AtomicUsize, value: u32) -> CountingIdentity<'_> {
-    CountingIdentity { clones, value }
-}
-
 #[test]
-#[allow(clippy::mutable_key_type)]
 fn bounded_requirement_rejection_does_not_clone_identity_pairs() {
-    let clones = AtomicUsize::new(0);
     let nodes = [
         CommandNode {
             dependencies: Vec::new(),
-            id: counting_identity(&clones, 1),
+            id: counting_identity(1),
         },
         CommandNode {
-            dependencies: vec![counting_identity(&clones, 1)],
-            id: counting_identity(&clones, 2),
+            dependencies: vec![counting_identity(1)],
+            id: counting_identity(2),
         },
         CommandNode {
-            dependencies: vec![counting_identity(&clones, 2)],
-            id: counting_identity(&clones, 3),
+            dependencies: vec![counting_identity(2)],
+            id: counting_identity(3),
         },
     ];
-    let selected = BTreeSet::from([counting_identity(&clones, 3)]);
-    clones.store(0, AtomicOrdering::Relaxed);
+    let selected = BTreeSet::from([counting_identity(3)]);
+    COUNTING_IDENTITY_CLONES.store(0, AtomicOrdering::Relaxed);
     assert_eq!(
         dependency_selection_requirements_bounded(&nodes, &selected, 1),
         Err(
@@ -791,35 +789,17 @@ fn bounded_requirement_rejection_does_not_clone_identity_pairs() {
             }
         ),
     );
-    assert_eq!(clones.load(AtomicOrdering::Relaxed), 0);
-}
-
-#[derive(Clone, Copy)]
-struct BorrowedNode<'graph> {
-    dependencies: &'graph [u32],
-    id: &'graph u32,
-}
-
-impl CommandDependencyNode for BorrowedNode<'_> {
-    type Identity = u32;
-
-    fn dependencies(&self) -> &[Self::Identity] {
-        self.dependencies
-    }
-
-    fn id(&self) -> &Self::Identity {
-        self.id
-    }
+    assert_eq!(COUNTING_IDENTITY_CLONES.load(AtomicOrdering::Relaxed), 0);
 }
 
 #[test]
 fn graph_validation_accepts_borrowed_node_views() {
-    let one = 1_u32;
-    let two = 2_u32;
-    let three = 3_u32;
+    let one = 1u32;
+    let two = 2u32;
+    let three = 3u32;
     let no_dependencies = [];
-    let depends_on_one = [1_u32];
-    let depends_on_two = [2_u32];
+    let depends_on_one = [1u32];
+    let depends_on_two = [2u32];
     let nodes = [
         BorrowedNode {
             dependencies: &no_dependencies,
@@ -845,7 +825,7 @@ fn graph_validation_accepts_borrowed_node_views() {
     );
 }
 
-fn next_graph_oracle_value(seed: &mut u64) -> u64 {
+const fn next_graph_oracle_value(seed: &mut u64) -> u64 {
     *seed = seed
         .wrapping_mul(6_364_136_223_846_793_005)
         .wrapping_add(1_442_695_040_888_963_407);
@@ -853,11 +833,11 @@ fn next_graph_oracle_value(seed: &mut u64) -> u64 {
 }
 
 fn exhaustive_dependency_mask(mask: u8) -> Vec<u32> {
-    [0_u32, 1, 2, 9]
+    [0u32, 1, 2, 9]
         .into_iter()
         .enumerate()
         .filter_map(|(bit, dependency)| {
-            (mask & (1_u8 << bit) != 0).then_some(dependency)
+            (mask & (1u8 << bit) != 0).then_some(dependency)
         })
         .collect()
 }
@@ -874,16 +854,25 @@ fn reference_three_node_graph(
                     command: node.id,
                 });
             }
-            let dependency_position = nodes
+            let Some(dependency_position) = nodes
                 .iter()
-                .position(|candidate| candidate.id == *dependency);
-            let Some(dependency_position) = dependency_position else {
+                .position(|candidate| candidate.id == *dependency)
+            else {
                 return Err(CommandGraphError::MissingDependency {
                     command: node.id,
                     dependency: *dependency,
                 });
             };
-            reachability[position][dependency_position] = true;
+            let Some(edge) = reachability
+                .get_mut(position)
+                .and_then(|row| row.get_mut(dependency_position))
+            else {
+                return Err(CommandGraphError::MissingDependency {
+                    command: node.id,
+                    dependency: *dependency,
+                });
+            };
+            *edge = true;
             if dependency_position > position && first_forward.is_none() {
                 first_forward = Some((node.id, *dependency));
             }
@@ -892,41 +881,61 @@ fn reference_three_node_graph(
     let Some((command, dependency)) = first_forward else {
         return Ok(());
     };
+    // Snapshot one intermediate step at a time: the reference oracle uses
+    // no unchecked indexes and keeps the three-node graph independent.
     for intermediate in 0..3 {
-        for from in 0..3 {
-            for to in 0..3 {
-                reachability[from][to] |= reachability[from][intermediate]
-                    && reachability[intermediate][to];
+        let previous = reachability;
+        for (from, row) in reachability.iter_mut().enumerate() {
+            for (to, cell) in row.iter_mut().enumerate() {
+                let from_to_middle = previous
+                    .get(from)
+                    .and_then(|edges| edges.get(intermediate))
+                    .copied()
+                    .unwrap_or(false);
+                let middle_to_to = previous
+                    .get(intermediate)
+                    .and_then(|edges| edges.get(to))
+                    .copied()
+                    .unwrap_or(false);
+                *cell |= from_to_middle && middle_to_to;
             }
         }
     }
-    if (0..3).any(|position| reachability[position][position]) {
+    if reachability
+        .iter()
+        .enumerate()
+        .any(|(position, row)| row.get(position).copied().unwrap_or(false))
+    {
         Err(CommandGraphError::Cycle)
     } else {
-        Err(CommandGraphError::DependencyAfterCommand {
-            command,
-            dependency,
-        })
+        Err(CommandGraphError::DependencyAfterCommand { command, dependency })
     }
 }
 
 #[test]
 fn every_three_command_graph_matches_invalid_precedence_oracle() {
-    let mut cases = 0_u32;
+    let mut cases = 0u32;
     let mut saw_valid = false;
     let mut saw_self_dependency = false;
     let mut saw_missing_dependency = false;
     let mut saw_cycle = false;
     let mut saw_forward_dependency = false;
-    for first_mask in 0_u8..16 {
-        for second_mask in 0_u8..16 {
-            for third_mask in 0_u8..16 {
+    for first_mask in 0u8..16 {
+        for second_mask in 0u8..16 {
+            for third_mask in 0u8..16 {
                 let nodes = [
                     node(0, &exhaustive_dependency_mask(first_mask)),
                     node(1, &exhaustive_dependency_mask(second_mask)),
                     node(2, &exhaustive_dependency_mask(third_mask)),
                 ];
                 let expected = reference_three_node_graph(&nodes);
+                assert!(
+                    !matches!(
+                        expected,
+                        Err(CommandGraphError::DuplicateIdentity { .. })
+                    ),
+                    "the three-node oracle has fixed unique identities",
+                );
                 match &expected {
                     Ok(()) => saw_valid = true,
                     Err(CommandGraphError::SelfDependency { .. }) => {
@@ -936,32 +945,24 @@ fn every_three_command_graph_matches_invalid_precedence_oracle() {
                         saw_missing_dependency = true;
                     },
                     Err(CommandGraphError::Cycle) => saw_cycle = true,
-                    Err(CommandGraphError::DependencyAfterCommand { .. }) => {
+                    Err(CommandGraphError::DependencyAfterCommand {
+                        ..
+                    }) => {
                         saw_forward_dependency = true;
                     },
-                    Err(CommandGraphError::DuplicateIdentity { .. }) => {
-                        panic!(
-                            "three-node oracle uses fixed unique identities",
-                        );
-                    },
+                    Err(CommandGraphError::DuplicateIdentity { .. }) => {},
                 }
                 assert_eq!(
                     validate_command_graph(&nodes),
-                    expected.clone(),
-                    "graph mismatch for masks {}/{}/{}",
-                    first_mask,
-                    second_mask,
-                    third_mask,
+                    expected,
+                    "masks {first_mask}/{second_mask}/{third_mask}",
                 );
                 assert_eq!(
                     validate_command_graph_view(&nodes).map(|validated| {
-                        std::ptr::eq(validated.nodes(), nodes.as_slice())
+                        ptr::eq(validated.nodes(), nodes.as_slice())
                     }),
                     expected.map(|()| true),
-                    "sealed graph mismatch for masks {}/{}/{}",
-                    first_mask,
-                    second_mask,
-                    third_mask,
+                    "sealed {first_mask}/{second_mask}/{third_mask}",
                 );
                 cases = cases.saturating_add(1);
             }
@@ -978,10 +979,7 @@ fn every_three_command_graph_matches_invalid_precedence_oracle() {
 fn reference_dependency_requirements(
     nodes: &[CommandNode<u32>],
     selected: &BTreeSet<u32>,
-) -> (
-    BTreeSet<u32>,
-    Vec<MissingDependencyRequirement<u32>>,
-) {
+) -> (BTreeSet<u32>, Vec<MissingDependencyRequirement<u32>>) {
     let mut required = selected.clone();
     for node in nodes.iter().rev() {
         if !required.contains(&node.id) {
@@ -1028,10 +1026,139 @@ fn reference_closed_selection(
     Ok(())
 }
 
+fn assert_dag_case(
+    nodes: &[CommandNode<u32>],
+    selected: &BTreeSet<u32>,
+    case: usize,
+) -> bool {
+    let (required, expected_missing) =
+        reference_dependency_requirements(nodes, selected);
+    let expected_summary = DependencySelectionSummary {
+        missing_dependency_edges: expected_missing.len(),
+        required_commands: required.len(),
+        selected_commands: selected.len(),
+    };
+    let expected_size = CommandGraphSize {
+        commands: nodes.len(),
+        dependency_edges: nodes
+            .iter()
+            .map(|node| node.dependencies.len())
+            .sum(),
+    };
+
+    assert_eq!(
+        validate_command_graph(nodes),
+        Ok(()),
+        "graph validity mismatch in generated case {case}",
+    );
+    let validated_result = validate_command_graph_view(nodes);
+    assert!(validated_result.is_ok(), "generated ordered DAG seals");
+    let Ok(validated) = validated_result else {
+        return false;
+    };
+    assert!(
+        ptr::eq(validated.nodes(), nodes),
+        "validated graph view keeps caller-owned nodes",
+    );
+    assert_eq!(
+        command_graph_size(nodes),
+        Ok(expected_size),
+        "graph size mismatch in generated case {case}",
+    );
+    assert_eq!(
+        dependency_selection_requirements(nodes, selected),
+        Ok(expected_missing.clone()),
+        "requirements mismatch in generated case {case}",
+    );
+    assert_eq!(
+        validated.dependency_selection_requirements(selected),
+        Ok(expected_missing.clone()),
+        "sealed requirements mismatch in generated case {case}",
+    );
+    assert_eq!(
+        dependency_selection_summary(nodes, selected),
+        Ok(expected_summary),
+        "summary mismatch in generated case {case}",
+    );
+    assert_eq!(
+        validated.dependency_selection_summary(selected),
+        Ok(expected_summary),
+        "sealed summary mismatch in generated case {case}",
+    );
+    assert_eq!(
+        dependency_selection_requirements_bounded(
+            nodes,
+            selected,
+            expected_missing.len(),
+        ),
+        Ok(expected_missing.clone()),
+        "bounded requirements mismatch in generated case {case}",
+    );
+    assert_eq!(
+        validated.dependency_selection_requirements_bounded(
+            selected,
+            expected_missing.len(),
+        ),
+        Ok(expected_missing.clone()),
+        "sealed bounded requirements mismatch in generated case {case}",
+    );
+    assert_eq!(
+        validate_dependency_closed_selection(nodes, selected),
+        reference_closed_selection(nodes, selected),
+        "closure mismatch in generated case {case}",
+    );
+    assert_eq!(
+        validated.validate_dependency_closed_selection(selected),
+        reference_closed_selection(nodes, selected),
+        "sealed closure mismatch in generated case {case}",
+    );
+    assert_bounded_rejection(
+        nodes,
+        selected,
+        &expected_missing,
+        case,
+        &validated,
+    );
+    expected_missing.is_empty()
+}
+
+fn assert_bounded_rejection(
+    nodes: &[CommandNode<u32>],
+    selected: &BTreeSet<u32>,
+    expected_missing: &[MissingDependencyRequirement<u32>],
+    case: usize,
+    validated: &ValidatedCommandGraph<'_, CommandNode<u32>>,
+) {
+    if expected_missing.is_empty() {
+        return;
+    }
+    let limit = expected_missing.len().saturating_sub(1);
+    assert_eq!(
+        dependency_selection_requirements_bounded(nodes, selected, limit),
+        Err(
+            BoundedDependencyRequirementsError::RequirementCountExceeded {
+                actual: expected_missing.len(),
+                limit,
+            },
+        ),
+        "bounded rejection mismatch in generated case {case}",
+    );
+    assert_eq!(
+        validated.dependency_selection_requirements_bounded(selected, limit),
+        Err(
+            BoundedDependencyRequirementsError::RequirementCountExceeded {
+                actual: expected_missing.len(),
+                limit,
+            },
+        ),
+        "sealed bounded rejection mismatch in generated case {case}",
+    );
+}
+
 #[test]
 fn valid_dag_selection_apis_match_reference_oracle() {
     const CASES: usize = 20_000;
-    let mut seed = 0x05ee_dda6_2026_u64;
+    let mut seed = 0x05ee_dda6_2026u64;
     let mut seen_node_counts = [false; 9];
     let mut saw_duplicate_edge = false;
     let mut saw_empty_selection = false;
@@ -1040,10 +1167,17 @@ fn valid_dag_selection_apis_match_reference_oracle() {
     let mut saw_missing_requirements = false;
     let mut saw_closed_selection = false;
     for case in 0..CASES {
-        let node_count = (next_graph_oracle_value(&mut seed) % 9) as u32;
-        seen_node_counts[node_count as usize] = true;
-        let mut nodes = Vec::with_capacity(node_count as usize);
-        for id in 0..node_count {
+        let node_count =
+            usize::try_from(next_graph_oracle_value(&mut seed).rem_euclid(9))
+                .unwrap_or_default();
+        assert_eq!(
+            seen_node_counts
+                .get_mut(node_count)
+                .map(|seen| *seen = true),
+            Some(())
+        );
+        let mut nodes = Vec::with_capacity(node_count);
+        for id in 0..u32::try_from(node_count).unwrap_or_default() {
             let mut dependencies = Vec::new();
             for dependency in 0..id {
                 if next_graph_oracle_value(&mut seed).is_multiple_of(3) {
@@ -1070,117 +1204,10 @@ fn valid_dag_selection_apis_match_reference_oracle() {
         } else {
             saw_partial_selection = true;
         }
-        let (required, expected_missing) =
-            reference_dependency_requirements(&nodes, &selected);
-        if expected_missing.is_empty() {
+        if assert_dag_case(&nodes, &selected, case) {
             saw_closed_selection = true;
         } else {
             saw_missing_requirements = true;
-        }
-        let expected_summary = DependencySelectionSummary {
-            missing_dependency_edges: expected_missing.len(),
-            required_commands: required.len(),
-            selected_commands: selected.len(),
-        };
-        let expected_size = CommandGraphSize {
-            commands: nodes.len(),
-            dependency_edges: nodes
-                .iter()
-                .map(|node| node.dependencies.len())
-                .sum(),
-        };
-
-        assert_eq!(
-            validate_command_graph(&nodes),
-            Ok(()),
-            "graph validity mismatch in generated case {case}",
-        );
-        let validated = validate_command_graph_view(&nodes)
-            .expect("generated ordered DAG seals");
-        assert!(std::ptr::eq(validated.nodes(), nodes.as_slice()));
-        assert_eq!(
-            command_graph_size(&nodes),
-            Ok(expected_size),
-            "graph size mismatch in generated case {case}",
-        );
-        assert_eq!(
-            dependency_selection_requirements(&nodes, &selected),
-            Ok(expected_missing.clone()),
-            "requirements mismatch in generated case {case}",
-        );
-        assert_eq!(
-            validated.dependency_selection_requirements(&selected),
-            Ok(expected_missing.clone()),
-            "sealed requirements mismatch in generated case {case}",
-        );
-        assert_eq!(
-            dependency_selection_summary(&nodes, &selected),
-            Ok(expected_summary),
-            "summary mismatch in generated case {case}",
-        );
-        assert_eq!(
-            validated.dependency_selection_summary(&selected),
-            Ok(expected_summary),
-            "sealed summary mismatch in generated case {case}",
-        );
-        assert_eq!(
-            dependency_selection_requirements_bounded(
-                &nodes,
-                &selected,
-                expected_missing.len(),
-            ),
-            Ok(expected_missing.clone()),
-            "bounded requirements mismatch in generated case {case}",
-        );
-        assert_eq!(
-            validated.dependency_selection_requirements_bounded(
-                &selected,
-                expected_missing.len(),
-            ),
-            Ok(expected_missing.clone()),
-            "sealed bounded requirements mismatch in generated case {case}",
-        );
-        assert_eq!(
-            validate_dependency_closed_selection(&nodes, &selected),
-            reference_closed_selection(&nodes, &selected),
-            "closure mismatch in generated case {case}",
-        );
-        assert_eq!(
-            validated.validate_dependency_closed_selection(&selected),
-            reference_closed_selection(&nodes, &selected),
-            "sealed closure mismatch in generated case {case}",
-        );
-        if !expected_missing.is_empty() {
-            let limit = expected_missing.len() - 1;
-            assert_eq!(
-                dependency_selection_requirements_bounded(
-                    &nodes,
-                    &selected,
-                    limit,
-                ),
-                Err(
-                    BoundedDependencyRequirementsError::
-                        RequirementCountExceeded {
-                            actual: expected_missing.len(),
-                            limit,
-                        },
-                ),
-                "bounded rejection mismatch in generated case {case}",
-            );
-            assert_eq!(
-                validated.dependency_selection_requirements_bounded(
-                    &selected,
-                    limit,
-                ),
-                Err(
-                    BoundedDependencyRequirementsError::
-                        RequirementCountExceeded {
-                            actual: expected_missing.len(),
-                            limit,
-                        },
-                ),
-                "sealed bounded rejection mismatch in generated case {case}",
-            );
         }
     }
     assert!(seen_node_counts.into_iter().all(|seen| seen));
