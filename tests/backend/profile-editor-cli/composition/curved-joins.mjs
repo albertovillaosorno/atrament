@@ -8,7 +8,32 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-const root = fileURLToPath(new URL('../../../', import.meta.url));
+const root = fileURLToPath(new URL('../../../../', import.meta.url));
+const cargo = join(root, '.dependencies/rust/1.99.1/bin/cargo');
+
+// Read Cargo's exact locked/offline compiler artifact, rather than guessing a
+// debug path or spawning Cargo for every numeric-oracle sample.
+function buildCli() {
+    const result = spawnSync(cargo, [
+        'build', '--locked', '--offline', '-p', 'atrament_profile_editor_cli',
+        '--message-format=json',
+    ], { cwd: root, encoding: 'utf8', timeout: 120_000,
+        maxBuffer: 8 * 1024 * 1024 });
+    assert.equal(result.error, undefined, result.error?.message);
+    assert.equal(result.status, 0, result.stderr);
+    const messages = result.stdout.trimEnd().split('\n').map(JSON.parse);
+    const binaries = messages.filter((message) =>
+        message.reason === 'compiler-artifact'
+        && message.target?.name === 'atrament-profiles'
+        && message.target?.kind?.includes('bin')
+        && typeof message.executable === 'string')
+        .map((message) => message.executable);
+    assert.equal(messages.some((message) =>
+        message.reason === 'build-finished' && message.success === true), true);
+    assert.equal(binaries.length, 1, 'exact native executable receipt');
+    return binaries[0];
+}
+const cli = buildCli();
 const source = [
     '--printed-sheet', 'true',
     '--glyph-stroke', 'a', '200', '1000', '3200', '2200',
@@ -20,11 +45,9 @@ const source = [
 const curve = ['--join-text-curved', 'a', 'o', '1', '1', '0', '-400'];
 
 function notebook(args) {
-    const result = spawnSync('cargo', [
-        'run', '--locked', '--offline', '--quiet',
-        '-p', 'atrament_profile_editor_cli', '--bin', 'atrament-profiles',
-        '--', 'notebook', ...args,
-    ], { cwd: root, timeout: 120000, maxBuffer: 16 * 1024 * 1024 });
+    const result = spawnSync(cli, ['notebook', ...args], {
+        cwd: root, timeout: 120_000, maxBuffer: 16 * 1024 * 1024,
+    });
     assert.equal(result.error, undefined, result.error?.message);
     return result;
 }
@@ -46,20 +69,25 @@ const expectedInk = [
     '',
 ].join('\n');
 
-test('curved join follows adjacent glyph endpoints with four quadratic pieces', () => {
+test('curved join follows adjacent glyph endpoints with four '
+    + 'quadratic pieces', () => {
     const bytes = admitted([...source, ...curve, '--emit-ink-file']);
     assert.equal(bytes.toString(), expectedInk);
     assert.deepEqual(bytes, admitted([...source, ...curve, '--emit-ink-file']));
     assert.notDeepEqual(bytes, admitted([...source, '--emit-ink-file']));
 });
 
-test('vector PDF and transparent PNG consume the same curved physical ink', () => {
+test('vector PDF and transparent PNG consume the same curved '
+    + 'physical ink', () => {
     for (const format of ['pdf', 'png']) {
         const suffix = format === 'png' ? ['--dpi', '72'] : [];
-        const curved = admitted([...source, ...curve, '--export-paper', format, ...suffix]);
-        const straight = admitted([...source, '--join-text-anchors', 'a', 'o', '1', '1',
+        const curved = admitted([...source, ...curve,
             '--export-paper', format, ...suffix]);
-        const signature = format === 'png' ? Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+        const straight = admitted([...source, '--join-text-anchors',
+            'a', 'o', '1', '1',
+            '--export-paper', format, ...suffix]);
+        const signature = format === 'png'
+            ? Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
             : Buffer.from('%PDF-');
         assert.deepEqual(curved.subarray(0, signature.length), signature);
         assert.notDeepEqual(curved, straight);
@@ -68,8 +96,10 @@ test('vector PDF and transparent PNG consume the same curved physical ink', () =
     }
 });
 
-test('invalid curves refuse atomically before replacing existing output', () => {
-    const directory = mkdtempSync(join(root, '.temp', 'atrament-curved-joins-'));
+test('invalid curves refuse atomically before replacing '
+    + 'existing output', () => {
+    const directory = mkdtempSync(join(root, '.temp',
+        'atrament-curved-joins-'));
     try {
         const filename = join(directory, 'accepted.pdf');
         const sentinel = Buffer.from('preserve the earlier printable PDF');
@@ -85,7 +115,8 @@ test('invalid curves refuse atomically before replacing existing output', () => 
             ['--join-text-curved', 'a', 'ó', '1', '1', '0', '-400'],
         ];
         for (const choice of invalid) {
-            const result = notebook([...source, ...choice, '--export-paper', 'pdf',
+            const result = notebook([...source, ...choice,
+                '--export-paper', 'pdf',
                 '--output', filename, '--replace']);
             assert.notEqual(result.status, 0, JSON.stringify(choice));
             assert.equal(result.stdout.length, 0);
@@ -96,13 +127,15 @@ test('invalid curves refuse atomically before replacing existing output', () => 
     }
 });
 
-test('two independent measured text rows receive separate curved connections', () => {
+test('two independent measured text rows receive separate '
+    + 'curved connections', () => {
     const flowSource = source.slice(0, -5);
     const flags = [...flowSource, '--flow-text', 'ao\nao',
         ...curve, '--emit-ink-file'];
     const lines = admitted(flags).toString().trimEnd().split('\n');
     assert.equal(lines[0], 'atrament.page-ink.v1');
-    assert.equal(lines.length, 13, 'two glyphs and four curved strokes per row');
+    assert.equal(lines.length, 13,
+        'two glyphs and four curved strokes per row');
     for (const offset of [0, 6]) {
         const decoded = lines.slice(1 + offset, 7 + offset).map((line) => {
             const [, x1, y1, x2, y2, width, color] = line.split('\t');
@@ -116,11 +149,13 @@ test('two independent measured text rows receive separate curved connections', (
         }
         assert.deepEqual(decoded[5].start, decoded[4].end);
     }
-    assert.notDeepEqual(lines[1], lines[7], 'second row uses a distinct physical baseline');
+    assert.notDeepEqual(lines[1], lines[7],
+        'second row uses a distinct physical baseline');
     assert.deepEqual(admitted(flags), admitted(flags), 'replay is exact');
 });
 
-test('exact decomposed Unicode and explicit stroke anchors remain distinct', () => {
+test('exact decomposed Unicode and explicit stroke anchors '
+    + 'remain distinct', () => {
     const original = [
         '--printed-sheet', 'true',
         '--glyph-stroke', 'n\u0303', '200', '1200', '1500', '1600',
@@ -137,7 +172,8 @@ test('exact decomposed Unicode and explicit stroke anchors remain distinct', () 
         'n\u0303', 'ó', '2', '1', '0', '-300', '--emit-ink-file'];
     const lines = admitted(curved).toString().trimEnd().split('\n');
     assert.equal(lines.length, 9);
-    const coordinates = lines.slice(1).map((line) => line.split('\t').slice(1, 5).map(Number));
+    const coordinates = lines.slice(1)
+        .map((line) => line.split('\t').slice(1, 5).map(Number));
     assert.deepEqual(coordinates[1].slice(2), [33200, 47200]);
     assert.deepEqual(coordinates[2].slice(0, 2), [33200, 47200]);
     assert.deepEqual(coordinates[5].slice(2), [34200, 47200]);
@@ -162,8 +198,10 @@ test('seeded per-occurrence geometry is joined after native transforms', () => {
     assert.deepEqual(admitted(withVariation), admitted(withVariation));
 });
 
-test('physical TSV saved from curved text reproduces exact vector and raster pages', () => {
-    const directory = mkdtempSync(join(root, '.temp', 'atrament-curved-ink-parity-'));
+test('physical TSV saved from curved text reproduces exact '
+    + 'vector and raster pages', () => {
+    const directory = mkdtempSync(join(root, '.temp',
+        'atrament-curved-ink-parity-'));
     try {
         const filename = join(directory, 'joined.page-ink.tsv');
         const ink = admitted([...source, ...curve, '--emit-ink-file']);
@@ -175,7 +213,8 @@ test('physical TSV saved from curved text reproduces exact vector and raster pag
             const imported = admitted(['--printed-sheet', 'true', '--ink-file',
                 filename, ...option]);
             assert.deepEqual(imported, direct,
-                format + ' must draw byte-identical native physical pen segments');
+                format + ' must draw byte-identical native physical '
+                    + 'pen segments');
         }
         assert.deepEqual(readFileSync(filename), ink,
             'replaying page ink must not modify source bytes');
@@ -184,7 +223,8 @@ test('physical TSV saved from curved text reproduces exact vector and raster pag
     }
 });
 
-test('128 independent quadratic bends match a whole-um numeric reference oracle', () => {
+test('128 independent quadratic bends match a whole-um numeric '
+    + 'reference oracle', () => {
     const start = [33200, 47200];
     const end = [34200, 47200];
     for (let seed = 0; seed < 128; seed++) {
@@ -210,7 +250,8 @@ test('128 independent quadratic bends match a whole-um numeric reference oracle'
     }
 });
 
-test('cross-row, out-of-range gap and incompatible pen links fail closed', () => {
+test('cross-row, out-of-range gap and incompatible pen links '
+    + 'fail closed', () => {
     const cases = [
         [...source.slice(0, -5), '--flow-text', 'a\no',
             ...curve, '--emit-ink-file'],
@@ -228,7 +269,8 @@ test('cross-row, out-of-range gap and incompatible pen links fail closed', () =>
     }
 });
 
-test('multiple curved pairs retain independent bends in reverse option order', () => {
+test('multiple curved pairs retain independent bends in '
+    + 'reverse option order', () => {
     const pairs = [
         '--printed-sheet', 'true',
         '--glyph-stroke', 'a', '200', '1000', '3200', '2200', '250', '#102030',
@@ -299,7 +341,8 @@ test('128 oblique glyph gaps match signed integer quadratic samples', () => {
     assert.ok(checked >= 120, 'independent off-axis bend fixtures exercised');
 });
 
-test('curved pen overshoot outside printable margins refuses a valid straight bridge', () => {
+test('curved pen overshoot outside printable margins refuses a '
+    + 'valid straight bridge', () => {
     // Default A4 right ink limit is 195875 um with the 250-um pen.
     // Both original glyphs and the straight bridge fit. Its curved
     // quarter samples protrude past that physical boundary.
@@ -314,7 +357,8 @@ test('curved pen overshoot outside printable margins refuses a valid straight br
     const straight = admitted([...nearEdge, '--join-text-anchors',
         'a', 'o', '1', '1', '--emit-ink-file']);
     assert.equal(straight.toString().trimEnd().split('\n').length, 4);
-    const directory = mkdtempSync(join(root, '.temp', 'atrament-curve-margin-'));
+    const directory = mkdtempSync(join(root, '.temp',
+        'atrament-curve-margin-'));
     try {
         for (const format of ['pdf', 'png']) {
             const filename = join(directory, `existing.${format}`);
@@ -335,7 +379,8 @@ test('curved pen overshoot outside printable margins refuses a valid straight br
     }
 });
 
-test('two accented text rows join after correlated variation and honor pen reversal', () => {
+test('two accented text rows join after correlated variation '
+    + 'and honor pen reversal', () => {
     const nfd = 'n\u0303';
     const nfc = 'ó';
     const glyph = [
@@ -355,12 +400,12 @@ test('two accented text rows join after correlated variation and honor pen rever
         '--glyph-word-rise', '20',
         '--glyph-word-tracking', '30',
     ];
-    const directory = mkdtempSync(join(root, '.temp', 'atrament-accent-curves-'));
-    const glyphCommand = (options) => spawnSync('cargo', [
-        'run', '--locked', '--offline', '--quiet',
-        '-p', 'atrament_profile_editor_cli', '--bin', 'atrament-profiles',
-        '--', 'glyphs', ...options,
-    ], { cwd: root, timeout: 120000, maxBuffer: 16 * 1024 * 1024 });
+    const directory = mkdtempSync(join(root, '.temp',
+        'atrament-accent-curves-'));
+    const glyphCommand = (options) => spawnSync(cli,
+        ['glyphs', ...options], {
+            cwd: root, timeout: 120_000, maxBuffer: 16 * 1024 * 1024,
+        });
     try {
         const library = join(directory, 'author.tsv');
         const reversed = join(directory, 'reverse.tsv');
@@ -425,7 +470,8 @@ test('two accented text rows join after correlated variation and honor pen rever
 });
 
 test('four curved segments consume the exact 4096-line physical budget', () => {
-    const directory = mkdtempSync(join(root, '.temp', 'atrament-curve-budget-'));
+    const directory = mkdtempSync(join(root, '.temp',
+        'atrament-curve-budget-'));
     const glyphRow = 'a\t200\t1000\t3200\t2200\t250\t#102030';
     const nextRow = 'o\t200\t2200\t1200\t1000\t250\t#102030';
     const filename = join(directory, 'glyphs.tsv');
@@ -469,7 +515,8 @@ test('four curved segments consume the exact 4096-line physical budget', () => {
     }
 });
 
-test('malformed curved text joins refuse before opening an unclosed glyph stdin', async () => {
+test('malformed curved text joins refuse before opening an '
+    + 'unclosed glyph stdin', async () => {
     const invalid = [
         [['a', 'o', '1', '1', '0', '0'], /requires nonzero bend/],
         [['a', 'o', '1', '1', '601', '0'], /outside native bounds/],
@@ -481,12 +528,9 @@ test('malformed curved text joins refuse before opening an unclosed glyph stdin'
     ];
     for (const [operands, diagnostic] of invalid) {
         const result = await new Promise((resolve, reject) => {
-            const child = spawn('cargo', [
-                'run', '--locked', '--offline', '--quiet',
-                '-p', 'atrament_profile_editor_cli', '--bin',
-                'atrament-profiles', '--', 'notebook',
-                '--glyph-file', '-', '--join-text-curved', ...operands,
-                '--emit-ink-file',
+            const child = spawn(cli, [
+                'notebook', '--glyph-file', '-',
+                '--join-text-curved', ...operands, '--emit-ink-file',
             ], { cwd: root, stdio: ['pipe', 'pipe', 'pipe'] });
             let stderr = '';
             let stdout = '';

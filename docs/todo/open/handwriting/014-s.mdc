@@ -1581,8 +1581,8 @@ anchors, duplicate pair selections and physical 4096-stroke exhaustion.
 The final PDF, PNG and page-ink TSV use the same bounded physical
 segments; explicit file output keeps atomic no-clobber semantics.
 
-The separate nine-case production CLI subprocess suite at
-`tests/backend/handwriting-curved-text-joins/curved-joins.mjs`
+The separate 15-case native CLI subprocess suite at
+`tests/backend/profile-editor-cli/composition/curved-joins.mjs`
 checks exact integer quadratic samples, two measured text rows,
 composed-vs-decomposed Unicode identities, explicit anchors, seeded
 replay, native vector PDF/transparent PNG, exact imported page-ink
