@@ -69,17 +69,27 @@ if (names.length === 0 || declarations.length !== names.length
 const shardSize = 3;
 const shardCount = Math.ceil(names.length / shardSize);
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-// TAP's exit status alone is not enough: an unmatched name filter can exit
-// successfully with zero selected tests. Refuse missing, duplicate or partial
-// test receipts without trusting log text as evidence of a passed shard.
+// TAP's exit status and aggregate pass count cannot prove which authored
+// tests actually ran. Match every selected top-level name in original order,
+// then refuse partial, duplicate, skipped or otherwise incomplete receipts.
 export function completeShardTap(stdout, expected) {
+    if (expected.length === 0 || new Set(expected).size !== expected.length) {
+        return false;
+    }
+    const actual = [...stdout.matchAll(/^# Subtest: (.+)\r?$/gm)]
+        .map((match) => match[1]);
+    if (actual.length !== expected.length
+        || actual.some((name, index) => name !== expected[index])) {
+        return false;
+    }
     const count = (label) => {
         const lines = [...stdout.matchAll(
             new RegExp(`^# ${label} (\\d+)\\r?$`, 'gm'),
         )];
         return lines.length === 1 ? Number(lines[0][1]) : null;
     };
-    return count('tests') === expected && count('pass') === expected
+    return count('tests') === expected.length
+        && count('pass') === expected.length
         && count('fail') === 0 && count('cancelled') === 0
         && count('skipped') === 0 && count('todo') === 0;
 }
@@ -148,11 +158,11 @@ function run() {
                 process.stdout.write(result.stdout ?? '');
                 process.stderr.write(result.stderr ?? '');
                 const complete = completeShardTap(result.stdout ?? '',
-                    selected.length);
+                    selected);
                 if (result.status !== 0 || result.error || !complete) {
                     console.error(`Flow shard ${shard + 1} failed:`,
                         result.error?.message ?? result.signal ?? result.status,
-                        complete ? '' : 'incomplete TAP test counts');
+                        complete ? '' : 'incomplete or mismatched TAP receipt');
                     process.exitCode = 1;
                     break;
                 }
@@ -165,6 +175,8 @@ function run() {
     }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// Generic Node test discovery must never launch the native export runner.
+if (process.argv[1] === fileURLToPath(import.meta.url)
+    && !process.env.NODE_TEST_CONTEXT) {
     run();
 }

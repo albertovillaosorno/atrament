@@ -70,12 +70,31 @@ test('flow shard runner rejects invalid selectors before native export', () => {
     }
 });
 
-test('flow shard receipts refuse zero matches and partial TAP results', () => {
-    const accepted = [
-        '# tests 3', '# pass 3', '# fail 0', '# cancelled 0',
-        '# skipped 0', '# todo 0',
+function tap(names) {
+    return [
+        'TAP version 13',
+        ...names.flatMap((name, index) => [
+            `# Subtest: ${name}`, `ok ${index + 1} - ${name}`,
+        ]),
+        `1..${names.length}`,
+        `# tests ${names.length}`, `# pass ${names.length}`,
+        '# fail 0', '# cancelled 0', '# skipped 0', '# todo 0',
     ].join('\n') + '\n';
-    assert.equal(completeShardTap(accepted, 3), true);
+}
+
+test('flow shard receipts require exact names and complete TAP counters',
+    () => {
+    const names = ['first native export', 'second native export',
+        'third native export'];
+    const accepted = tap(names);
+    assert.equal(completeShardTap(accepted, names), true);
+    assert.equal(completeShardTap(accepted, []), false);
+    assert.equal(completeShardTap(accepted, names.slice(0, 2)), false);
+    assert.equal(completeShardTap(accepted,
+        [names[1], names[0], names[2]]), false);
+    assert.equal(completeShardTap(accepted,
+        [names[0], names[0], names[2]]), false);
+    assert.equal(completeShardTap(tap(['flow.mjs']), names), false);
     for (const [from, to] of [
         ['# tests 3', '# tests 0'],
         ['# pass 3', '# pass 0'],
@@ -84,24 +103,38 @@ test('flow shard receipts refuse zero matches and partial TAP results', () => {
         ['# cancelled 0', '# cancelled 1'],
         ['# skipped 0', '# skipped 1'],
         ['# todo 0', '# todo 1'],
+        ['# Subtest: first native export', '# Subtest: wrong export'],
     ]) {
-        assert.equal(completeShardTap(accepted.replace(from, to), 3),
+        assert.equal(completeShardTap(accepted.replace(from, to), names),
             false, to);
-        assert.equal(completeShardTap(accepted.replace(from, ''), 3),
+        assert.equal(completeShardTap(accepted.replace(from, ''), names),
             false, `${from} missing`);
-        assert.equal(completeShardTap(accepted + `${from}\n`, 3),
+        assert.equal(completeShardTap(accepted + `${from}\n`, names),
             false, `${from} duplicate`);
     }
-    assert.equal(completeShardTap('', 3), false);
-    assert.equal(completeShardTap(accepted, 2), false);
+    assert.equal(completeShardTap('', names), false);
+});
+
+test('generic Node test discovery never launches native export shards',
+    () => {
+    const result = spawnSync(process.execPath, [
+        '--test', '--test-reporter=tap', runner,
+    ], { cwd: root, encoding: 'utf8', timeout: 10_000, env: childEnv });
+    assert.equal(result.error, undefined, result.error?.message);
+    assert.equal(result.status, 0, result.stderr);
+    assert.doesNotMatch(result.stdout, /Flow shard \d+\//);
+    assert.doesNotMatch(result.stdout, /Passed \d+ selected native flow/);
 });
 
 test('shards build and run the native CLI with complete selected receipts',
     () => {
     const result = run('--shard', '1');
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /Flow shard 1\/60 \(3 cases\)/);
-    assert.ok(completeShardTap(result.stdout, 3));
+    const source = readFileSync(flow, 'utf8');
+    const names = [...source.matchAll(/^test\('([^'\n]+)'/gm)]
+        .map((match) => match[1]);
+    assert.match(result.stdout, /Flow shard 1\/\d+ \(3 cases\)/);
+    assert.ok(completeShardTap(result.stdout, names.slice(0, 3)));
     assert.match(result.stdout, /Passed 3 selected native flow cases\./);
 });
 
@@ -118,5 +151,7 @@ test('prebuilt CLI selection cannot silently fall back to Cargo', () => {
     assert.notEqual(result.status, 0);
     assert.match(result.stdout, /null !== 0/);
     assert.doesNotMatch(result.stdout, /Finished .*target/);
-    assert.equal(completeShardTap(result.stdout, 1), false);
+    assert.equal(completeShardTap(result.stdout, [
+        'stdout nominal flow rows predict independently authored PDF/PNG ink',
+    ]), false);
 });
