@@ -41,6 +41,7 @@ const CIRCLE_SEGMENTS = 48;
 const OPEN_ARC_SEGMENTS = 36;
 const ARCH_SEGMENTS = 16;
 const AXES = ["x1", "y1", "x2", "y2", "width"] as const;
+const LATIN_LOWERCASE = [..."abcdefghijklmnopqrstuvwxyz"];
 type Axis = typeof AXES[number];
 type Point = { x: number; y: number };
 type Stroke = {
@@ -3026,6 +3027,33 @@ function sampleQuadraticInk(
     return ink;
 }
 
+// Shared directed path emission keeps straight and quadratic marks in
+// their authored order across text, numerals, maths and currency starters.
+function sampleMarkInk(
+    parts: readonly MarkPiece[],
+    line: (from: Point, to: Point) => Stroke,
+): Stroke[] {
+    const ink: Stroke[] = [];
+    for (const { from, control, to } of parts) {
+        if (control === undefined) ink.push(line(from, to));
+        else ink.push(...sampleQuadraticInk(from, control, to, line));
+    }
+    return ink;
+}
+
+// Sample one whole ellipse with an identical integer point at every join.
+// This is the same directed sampling for digits and degree/percent rings.
+function sampleEllipseInk(
+    ellipse: Ellipse, line: (from: Point, to: Point) => Stroke,
+): Stroke[] {
+    const ink: Stroke[] = [];
+    for (let step = 0; step < CIRCLE_SEGMENTS; step += 1) {
+        ink.push(line(ellipsePoint(ellipse, step),
+            ellipsePoint(ellipse, step + 1)));
+    }
+    return ink;
+}
+
 // Apply a user-selected shear to every existing pen stroke of one exact
 // glyph. Interleaved NFC/NFD and unrelated glyphs are never modified.
 // One rejected endpoint prevents the entire candidate from being returned.
@@ -3984,10 +4012,8 @@ export function geometricStarter(
                 x1: from.x, y1: from.y, x2: to.x, y2: to.y,
                 width: pen, color });
         };
-        return textMarkParts(cx, cy, radius, g as TextMark).flatMap(
-            ({ from, control, to }) => control === undefined
-                ? [line(from, to)]
-                : sampleQuadraticInk(from, control, to, line));
+        return sampleMarkInk(
+            textMarkParts(cx, cy, radius, g as TextMark), line);
     }
     if (/^[A-Z]$/.test(g)) {
         const line = (from: Point, to: Point): Stroke => {
@@ -4026,10 +4052,7 @@ export function geometricStarter(
                 output.push(...sampleQuadraticInk(from, control, to, line));
             }
         }
-        for (const { from, control, to } of parts) {
-            if (control === undefined) output.push(line(from, to));
-            else output.push(...sampleQuadraticInk(from, control, to, line));
-        }
+        output.push(...sampleMarkInk(parts, line));
         return output;
     }
     if (/^[0-9]$/.test(g)) {
@@ -4047,13 +4070,8 @@ export function geometricStarter(
                 width: pen, color });
         };
         const ellipses = geometry.ellipses.flatMap((ellipse) =>
-            Array.from({ length: CIRCLE_SEGMENTS }, (_, step) =>
-                line(ellipsePoint(ellipse, step),
-                    ellipsePoint(ellipse, step + 1))));
-        const parts = geometry.parts.flatMap(({ from, control, to }) =>
-            control === undefined ? [line(from, to)]
-                : sampleQuadraticInk(from, control, to, line));
-        return [...ellipses, ...parts];
+            sampleEllipseInk(ellipse, line));
+        return [...ellipses, ...sampleMarkInk(geometry.parts, line)];
     }
     if ((CIRCLE_MARKS as readonly string[]).includes(g)) {
         const geometry = circleMarkGeometry(cx, cy, radius,
@@ -4075,11 +4093,7 @@ export function geometricStarter(
         };
         const ink: Stroke[] = [];
         for (const ring of geometry.ellipses) {
-            for (let step = 0; step < CIRCLE_SEGMENTS; step += 1) {
-                const start = ellipsePoint(ring, step);
-                const end = ellipsePoint(ring, step + 1);
-                ink.push(line(start, end));
-            }
+            ink.push(...sampleEllipseInk(ring, line));
         }
         for (const { from, to } of geometry.parts) {
             ink.push(line(from, to));
@@ -4131,10 +4145,8 @@ export function geometricStarter(
                 x2: to.x, y2: to.y, width: pen, color,
             });
         };
-        return mathParts(cx, cy, radius, g as MathGlyph).flatMap(
-            ({ from, control, to }) => control === undefined
-                ? [line(from, to)]
-                : sampleQuadraticInk(from, control, to, line));
+        return sampleMarkInk(
+            mathParts(cx, cy, radius, g as MathGlyph), line);
     }
     if ((CURRENCY_MARKS as readonly string[]).includes(g)) {
         const line = (from: Point, to: Point): Stroke => {
@@ -4158,9 +4170,7 @@ export function geometricStarter(
                     y: Math.round(first.y) },
                 { x: Math.round(last.x), y: Math.round(last.y) });
             }) : [];
-        return [...arc, ...parts.flatMap(({ from, control, to }) =>
-            control === undefined ? [line(from, to)]
-                : sampleQuadraticInk(from, control, to, line))];
+        return [...arc, ...sampleMarkInk(parts, line)];
     }
     if (["«", "»", "‘", "’", "“", "”"].includes(g)) {
         const glyph = g as QuoteGlyph;
@@ -4570,7 +4580,7 @@ export function fillMissingConnectedLowercase(
     color: string,
 ): Stroke[] {
     const authored = new Set(existing.map((stroke) => stroke.grapheme));
-    const missing = [..."abcdefghijklmnopqrstuvwxyz"].filter(
+    const missing = LATIN_LOWERCASE.filter(
         (glyph) => !authored.has(glyph));
     if (missing.length === 0) return existing;
     const added = missing.flatMap((glyph) =>
@@ -5108,6 +5118,15 @@ export function createGlyphStrokeEditor(): {
         decimalWhole(radius.value), decimalWhole(numeric.width.value),
         color.value,
     ];
+    // All explicit starter-fill buttons preserve glyph order and share the
+    // exact same optional-free native geometry invocation.
+    const sampleMissingStarters = (
+        glyphs: readonly string[], geometry: ReturnType<typeof starterGeometry>,
+    ): Stroke[] => {
+        const sample = (glyph: string): Stroke[] =>
+            geometricStarter(glyph, ...geometry);
+        return glyphs.flatMap(sample);
+    };
     const accentPosition = (): { dx: number; lift: number } => ({
         dx: decimalWhole(accentShift.value, true),
         lift: decimalWhole(accentLift.value),
@@ -6746,15 +6765,14 @@ export function createGlyphStrokeEditor(): {
                 throw new Error("Finish the current pen trace before seeding");
             }
             const authored = new Set(strokes.map((stroke) => stroke.grapheme));
-            const missing = [..."abcdefghijklmnopqrstuvwxyz"].filter(
+            const missing = LATIN_LOWERCASE.filter(
                 (glyph) => !authored.has(glyph));
             if (missing.length === 0) {
                 message("All 26 lowercase glyphs already have authored ink");
                 return;
             }
             const values = starterGeometry();
-            const added = missing.flatMap((glyph) =>
-                geometricStarter(glyph, ...values));
+            const added = sampleMissingStarters(missing, values);
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
             commitInkEdit(next, character.value, "lowercase fill", null);
@@ -6851,8 +6869,7 @@ export function createGlyphStrokeEditor(): {
                 return;
             }
             const values = starterGeometry();
-            const added = missing.flatMap((g) =>
-                geometricStarter(g, ...values));
+            const added = sampleMissingStarters(missing, values);
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
             commitInkEdit(next, character.value, "punctuation fill", null);
@@ -6876,8 +6893,7 @@ export function createGlyphStrokeEditor(): {
                 return;
             }
             const values = starterGeometry();
-            const added = missing.flatMap((g) =>
-                geometricStarter(g, ...values));
+            const added = sampleMissingStarters(missing, values);
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
             commitInkEdit(next, character.value, "quotation fill", null);
@@ -6902,8 +6918,7 @@ export function createGlyphStrokeEditor(): {
                 return;
             }
             const values = starterGeometry();
-            const added = missing.flatMap((g) =>
-                geometricStarter(g, ...values));
+            const added = sampleMissingStarters(missing, values);
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
             commitInkEdit(next, character.value, "math fill", null);
@@ -6926,8 +6941,7 @@ export function createGlyphStrokeEditor(): {
                 return;
             }
             const values = starterGeometry();
-            const added = missing.flatMap((g) =>
-                geometricStarter(g, ...values));
+            const added = sampleMissingStarters(missing, values);
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
             commitInkEdit(next, character.value, "digit fill", null);
@@ -6951,8 +6965,7 @@ export function createGlyphStrokeEditor(): {
                 return;
             }
             const values = starterGeometry();
-            const added = missing.flatMap((g) =>
-                geometricStarter(g, ...values));
+            const added = sampleMissingStarters(missing, values);
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
             commitInkEdit(next, character.value, "capital fill", null);
@@ -6975,8 +6988,7 @@ export function createGlyphStrokeEditor(): {
                 return;
             }
             const values = starterGeometry();
-            const added = missing.flatMap((g) =>
-                geometricStarter(g, ...values));
+            const added = sampleMissingStarters(missing, values);
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
             commitInkEdit(next, character.value, "text mark fill", null);
