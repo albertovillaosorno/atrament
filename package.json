@@ -8,7 +8,7 @@
     "build:frontend": "pnpm --filter @atrament/frontend run build",
     "check:frontend": "pnpm --filter @atrament/frontend run check",
     "test:frontend":
-      "node --test --test-concurrency=1 tests/browser/*/*/*.mjs",
+      "node tests/browser/workspace/adapter-inbound/frontend-shards.mjs",
     "test:flow":
       "node tests/backend/profile-editor-cli/composition/flow-shards.mjs",
     "test:cli-files":

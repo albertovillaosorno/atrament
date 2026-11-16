@@ -231,6 +231,36 @@ HTTP write deadlines to compensate for a test host's exhausted quota.
 This validates an environment-specific test failure, not approved visual
 goldens or full keyboard-only coverage; the acceptance task remains open.
 
+## Bounded, receipt-checked frontend acceptance — 2026-11-16
+
+`pnpm run test:frontend` now discovers each literal top-level Node test
+in the existing browser fixtures. Ordinary source files run as separate
+workers; the 141-case Firefox integration file is divided into four-case
+batches with individual process timeouts. A failed, cancelled or skipped
+selected case stops the overall acceptance rather than silently counting
+it as proof. Every batch compares its actual TAP test names, ordering and
+pass/fail/skip totals with the source inventory: Node can otherwise return
+exit 0 for a name selector that matches no test at all.
+
+The new `frontend-shards.mjs` entrypoint supports `--list` and `--shard N`
+for bounded, repeatable selection without sharing Firefox profiles between
+workers. The aggregate command includes its own runner-discovery and
+receipt-refusal tests; callers can invoke these separately with:
+
+```sh
+node --test \
+  tests/browser/workspace/adapter-inbound/frontend-shards.test.mjs
+node tests/browser/workspace/adapter-inbound/frontend-shards.mjs --list
+node tests/browser/workspace/adapter-inbound/frontend-shards.mjs --shard 25
+```
+
+The initial discovery covers 685 authored tests in 50 shards, including
+309 exact-glyph browser tests. The shard runner tests and an actual
+four-case Firefox/Rust local profile round-trip shard pass. This is test
+reliability work, not a new handwriting renderer or evidence that the
+entire Firefox matrix passed in one invocation. The owner-approved visual
+golden and exhaustive keyboard-only control coverage remain open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
