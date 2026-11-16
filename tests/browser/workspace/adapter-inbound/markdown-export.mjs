@@ -101,6 +101,53 @@ test("native four-column tab expansion cannot overrun Markdown handoff",
     }
 });
 
+test("repeated tab checks reuse one grapheme segmenter without state",
+    async () => {
+    const original = Intl.Segmenter;
+    let constructed = 0;
+    class CountingSegmenter extends original {
+        constructor(...args) {
+            super(...args);
+            constructed += 1;
+        }
+    }
+    try {
+        Intl.Segmenter = CountingSegmenter;
+        // A fresh module isolates its lazy cache from preceding assertions.
+        const isolated = await import(
+            `${ROOT}generated/markdown-export.js?cache-test=tab-columns`);
+        for (let count = 1; count <= 64; count += 1) {
+            const source = "a\t".repeat(count) + "n\u0303\t";
+            assert.deepEqual(isolated.prepareMarkdownHandoff(source), {
+                kind: "ready", text: source,
+                bytes: new TextEncoder().encode(source).byteLength,
+            });
+        }
+        assert.equal(isolated.prepareMarkdownHandoff(
+            "a\t".repeat(1025)).kind, "too-large");
+        assert.equal(constructed, 1, "native expansion shares one segmenter");
+    } finally {
+        Intl.Segmenter = original;
+    }
+});
+
+test("no segmenter defers tab overflow to native Rust validation",
+    async () => {
+    const original = Intl.Segmenter;
+    try {
+        Intl.Segmenter = undefined;
+        const isolated = await import(
+            `${ROOT}generated/markdown-export.js?cache-test=no-segmenter`);
+        const source = "a\t".repeat(1025);
+        assert.deepEqual(isolated.prepareMarkdownHandoff(source), {
+            kind: "ready", text: source,
+            bytes: new TextEncoder().encode(source).byteLength,
+        }, "absent browser segmenter must not assert a false native result");
+    } finally {
+        Intl.Segmenter = original;
+    }
+});
+
 test("blank or lossy Unicode handoff refuses without fallback", () => {
     for (const source of ["", "\n \t", "\uFEFF",
         "\uFEFF \t\n\r\u2028\u2029"]) {

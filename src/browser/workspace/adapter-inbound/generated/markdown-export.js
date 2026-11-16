@@ -1,6 +1,9 @@
 // Native flow expands tabs to physical four-grapheme columns after
 // normalizing source line separators. This read-only estimate only blocks
 // known size overflow; unsupported segmenters defer to the Rust CLI.
+// The immutable segmenter is shared across explicit handoffs, not rebuilt
+// for each edit. Do not cache derived source or a private Markdown draft.
+let graphemeSegmenter;
 function expandsBeyondNativeFlowLimit(text, encoder) {
     if (!text.includes("\t") || typeof Intl.Segmenter !== "function") {
         return false;
@@ -9,10 +12,10 @@ function expandsBeyondNativeFlowLimit(text, encoder) {
         .replace(/\u2028/g, "  \n").replace(/\u2029/g, "\n\n");
     let expandedBytes = encoder.encode(normalized).byteLength;
     let column = 0;
-    const segments = new Intl.Segmenter(undefined, {
+    graphemeSegmenter ??= new Intl.Segmenter(undefined, {
         granularity: "grapheme",
     });
-    for (const { segment } of segments.segment(normalized)) {
+    for (const { segment } of graphemeSegmenter.segment(normalized)) {
         if (segment === "\n") {
             column = 0;
         }
