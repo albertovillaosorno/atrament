@@ -4770,6 +4770,8 @@ export function createGlyphStrokeEditor() {
         earlierPath, laterPath, earlier, later, join, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
     let active = false;
+    // Invalidates pending file reads whenever another user gesture edits
+    // the draft or starts a pen trace, including after the trace releases.
     let generation = 0;
     let strokes = [];
     let selectedIndex = null;
@@ -6136,6 +6138,9 @@ export function createGlyphStrokeEditor() {
                 throw new Error("Ink color requires #RRGGBB");
             }
             preview.setPointerCapture(event.pointerId);
+            // A read started before capture must never overwrite the trace,
+            // even if it finishes after pointerup or pointercancel.
+            generation += 1;
             drawing = {
                 pointerId: event.pointerId,
                 grapheme: character.value,
@@ -6257,6 +6262,7 @@ export function createGlyphStrokeEditor() {
         // A no-op transform or edit is not a new history step. Any invalid
         // proposed TSV refuses before touching the accepted draft/history.
         if (before !== after) {
+            generation += 1;
             // Accepting a new edit after undo discards only the redo tail.
             // Evict old snapshots at the fixed bound, never live TSV ink.
             transformHistory.length = historyCursor;
@@ -6436,8 +6442,10 @@ export function createGlyphStrokeEditor() {
                 clearHistory();
                 throw new Error("Cannot restore ink after another edit");
             }
-            strokes = step[side] === ""
+            const restored = step[side] === ""
                 ? [] : parseGlyphLibrary(step[side]);
+            generation += 1;
+            strokes = restored;
             historyCursor += side === "before" ? -1 : 1;
             const recoveredSelection = side === "before"
                 ? step.beforeSelection : step.afterSelection;

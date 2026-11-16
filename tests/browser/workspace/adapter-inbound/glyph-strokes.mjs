@@ -1573,6 +1573,74 @@ test("pending file read cannot replace ink during a later pen trace",
     }
 });
 
+// A file can resolve after the new gesture has already ended. Reject it
+// by edit generation, not just by checking whether drawing is non-null.
+test("late file read never overwrites a released, canceled or undone edit",
+    async () => {
+    for (const scenario of ["released trace", "canceled trace",
+        "new edit", "undo"]) {
+        const ui = mountEditor();
+        try {
+            const { get, editor, downloads } = ui;
+            const original = [stroke("ñ")];
+            const first = new TextEncoder().encode(
+                encodeGlyphLibrary(original));
+            const incoming = new TextEncoder().encode(
+                encodeGlyphLibrary([stroke("∞")]));
+            editor.start();
+            get("load").files = [{
+                size: first.length, arrayBuffer: async () => first.buffer,
+            }];
+            await get("load").dispatch("change");
+            if (scenario === "undo") {
+                get("x1").value = "500";
+                get("add").dispatch("click");
+            }
+            let resolveRead;
+            const deferred = new Promise((resolve) => {
+                resolveRead = resolve;
+            });
+            get("load").files = [{
+                size: incoming.length, arrayBuffer: async () => deferred,
+            }];
+            const pending = get("load").dispatch("change");
+            const pointer = (x, y) => ({
+                clientX: x, clientY: y,
+                pointerId: 21, button: 0, isPrimary: true,
+            });
+            if (scenario.endsWith("trace")) {
+                const preview = get("preview");
+                preview.dispatch("pointerdown", pointer(50, 50));
+                preview.dispatch(scenario === "released trace"
+                    ? "pointerup" : "pointercancel",
+                    scenario === "released trace"
+                        ? pointer(250, 300) : { pointerId: 21 });
+            } else if (scenario === "new edit") {
+                get("x1").value = "500";
+                get("add").dispatch("click");
+            } else {
+                get("slant-undo").dispatch("click");
+            }
+            // Confirm the modification precedes I/O resolution. A
+            // canceled gesture must leave only its original accepted ink.
+            get("save").dispatch("click");
+            const accepted = await downloads.at(-1).text();
+            assert.equal(parseGlyphLibrary(accepted).length,
+                scenario === "released trace" || scenario === "new edit"
+                    ? 2 : 1, scenario);
+            resolveRead(incoming.buffer);
+            await pending;
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(), accepted,
+                scenario + " must not lose its accepted local state");
+            assert.deepEqual(parseGlyphLibrary(accepted)[0], original[0],
+                "the late import never replaces the exact Unicode source");
+        } finally {
+            ui.restore();
+        }
+    }
+});
+
 test("curved pointer traces preserve samples and refuse excess", async () => {
     const ui = mountEditor();
     try {
