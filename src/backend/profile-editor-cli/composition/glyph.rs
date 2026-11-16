@@ -806,8 +806,8 @@ impl GlyphOverlay {
         }
         let dx = i64::from(start.0) - i64::from(end.0);
         let dy = i64::from(start.1) - i64::from(end.1);
-        if i64::from(bend_x).saturating_mul(dy)
-            == i64::from(bend_y).saturating_mul(dx) {
+        if collinear_offsets((i64::from(bend_x), i64::from(bend_y)),
+            (dx, dy)) {
             return Err("curved closure requires a transverse bend".into());
         }
         if self.strokes.len() > MAX_STROKES - 4 {
@@ -913,8 +913,8 @@ impl GlyphOverlay {
         if gap_exceeds_join_limit(start, end) {
             return Err("curved path gap exceeds 1200 um join limit".into());
         }
-        if i64::from(bend_x).saturating_mul(dy)
-            == i64::from(bend_y).saturating_mul(dx) {
+        if collinear_offsets((i64::from(bend_x), i64::from(bend_y)),
+            (dx, dy)) {
             return Err("curved join requires a transverse bend".into());
         }
         if self.strokes.len() > MAX_STROKES - 4 {
@@ -3669,6 +3669,33 @@ fn gap_exceeds_join_limit(start: (u32, u32), end: (u32, u32)) -> bool {
         > u128::from(MAX_JOIN_GAP_UM).pow(2)
 }
 
+// The local-glyph and final-page curved joins share the exact four-sample
+// integer Bernstein curve. Widen before applying the weights, and reject
+// invalid or unrepresentable points instead of clipping or wrapping them.
+fn quadratic_bridge_coordinate(
+    start: u32, end: u32, bend: i32, index: u32,
+) -> Option<u32> {
+    if !(1..=4).contains(&index) {
+        return None;
+    }
+    let step = i128::from(index);
+    let remaining = i128::from(4u32.saturating_sub(index));
+    let middle = i128::from(start).checked_add(i128::from(end))?
+        .checked_add(i128::from(bend).checked_mul(2)?)?;
+    let first = remaining.checked_mul(remaining)?
+        .checked_mul(i128::from(start))?;
+    let second = step.checked_mul(remaining)?.checked_mul(middle)?;
+    let last = step.checked_mul(step)?.checked_mul(i128::from(end))?;
+    let numerator = first.checked_add(second)?.checked_add(last)?;
+    u32::try_from(numerator.checked_add(8)?.div_euclid(16)).ok()
+}
+
+// Cross-products use widened exact integers even for final physical positions.
+fn collinear_offsets(a: (i64, i64), b: (i64, i64)) -> bool {
+    i128::from(a.0).saturating_mul(i128::from(b.1))
+        == i128::from(a.1).saturating_mul(i128::from(b.0))
+}
+
 // Four directed integer quadratic pieces are the shared physical sampling
 // rule for curved joins and curved closures. Inputs are already gap-, bend-,
 // capacity- and exact-glyph-validated by the respective caller.
@@ -3678,25 +3705,18 @@ fn sample_curved_bridge(
 ) -> Result<Vec<GlyphStroke>, String> {
     let dx = i64::from(start.0) - i64::from(end.0);
     let dy = i64::from(start.1) - i64::from(end.1);
-    let sampled = |i: i64| -> Result<(u32, u32), String> {
-        let component = |a: u32, b: u32, bend: i32|
-            -> Result<u32, String> {
-            let complement = 4 - i;
-            let numerator = complement * complement * i64::from(a)
-                + i * complement * (i64::from(a) + i64::from(b)
-                    + 2 * i64::from(bend))
-                + i * i * i64::from(b);
-            let rounded = (numerator + 8).div_euclid(16);
-            u32::try_from(rounded)
-                .map_err(|_error| "curved join leaves glyph cell".into())
-        };
-        Ok((component(start.0, end.0, bend_x)?,
-            component(start.1, end.1, bend_y)?))
+    let sampled = |index: u32| -> Result<(u32, u32), String> {
+        Ok((
+            quadratic_bridge_coordinate(start.0, end.0, bend_x, index)
+                .ok_or("curved join leaves glyph cell")?,
+            quadratic_bridge_coordinate(start.1, end.1, bend_y, index)
+                .ok_or("curved join leaves glyph cell")?,
+        ))
     };
     let mut prior = start;
     let mut segments = Vec::with_capacity(4);
-    for i in 1..=4 {
-        let following = sampled(i)?;
+    for index in 1u32..=4 {
+        let following = sampled(index)?;
         if following == prior {
             return Err("curved join collapses a pen segment".into());
         }
@@ -3711,9 +3731,11 @@ fn sample_curved_bridge(
     }
     // Refuse a control offset that rounds to four straight pieces.
     if segments.iter().all(|piece| {
-        let px = i64::from(piece.end_um.0) - i64::from(start.0);
-        let py = i64::from(piece.end_um.1) - i64::from(start.1);
-        px * dy == py * dx
+        let px = i64::from(piece.end_um.0)
+            .saturating_sub(i64::from(start.0));
+        let py = i64::from(piece.end_um.1)
+            .saturating_sub(i64::from(start.1));
+        collinear_offsets((px, py), (dx, dy))
     }) {
         return Err("curved join does not bend the selected ink".into());
     }
@@ -4062,28 +4084,21 @@ fn sample_curved_text_join(
     let (start, end) = (bridge.start_um, bridge.end_um);
     let dx = i64::from(start.0) - i64::from(end.0);
     let dy = i64::from(start.1) - i64::from(end.1);
-    if i64::from(bend.0) * dy == i64::from(bend.1) * dx {
+    if collinear_offsets((i64::from(bend.0), i64::from(bend.1)),
+        (dx, dy)) {
         return Err("curved text join requires transverse bend".into());
     }
-    let sample = |i: i64| -> Result<(u32, u32), String> {
-        let component = |a: u32, b: u32, shift: i32|
-            -> Result<u32, String> {
-            let remainder = 4 - i;
-            let numerator = remainder * remainder * i64::from(a)
-                + i * remainder * (i64::from(a) + i64::from(b)
-                    + 2 * i64::from(shift))
-                + i * i * i64::from(b);
-            u32::try_from((numerator + 8).div_euclid(16))
-                .map_err(|_error| {
-                    "curved text join leaves physical coordinates".into()
-                })
-        };
-        Ok((component(start.0, end.0, bend.0)?,
-            component(start.1, end.1, bend.1)?))
+    let sample = |index: u32| -> Result<(u32, u32), String> {
+        Ok((
+            quadratic_bridge_coordinate(start.0, end.0, bend.0, index)
+                .ok_or("curved text join leaves physical coordinates")?,
+            quadratic_bridge_coordinate(start.1, end.1, bend.1, index)
+                .ok_or("curved text join leaves physical coordinates")?,
+        ))
     };
     let mut strokes = Vec::with_capacity(4);
     let mut previous = start;
-    for index in 1..=4 {
+    for index in 1u32..=4 {
         let next = sample(index)?;
         if next == previous {
             return Err("curved text join collapses a pen segment".into());
@@ -4095,9 +4110,11 @@ fn sample_curved_text_join(
     }
     // Guard tiny transverse bends that disappear after whole-um rounding.
     if strokes.iter().all(|piece| {
-        let px = i64::from(piece.end_um.0) - i64::from(start.0);
-        let py = i64::from(piece.end_um.1) - i64::from(start.1);
-        px * dy == py * dx
+        let px = i64::from(piece.end_um.0)
+            .saturating_sub(i64::from(start.0));
+        let py = i64::from(piece.end_um.1)
+            .saturating_sub(i64::from(start.1));
+        collinear_offsets((px, py), (dx, dy))
     }) {
         return Err("curved text join does not bend selected ink".into());
     }
