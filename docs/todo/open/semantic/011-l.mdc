@@ -5437,3 +5437,18 @@ native-process PDF/transparent PNG acceptance compares both new operators
 with independently authored physical ink and verifies missing-shape refusal
 without replacing a previously valid export. No glyph is inferred and no
 mathematical expression or saved semantic block is created.
+
+### Signed parenthesized scientific exponents — 2026-11-15
+
+Native CLI process regressions now include signed ASCII caret powers such as
+`1×10^(-3)` and `1×10^(+3)`, plus signed Unicode superscript groups such as
+`1×10⁽⁻³⁾` and `1×10⁽⁺³⁾`. Parenthesized last-digit uncertainties are also
+checked after complete signed powers in both ASCII and Unicode forms.
+
+All 562 Rust package tests pass, including the expanded native unit cases.
+The two focused CLI process tests also pass in plain-text and Markdown modes;
+they compare exact vector PDF and transparent PNG bytes against independently
+positioned authored strokes and verify missing exponent or uncertainty glyphs
+cannot replace an accepted export. This extends physical wrapping evidence
+only; it does not parse mathematical values or complete saved-notebook
+rendering.
