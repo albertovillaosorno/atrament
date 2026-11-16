@@ -752,11 +752,7 @@ impl GlyphOverlay {
         if start == end {
             return Err("path is already closed".into());
         }
-        let dx = i64::from(start.0).saturating_sub(i64::from(end.0));
-        let dy = i64::from(start.1).saturating_sub(i64::from(end.1));
-        let squared = dx.unsigned_abs().pow(2)
-            .saturating_add(dy.unsigned_abs().pow(2));
-        if squared > MAX_JOIN_GAP_UM.pow(2) {
+        if gap_exceeds_join_limit(start, end) {
             return Err("path closure exceeds 1200 um gap limit".into());
         }
         if self.strokes.len() == MAX_STROKES {
@@ -805,13 +801,13 @@ impl GlyphOverlay {
         if start == end {
             return Err("path is already closed".into());
         }
-        let dx = i64::from(start.0) - i64::from(end.0);
-        let dy = i64::from(start.1) - i64::from(end.1);
-        if dx.unsigned_abs().pow(2).saturating_add(dy.unsigned_abs().pow(2))
-            > MAX_JOIN_GAP_UM.pow(2) {
+        if gap_exceeds_join_limit(start, end) {
             return Err("curved closure exceeds 1200 um gap limit".into());
         }
-        if i64::from(bend_x) * dy == i64::from(bend_y) * dx {
+        let dx = i64::from(start.0) - i64::from(end.0);
+        let dy = i64::from(start.1) - i64::from(end.1);
+        if i64::from(bend_x).saturating_mul(dy)
+            == i64::from(bend_y).saturating_mul(dx) {
             return Err("curved closure requires a transverse bend".into());
         }
         if self.strokes.len() > MAX_STROKES - 4 {
@@ -861,11 +857,7 @@ impl GlyphOverlay {
         if start == end {
             return Err("candidate paths are already continuous".into());
         }
-        let dx = i64::from(start.0) - i64::from(end.0);
-        let dy = i64::from(start.1) - i64::from(end.1);
-        let squared = dx.unsigned_abs().pow(2)
-            .saturating_add(dy.unsigned_abs().pow(2));
-        if squared > MAX_JOIN_GAP_UM.pow(2) {
+        if gap_exceeds_join_limit(start, end) {
             return Err("path gap exceeds 1200 um join limit".into());
         }
         if self.strokes.len() >= MAX_STROKES {
@@ -918,11 +910,11 @@ impl GlyphOverlay {
         }
         let dx = i64::from(start.0) - i64::from(end.0);
         let dy = i64::from(start.1) - i64::from(end.1);
-        if dx.unsigned_abs().pow(2).saturating_add(dy.unsigned_abs().pow(2))
-            > MAX_JOIN_GAP_UM.pow(2) {
+        if gap_exceeds_join_limit(start, end) {
             return Err("curved path gap exceeds 1200 um join limit".into());
         }
-        if i64::from(bend_x) * dy == i64::from(bend_y) * dx {
+        if i64::from(bend_x).saturating_mul(dy)
+            == i64::from(bend_y).saturating_mul(dx) {
             return Err("curved join requires a transverse bend".into());
         }
         if self.strokes.len() > MAX_STROKES - 4 {
@@ -1685,11 +1677,7 @@ impl GlyphOverlay {
         if start == end {
             return Err("strokes are already continuous".into());
         }
-        let dx = i64::from(start.0).saturating_sub(i64::from(end.0));
-        let dy = i64::from(start.1).saturating_sub(i64::from(end.1));
-        let distance_squared = dx.unsigned_abs().pow(2)
-            .saturating_add(dy.unsigned_abs().pow(2));
-        if distance_squared > MAX_JOIN_GAP_UM.pow(2) {
+        if gap_exceeds_join_limit(start, end) {
             return Err("stroke gap exceeds 1200 um join limit".into());
         }
         if self.strokes.len() == MAX_STROKES {
@@ -2379,13 +2367,14 @@ impl GlyphOverlay {
             .ok_or("stroke index outside library")?;
         let midpoint = if exact {
             let dx = i64::from(original.end_um.0)
-                - i64::from(original.start_um.0);
+                .saturating_sub(i64::from(original.start_um.0));
             let dy = i64::from(original.end_um.1)
-                - i64::from(original.start_um.1);
+                .saturating_sub(i64::from(original.start_um.1));
             let mut divisor = dx.unsigned_abs();
             let mut remainder = dy.unsigned_abs();
             while remainder != 0 {
-                let next = divisor % remainder;
+                let next = divisor.checked_rem(remainder)
+                    .ok_or("stroke lattice zero divisor")?;
                 divisor = remainder;
                 remainder = next;
             }
@@ -2396,21 +2385,34 @@ impl GlyphOverlay {
                 ).into());
             }
             let unit = i64::try_from(divisor)
-                .map_err(|_| "stroke lattice overflow")?;
-            let middle = i64::try_from((divisor + 1) / 2)
-                .map_err(|_| "stroke lattice overflow")?;
+                .map_err(|_error| "stroke lattice overflow")?;
+            let middle = i64::try_from(divisor.div_ceil(2))
+                .map_err(|_error| "stroke lattice overflow")?;
+            let coordinate = |start: u32, delta: i64, outside: &str|
+                -> Result<u32, String> {
+                let shift = delta.checked_div(unit)
+                    .and_then(|step| step.checked_mul(middle))
+                    .ok_or("stroke lattice overflow")?;
+                let position = i64::from(start).checked_add(shift)
+                    .ok_or("stroke lattice overflow")?;
+                u32::try_from(position).map_err(|_error| outside.into())
+            };
             (
-                u32::try_from(i64::from(original.start_um.0)
-                    + (dx / unit) * middle)
-                    .map_err(|_| "stroke lattice X outside cell")?,
-                u32::try_from(i64::from(original.start_um.1)
-                    + (dy / unit) * middle)
-                    .map_err(|_| "stroke lattice Y outside cell")?,
+                coordinate(original.start_um.0, dx,
+                    "stroke lattice X outside cell")?,
+                coordinate(original.start_um.1, dy,
+                    "stroke lattice Y outside cell")?,
             )
         } else {
+            // Widen first: this half-up midpoint also works at u32::MAX.
+            let half_up = |start: u32, end: u32| -> Result<u32, String> {
+                u32::try_from(u64::from(start)
+                    .saturating_add(u64::from(end)).div_ceil(2))
+                    .map_err(|_error| "stroke midpoint outside cell".into())
+            };
             (
-                (original.start_um.0 + original.end_um.0 + 1) / 2,
-                (original.start_um.1 + original.end_um.1 + 1) / 2,
+                half_up(original.start_um.0, original.end_um.0)?,
+                half_up(original.start_um.1, original.end_um.1)?,
             )
         };
         if midpoint == original.start_um || midpoint == original.end_um {
@@ -2421,8 +2423,10 @@ impl GlyphOverlay {
         first.end_um = midpoint;
         second.start_um = midpoint;
         let mut revised = self.strokes.clone();
-        revised[selected] = first;
-        revised.insert(selected + 1, second);
+        *revised.get_mut(selected).ok_or("stroke index outside library")?
+            = first;
+        revised.insert(selected.checked_add(1)
+            .ok_or("stroke index overflow")?, second);
         let prior = replace(&mut self.strokes, revised);
         if let Err(error) = self.encode_file() {
             self.strokes = prior;
@@ -3654,6 +3658,15 @@ fn append_path_summary(
         closure,
     );
     Ok(())
+}
+
+// Exact full-range u32 gap comparison without lossy clipping or overflow.
+// The same bridge limit governs straight and curved glyph path operations.
+fn gap_exceeds_join_limit(start: (u32, u32), end: (u32, u32)) -> bool {
+    let dx = u128::from(start.0.abs_diff(end.0));
+    let dy = u128::from(start.1.abs_diff(end.1));
+    dx.pow(2).saturating_add(dy.pow(2))
+        > u128::from(MAX_JOIN_GAP_UM).pow(2)
 }
 
 // Four directed integer quadratic pieces are the shared physical sampling
