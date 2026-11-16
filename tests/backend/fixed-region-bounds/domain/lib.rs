@@ -37,7 +37,7 @@ use atrament_fixed_region_bounds::{
 };
 use atrament_physical_page_profile::{Length, Rect};
 
-fn rect(x: u64, y: u64, width: u64, height: u64) -> Rect {
+const fn rect(x: u64, y: u64, width: u64, height: u64) -> Rect {
     Rect {
         height: Length::from_micrometres(height),
         width: Length::from_micrometres(width),
@@ -47,18 +47,30 @@ fn rect(x: u64, y: u64, width: u64, height: u64) -> Rect {
 }
 
 
-fn reference_bounds(writable: Rect, object: Rect) -> Vec<BoundaryViolation> {
-    let writable_right =
-        writable.x.micrometres() + writable.width.micrometres();
-    let writable_bottom =
-        writable.y.micrometres() + writable.height.micrometres();
-    let object_right = object.x.micrometres() + object.width.micrometres();
-    let object_bottom = object.y.micrometres() + object.height.micrometres();
+// A second, small-coordinate oracle stays independent of the u128
+// full-range implementation. Both use checked physical units, so a
+// generator bug is a typed failure instead of overflowing the test.
+fn reference_bounds_small(
+    writable: Rect, object: Rect,
+) -> Result<Vec<BoundaryViolation>, BoundsError> {
+    let writable_right = writable.x.micrometres()
+        .checked_add(writable.width.micrometres())
+        .ok_or(BoundsError::WritableCoordinateOverflow)?;
+    let writable_bottom = writable.y.micrometres()
+        .checked_add(writable.height.micrometres())
+        .ok_or(BoundsError::WritableCoordinateOverflow)?;
+    let object_right = object.x.micrometres()
+        .checked_add(object.width.micrometres())
+        .ok_or(BoundsError::ObjectCoordinateOverflow)?;
+    let object_bottom = object.y.micrometres()
+        .checked_add(object.height.micrometres())
+        .ok_or(BoundsError::ObjectCoordinateOverflow)?;
     let mut violations = Vec::new();
     if object_bottom > writable_bottom {
         violations.push(BoundaryViolation {
             amount: Length::from_micrometres(
-                object_bottom - writable_bottom,
+                object_bottom.checked_sub(writable_bottom)
+                    .ok_or(BoundsError::ObjectCoordinateOverflow)?,
             ),
             edge: BoundaryEdge::Bottom,
         });
@@ -66,36 +78,43 @@ fn reference_bounds(writable: Rect, object: Rect) -> Vec<BoundaryViolation> {
     if object.x < writable.x {
         violations.push(BoundaryViolation {
             amount: Length::from_micrometres(
-                writable.x.micrometres() - object.x.micrometres(),
+                writable.x.micrometres()
+                    .checked_sub(object.x.micrometres())
+                    .ok_or(BoundsError::ObjectCoordinateOverflow)?,
             ),
             edge: BoundaryEdge::Left,
         });
     }
     if object_right > writable_right {
         violations.push(BoundaryViolation {
-            amount: Length::from_micrometres(object_right - writable_right),
+            amount: Length::from_micrometres(
+                object_right.checked_sub(writable_right)
+                    .ok_or(BoundsError::ObjectCoordinateOverflow)?,
+            ),
             edge: BoundaryEdge::Right,
         });
     }
     if object.y < writable.y {
         violations.push(BoundaryViolation {
             amount: Length::from_micrometres(
-                writable.y.micrometres() - object.y.micrometres(),
+                writable.y.micrometres()
+                    .checked_sub(object.y.micrometres())
+                    .ok_or(BoundsError::ObjectCoordinateOverflow)?,
             ),
             edge: BoundaryEdge::Top,
         });
     }
-    violations
+    Ok(violations)
 }
 
-fn next_bounds_value(seed: &mut u64) -> u64 {
+const fn next_bounds_value(seed: &mut u64) -> u64 {
     *seed = seed
         .wrapping_mul(6_364_136_223_846_793_005)
         .wrapping_add(1_442_695_040_888_963_407);
     *seed >> 32
 }
 
-fn next_full_bounds_value(seed: &mut u64) -> u64 {
+const fn next_full_bounds_value(seed: &mut u64) -> u64 {
     *seed = seed
         .wrapping_mul(2_862_933_555_777_941_757)
         .wrapping_add(3_037_000_493);
@@ -107,33 +126,38 @@ fn reference_bounds_full_range(
     object: Rect,
 ) -> Result<Vec<BoundaryViolation>, BoundsError> {
     let maximum = u128::from(u64::MAX);
-    let writable_right = u128::from(writable.x.micrometres())
-        + u128::from(writable.width.micrometres());
-    let writable_bottom = u128::from(writable.y.micrometres())
-        + u128::from(writable.height.micrometres());
-    if writable_right > maximum || writable_bottom > maximum {
+    let writable_right_large = u128::from(writable.x.micrometres())
+        .checked_add(u128::from(writable.width.micrometres()))
+        .ok_or(BoundsError::WritableCoordinateOverflow)?;
+    let writable_bottom_large = u128::from(writable.y.micrometres())
+        .checked_add(u128::from(writable.height.micrometres()))
+        .ok_or(BoundsError::WritableCoordinateOverflow)?;
+    if writable_right_large > maximum || writable_bottom_large > maximum {
         return Err(BoundsError::WritableCoordinateOverflow);
     }
-    let object_right = u128::from(object.x.micrometres())
-        + u128::from(object.width.micrometres());
-    let object_bottom = u128::from(object.y.micrometres())
-        + u128::from(object.height.micrometres());
-    if object_right > maximum || object_bottom > maximum {
+    let object_right_large = u128::from(object.x.micrometres())
+        .checked_add(u128::from(object.width.micrometres()))
+        .ok_or(BoundsError::ObjectCoordinateOverflow)?;
+    let object_bottom_large = u128::from(object.y.micrometres())
+        .checked_add(u128::from(object.height.micrometres()))
+        .ok_or(BoundsError::ObjectCoordinateOverflow)?;
+    if object_right_large > maximum || object_bottom_large > maximum {
         return Err(BoundsError::ObjectCoordinateOverflow);
     }
-    let writable_right = u64::try_from(writable_right)
-        .expect("validated writable right fits u64");
-    let writable_bottom = u64::try_from(writable_bottom)
-        .expect("validated writable bottom fits u64");
-    let object_right = u64::try_from(object_right)
-        .expect("validated object right fits u64");
-    let object_bottom = u64::try_from(object_bottom)
-        .expect("validated object bottom fits u64");
+    let writable_right = u64::try_from(writable_right_large)
+        .map_err(|_conversion| BoundsError::WritableCoordinateOverflow)?;
+    let writable_bottom = u64::try_from(writable_bottom_large)
+        .map_err(|_conversion| BoundsError::WritableCoordinateOverflow)?;
+    let object_right = u64::try_from(object_right_large)
+        .map_err(|_conversion| BoundsError::ObjectCoordinateOverflow)?;
+    let object_bottom = u64::try_from(object_bottom_large)
+        .map_err(|_conversion| BoundsError::ObjectCoordinateOverflow)?;
     let mut violations = Vec::new();
     if object_bottom > writable_bottom {
         violations.push(BoundaryViolation {
             amount: Length::from_micrometres(
-                object_bottom - writable_bottom,
+                object_bottom.checked_sub(writable_bottom)
+                    .ok_or(BoundsError::ObjectCoordinateOverflow)?,
             ),
             edge: BoundaryEdge::Bottom,
         });
@@ -141,7 +165,9 @@ fn reference_bounds_full_range(
     if object.x < writable.x {
         violations.push(BoundaryViolation {
             amount: Length::from_micrometres(
-                writable.x.micrometres() - object.x.micrometres(),
+                writable.x.micrometres()
+                    .checked_sub(object.x.micrometres())
+                    .ok_or(BoundsError::ObjectCoordinateOverflow)?,
             ),
             edge: BoundaryEdge::Left,
         });
@@ -149,7 +175,8 @@ fn reference_bounds_full_range(
     if object_right > writable_right {
         violations.push(BoundaryViolation {
             amount: Length::from_micrometres(
-                object_right - writable_right,
+                object_right.checked_sub(writable_right)
+                    .ok_or(BoundsError::ObjectCoordinateOverflow)?,
             ),
             edge: BoundaryEdge::Right,
         });
@@ -157,7 +184,9 @@ fn reference_bounds_full_range(
     if object.y < writable.y {
         violations.push(BoundaryViolation {
             amount: Length::from_micrometres(
-                writable.y.micrometres() - object.y.micrometres(),
+                writable.y.micrometres()
+                    .checked_sub(object.y.micrometres())
+                    .ok_or(BoundsError::ObjectCoordinateOverflow)?,
             ),
             edge: BoundaryEdge::Top,
         });
@@ -180,7 +209,7 @@ fn boundary_mask(violations: &[BoundaryViolation]) -> usize {
 #[test]
 fn full_range_rectangles_match_u128_reference_oracle() {
     const CASES: usize = 200_000;
-    let mut seed = 0xa24b_aed4_963e_e407_u64;
+    let mut seed = 0xa24b_aed4_963e_e407u64;
     let mut object_overflows = 0usize;
     let mut valid = 0usize;
     let mut writable_overflows = 0usize;
@@ -200,7 +229,8 @@ fn full_range_rectangles_match_u128_reference_oracle() {
         );
         let expected = reference_bounds_full_range(writable, object);
         if let Ok(violations) = &expected {
-            seen_boundary_masks[boundary_mask(violations)] = true;
+            assert!(seen_boundary_masks.get_mut(boundary_mask(violations))
+                .is_some_and(|seen| { *seen = true; true }));
         }
         match expected {
             Ok(_) => valid = valid.saturating_add(1),
@@ -226,27 +256,28 @@ fn full_range_rectangles_match_u128_reference_oracle() {
 #[test]
 fn small_rectangles_match_reference_bounds_oracle() {
     const CASES: usize = 20_000;
-    let mut seed = 0x5eed_b0ad_2026_u64;
+    let mut seed = 0x5eed_b0ad_2026u64;
     let mut seen_boundary_masks = [false; 16];
     for case in 0..CASES {
+        let sample = |rng_seed: &mut u64, modulus: u64| {
+            next_bounds_value(rng_seed)
+                .checked_rem(modulus).unwrap_or_default()
+        };
         let writable = rect(
-            next_bounds_value(&mut seed) % 21,
-            next_bounds_value(&mut seed) % 21,
-            next_bounds_value(&mut seed) % 21,
-            next_bounds_value(&mut seed) % 21,
+            sample(&mut seed, 21), sample(&mut seed, 21),
+            sample(&mut seed, 21), sample(&mut seed, 21),
         );
         let object = rect(
-            next_bounds_value(&mut seed) % 31,
-            next_bounds_value(&mut seed) % 31,
-            next_bounds_value(&mut seed) % 31,
-            next_bounds_value(&mut seed) % 31,
+            sample(&mut seed, 31), sample(&mut seed, 31),
+            sample(&mut seed, 31), sample(&mut seed, 31),
         );
-        let actual = check_bounds(writable, object)
-            .expect("small coordinates cannot overflow");
-        let expected = reference_bounds(writable, object);
-        seen_boundary_masks[boundary_mask(&expected)] = true;
+        let expected = reference_bounds_small(writable, object);
+        if let Ok(violations) = &expected {
+            assert!(seen_boundary_masks.get_mut(boundary_mask(violations))
+                .is_some_and(|seen| { *seen = true; true }));
+        }
         assert_eq!(
-            actual.violations,
+            check_bounds(writable, object).map(|report| report.violations),
             expected,
             "bounds oracle mismatch in generated case {case}",
         );
@@ -257,20 +288,25 @@ fn small_rectangles_match_reference_bounds_oracle() {
 #[test]
 fn exact_fit_has_no_overflow() {
     let writable = rect(10_000, 20_000, 100_000, 200_000);
-    let report = check_bounds(writable, writable).expect("exact bounds");
-    assert!(report.is_within_bounds());
-    assert!(report.violations.is_empty());
+    assert!(check_bounds(writable, writable)
+        .is_ok_and(|report| report.is_within_bounds()));
+    assert_eq!(
+        check_bounds(writable, writable).map(|report| report.violations),
+        Ok(Vec::new()),
+    );
 }
 
 #[test]
 fn first_journey_six_mm_bottom_overflow_is_exact() {
     let writable = rect(10_000, 20_000, 100_000, 200_000);
     let object = rect(20_000, 180_000, 50_000, 46_000);
-    let report = check_bounds(writable, object).expect("bottom overflow");
-    assert_eq!(report.violations, vec![BoundaryViolation {
-        amount: Length::from_micrometres(6_000),
-        edge: BoundaryEdge::Bottom,
-    }]);
+    assert_eq!(
+        check_bounds(writable, object).map(|report| report.violations),
+        Ok(vec![BoundaryViolation {
+            amount: Length::from_micrometres(6_000),
+            edge: BoundaryEdge::Bottom,
+        }]),
+    );
 }
 
 #[test]
@@ -283,11 +319,13 @@ fn each_edge_reports_only_its_exact_excess() {
         (rect(150, 199, 50, 50), BoundaryEdge::Top, 1),
     ];
     for (object, edge, amount) in cases {
-        let report = check_bounds(writable, object).expect("single edge");
-        assert_eq!(report.violations, vec![BoundaryViolation {
-            amount: Length::from_micrometres(amount),
-            edge,
-        }]);
+        assert_eq!(
+            check_bounds(writable, object).map(|report| report.violations),
+            Ok(vec![BoundaryViolation {
+                amount: Length::from_micrometres(amount),
+                edge,
+            }]),
+        );
     }
 }
 
@@ -295,8 +333,9 @@ fn each_edge_reports_only_its_exact_excess() {
 fn corner_crossing_reports_both_edges_in_stable_order() {
     let writable = rect(100, 200, 300, 400);
     let object = rect(90, 190, 20, 20);
-    let report = check_bounds(writable, object).expect("top-left corner");
-    assert_eq!(report.violations, vec![
+    assert_eq!(
+        check_bounds(writable, object).map(|report| report.violations),
+        Ok(vec![
         BoundaryViolation {
             amount: Length::from_micrometres(10),
             edge: BoundaryEdge::Left,
@@ -305,15 +344,17 @@ fn corner_crossing_reports_both_edges_in_stable_order() {
             amount: Length::from_micrometres(10),
             edge: BoundaryEdge::Top,
         },
-    ]);
+        ]),
+    );
 }
 
 #[test]
 fn object_larger_than_writable_region_can_cross_opposite_edges() {
     let writable = rect(100, 200, 300, 400);
     let object = rect(90, 190, 420, 520);
-    let report = check_bounds(writable, object).expect("multi-edge overflow");
-    assert_eq!(report.violations, vec![
+    assert_eq!(
+        check_bounds(writable, object).map(|report| report.violations),
+        Ok(vec![
         BoundaryViolation {
             amount: Length::from_micrometres(110),
             edge: BoundaryEdge::Bottom,
@@ -330,7 +371,8 @@ fn object_larger_than_writable_region_can_cross_opposite_edges() {
             amount: Length::from_micrometres(10),
             edge: BoundaryEdge::Top,
         },
-    ]);
+        ]),
+    );
 }
 
 #[test]
@@ -339,8 +381,7 @@ fn zero_extent_point_inside_bounds_is_not_a_minimum_size_decision() {
     let object = rect(200, 300, 0, 0);
     assert!(
         check_bounds(writable, object)
-            .expect("zero extent bounds only")
-            .is_within_bounds()
+            .is_ok_and(|report| report.is_within_bounds())
     );
 }
 
