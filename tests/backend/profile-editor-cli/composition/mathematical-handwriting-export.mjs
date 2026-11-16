@@ -14,6 +14,7 @@ import {
     missingBilingualBaseline,
     composeAccentedGlyph,
     reverseCandidatePath, rotateClosedCandidatePath,
+// jig-ignore-next-line: Static ESM import specifier is indivisible.
 } from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));

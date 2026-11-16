@@ -10,6 +10,7 @@ import test from 'node:test';
 import { inflateSync } from 'node:zlib';
 import {
     candidatePenPaths, encodeGlyphLibrary, geometricStarter,
+// jig-ignore-next-line: Static ESM import specifier is indivisible.
 } from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -217,7 +218,9 @@ test('manually selected cursive o/a accents render exact physical native ink',
             assert.equal(png.status, 0, png.stderr.toString());
             assert.equal(pngPigment(png.stdout), true,
                 'native transparent PNG contains the selected cursive ink');
-            const repeated = cli('notebook', [...flags, '--export-paper', 'pdf']);
+            const repeated = cli('notebook', [
+                ...flags, '--export-paper', 'pdf',
+            ]);
             assert.equal(repeated.status, 0, repeated.stderr.toString());
             assert.deepEqual(repeated.stdout, accepted,
                 'manual variant exports deterministically without changes');

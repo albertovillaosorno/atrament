@@ -126,6 +126,7 @@ function usesUnreviewedMarkupRequests(source) {
     }
     // This one explicitly selected paper JSON input is bounded by Rust;
     // any additional picker remains an unreviewed request capability.
+    // jig-ignore-next-line: Exact reviewed HTML picker needs its full tag.
     const paperPicker = `<input id="paper-load" type="file" accept=".json,application/json"
                 aria-label="Load paper-only profile JSON" disabled>`;
     if (remaining.split(paperPicker).length - 1 !== 1) {
@@ -406,7 +407,8 @@ function hasUnreviewedExecutableCode(source, filename) {
             'import * as sessionHandshake from "./session-handshake.js";',
             'import { sessionSecretFromFragment } from ' +
                 '"./session-fragment.js";',
-            'import { createPaperProfileEditor, createNotebookProfileEditor } ' +
+            'import { createPaperProfileEditor, ' +
+                'createNotebookProfileEditor } ' +
                 'from "./paper-profile.js";',
             'import { createHandwritingProfileEditor } from ' +
                 '"./handwriting-profile.js";',
