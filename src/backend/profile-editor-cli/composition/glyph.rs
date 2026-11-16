@@ -637,7 +637,7 @@ impl GlyphOverlay {
             let by = next_signed_path_offset(
                 iter, "curved text join Y bend", 600,
             )?;
-            if bx == 0 && by == 0 {
+            if bx == 0i32 && by == 0i32 {
                 return Err("curved text join requires nonzero bend".into());
             }
             Some((bx, by))
@@ -775,7 +775,7 @@ impl GlyphOverlay {
         bend_x: i32, bend_y: i32,
     ) -> Result<(), String> {
         if bend_x.unsigned_abs() > 600 || bend_y.unsigned_abs() > 600
-            || (bend_x == 0 && bend_y == 0) {
+            || (bend_x == 0i32 && bend_y == 0i32) {
             return Err(
                 "curved closure needs nonzero bounded bend \
                 (-600..600 um)".into()
@@ -1015,7 +1015,7 @@ impl GlyphOverlay {
     ) -> Result<(), String> {
         validate_shifted_path_copy_keys(source, target)?;
         if dx.unsigned_abs() > 3500 || dy.unsigned_abs() > 4500
-            || (dx == 0 && dy == 0) {
+            || (dx == 0i32 && dy == 0i32) {
             return Err("shifted copy needs nonzero bounded whole um".into());
         }
         self.validate_stroke_library()?;
@@ -1074,7 +1074,7 @@ impl GlyphOverlay {
         let dx = next_signed_path_offset(iter, "path dx", 3500)?;
         let dy = next_signed_path_offset(iter, "path dy", 4500)?;
         validate_shifted_path_copy_keys(source, target)?;
-        if dx == 0 && dy == 0 {
+        if dx == 0i32 && dy == 0i32 {
             return Err("shifted copy needs nonzero bounded whole um".into());
         }
         Ok((source, ordinal, target, dx, dy))
@@ -2183,7 +2183,7 @@ impl GlyphOverlay {
                     let by = next_signed_path_offset(
                         iter, &format!("{label} Y bend"), 600,
                     )?;
-                    if bx == 0 && by == 0 {
+                    if bx == 0i32 && by == 0i32 {
                         return Err(format!("{label} requires a nonzero bend"));
                     }
                 }
@@ -2207,7 +2207,7 @@ impl GlyphOverlay {
                     let _baseline = next_integer(
                         iter, "path slant baseline", 0, 4500,
                     )?;
-                    if angle == 0 {
+                    if angle == 0i32 {
                         return Err("path slant needs nonzero angle".into());
                     }
                 }
@@ -3069,7 +3069,7 @@ impl GlyphOverlay {
         &mut self, grapheme: &str, ordinal: u32,
         degrees: i32, baseline: u32,
     ) -> Result<(), String> {
-        if degrees == 0 || degrees.unsigned_abs() > 20 || baseline > 4500 {
+        if degrees == 0i32 || degrees.unsigned_abs() > 20 || baseline > 4500 {
             return Err(
                 "path slant needs nonzero -20..20 degrees and baseline".into()
             );
@@ -3699,9 +3699,9 @@ fn quadratic_bridge_coordinate(
 }
 
 // Cross-products use widened exact integers even for final physical positions.
-fn collinear_offsets(a: (i64, i64), b: (i64, i64)) -> bool {
-    i128::from(a.0).saturating_mul(i128::from(b.1))
-        == i128::from(a.1).saturating_mul(i128::from(b.0))
+fn collinear_offsets(first: (i64, i64), second: (i64, i64)) -> bool {
+    i128::from(first.0).saturating_mul(i128::from(second.1))
+        == i128::from(first.1).saturating_mul(i128::from(second.0))
 }
 
 // Four directed integer quadratic pieces are the shared physical sampling
