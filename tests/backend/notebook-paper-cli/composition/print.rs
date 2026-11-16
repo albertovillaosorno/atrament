@@ -93,7 +93,8 @@ fn exhausted_stale_print_fixtures_fail_closed() {
         let occupied = outer.join(format!(
             "atrament-print-fixture-42-{number}",
         ));
-        fs::DirBuilder::new().create(occupied).expect("prepopulate stale owned fixture");
+        fs::DirBuilder::new().create(occupied)
+            .expect("prepopulate stale owned fixture");
     }
     let sequence = AtomicU64::new(0);
     let error = fixture_dir_with_sequence(&outer, 42u32, &sequence)
@@ -2100,7 +2101,8 @@ fn assert_hybrid_bad_pointer_cases(
         prefix.get(last_endobj.saturating_add(b"endobj\n".len())..)
             .expect("prefix after endobj"),
     ].concat();
-    let forged = revised_hybrid_pdf(&missing_endobj, &format!("/XRefStm {prior}"));
+    let forged = revised_hybrid_pdf(
+        &missing_endobj, &format!("/XRefStm {prior}"));
     assert!(!supported_pdf_cross_reference(&forged),
         "hybrid pointer cannot name a stream without its endobj");
     assert_fake_spool_rejected(
@@ -2122,7 +2124,8 @@ fn assert_hybrid_bad_pointer_cases(
             format!("/Prev {invalid_prev} ").as_bytes(),
             prefix.get(before_length..).expect("prior stream suffix"),
         ].concat();
-        let candidate = revised_hybrid_pdf(&malformed, &format!("/XRefStm {prior}"));
+        let candidate = revised_hybrid_pdf(
+            &malformed, &format!("/XRefStm {prior}"));
         assert!(!supported_pdf_cross_reference(&candidate),
             "prior stream /Prev must be a bounded decimal: {invalid_prev}");
         assert_fake_spool_rejected(
@@ -2437,7 +2440,8 @@ fn xref_table_prev_accepts_earlier_xref_stream_on_pdf_15() {
         unowned.as_slice(),
         format!(
             "xref\n0 1\n0000000000 65535 f \n\
-             trailer\n<< /Size 5 /Root 1 0 R /Prev {preceding_stream_offset} >>\n\
+             trailer\n<< /Size 5 /Root 1 0 R \
+             /Prev {preceding_stream_offset} >>\n\
              startxref\n{table_at}\n%%EOF\n",
         ).as_bytes(),
     ].concat();

@@ -53,7 +53,8 @@ impl GraphemeBoundaryProvider for ChangingZeroCountAnchorProvider {
         source: &str,
         grapheme_index: usize,
     ) -> Option<usize> {
-        assert_eq!(grapheme_index, 0, "zero-count provider needs source anchor");
+        assert_eq!(grapheme_index, 0,
+            "zero-count provider needs source anchor");
         let calls = self.boundary_calls.get();
         self.boundary_calls.set(calls.saturating_add(1));
         if calls == 0 {
@@ -781,7 +782,7 @@ fn compact_anchored_boundary_maps_match_independent_range_oracle() {
                                 "X",
                             ),
                             compact_expected_range(internal, start, count),
-                            "range map={internal:?} start={start} count={count}",
+                            "map={internal:?} start={start} count={count}",
                         );
                         cases += 1;
                     }
