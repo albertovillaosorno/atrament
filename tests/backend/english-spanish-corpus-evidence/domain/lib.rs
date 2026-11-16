@@ -34,11 +34,19 @@
 
 //! English spanish corpus evidence domain regression tests.
 
+use std::ptr;
+
 use atrament_english_spanish_corpus_evidence::{
     EnglishSpanishCorpusEvidenceError, EnglishSpanishCorpusObservation,
     EnglishSpanishCorpusScenario, validate_english_spanish_corpus_evidence,
     validate_english_spanish_corpus_evidence_view,
 };
+
+// The caller-owned text includes Spanish accents and inverted punctuation.
+const EXTRA_IDENTITY: &str = concat!(
+    "extra: M\u{e9}xico \u{2014} ",
+    "\u{2018}\u{bf}qu\u{e9}?\u{2019}",
+);
 
 const SCENARIOS: [EnglishSpanishCorpusScenario; 11] = [
     EnglishSpanishCorpusScenario::EnglishProse,
@@ -71,12 +79,10 @@ fn complete_adr_scenario_set_is_structurally_admitted() {
         validate_english_spanish_corpus_evidence(&observations),
         Ok(()),
     );
-    let validated = validate_english_spanish_corpus_evidence_view(&observations)
-        .expect("complete corpus evidence seals");
-    assert!(std::ptr::eq(
-        validated.observations(),
-        observations.as_slice(),
-    ));
+    assert!(validate_english_spanish_corpus_evidence_view(&observations)
+        .is_ok_and(|validated| {
+            ptr::eq(validated.observations(), observations.as_slice())
+        }));
     assert_eq!(observations.len(), 11);
 }
 
@@ -84,7 +90,7 @@ fn complete_adr_scenario_set_is_structurally_admitted() {
 fn duplicate_scenarios_and_owned_evidence_remain_caller_owned() {
     let mut observations = SCENARIOS.map(observation).to_vec();
     observations.push(EnglishSpanishCorpusObservation {
-        artifact_identity: String::from("extra: México — ‘¿qué?’"),
+        artifact_identity: String::from(EXTRA_IDENTITY),
         evidence: String::from("caller-reviewed-extra-prose"),
         scenario: EnglishSpanishCorpusScenario::SpanishProse,
     });
@@ -92,33 +98,41 @@ fn duplicate_scenarios_and_owned_evidence_remain_caller_owned() {
         validate_english_spanish_corpus_evidence(&observations),
         Ok(()),
     );
-    assert_eq!(observations[11].artifact_identity, "extra: México — ‘¿qué?’");
-    assert_eq!(observations[11].evidence, "caller-reviewed-extra-prose");
+    assert_eq!(
+        observations.get(11).map(|value| value.artifact_identity.as_str()),
+        Some(EXTRA_IDENTITY),
+    );
+    assert_eq!(
+        observations.get(11).map(|value| value.evidence.as_str()),
+        Some("caller-reviewed-extra-prose"),
+    );
 }
 
 #[test]
 fn all_2048_scenario_presence_masks_match_first_missing_scenario_oracle() {
-    let mut cases = 0_u16;
+    let mut cases = 0u16;
     let mut saw_complete = false;
     let mut saw_each_missing = [false; 11];
-    for mask in 0_u16..2_048 {
+    for mask in 0u16..2_048 {
         let observations = SCENARIOS
             .into_iter()
             .enumerate()
-            .filter(|(index, _)| mask & (1_u16 << index) != 0)
+            .filter(|(index, _)| mask & (1u16 << index) != 0)
             .map(|(_, scenario)| observation(scenario))
             .collect::<Vec<_>>();
         let expected = SCENARIOS
             .into_iter()
             .enumerate()
-            .find(|(index, _)| mask & (1_u16 << index) == 0)
+            .find(|(index, _)| mask & (1u16 << index) == 0)
             .map_or_else(
                 || {
                     saw_complete = true;
                     Ok(())
                 },
                 |(index, scenario)| {
-                    saw_each_missing[index] = true;
+                    assert!(saw_each_missing.get_mut(index).is_some_and(
+                        |seen| { *seen = true; true }
+                    ));
                     Err(EnglishSpanishCorpusEvidenceError::ScenarioAbsent(
                         scenario,
                     ))
@@ -132,7 +146,7 @@ fn all_2048_scenario_presence_masks_match_first_missing_scenario_oracle() {
         let sealed =
             validate_english_spanish_corpus_evidence_view(&observations).map(
                 |validated| {
-                    std::ptr::eq(
+                    ptr::eq(
                         validated.observations(),
                         observations.as_slice(),
                     )
