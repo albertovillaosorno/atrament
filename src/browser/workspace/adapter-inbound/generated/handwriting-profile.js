@@ -206,7 +206,8 @@ function parseProfileObject(value, dimensions) {
     return { version: root.version, seed: root.seed, globals, glyphs };
 }
 function parseProfile(text, dimensions) {
-    return parseProfileObject(boundedProfileJson(text, MAX_JSON_BYTES), dimensions);
+    const profileJson = boundedProfileJson(text, MAX_JSON_BYTES);
+    return parseProfileObject(profileJson, dimensions);
 }
 // Explicit field order keeps only the u64 seed as a raw numeric JSON token.
 // String fields and all bounded statistics are still escaped by JSON.stringify.
@@ -432,7 +433,8 @@ export function createHandwritingProfileEditor(context) {
             ?.startsWith("application/json")) {
             throw new Error("Rust file operation refused");
         }
-        const value = boundedProfileJson(await response.text(), MAX_JSON_BYTES + 4096);
+        const responseText = await response.text();
+        const value = boundedProfileJson(responseText, MAX_JSON_BYTES + 4096);
         if (typeof value !== "object" || value === null
             || !validRevision(value.revision)) {
             throw new Error("Invalid native file response");
@@ -744,7 +746,8 @@ export function createHandwritingProfileEditor(context) {
             if (new TextEncoder().encode(body).length > MAX_JSON_BYTES + 512) {
                 throw new Error("Numerical sample proposal exceeds limit");
             }
-            const json = await fetchJson(secret, "/api/handwriting/preview", body);
+            const endpoint = "/api/handwriting/preview";
+            const json = await fetchJson(secret, endpoint, body);
             if (!isCurrent(secret, observed))
                 return;
             const result = record(boundedJson(json, 128));
@@ -767,7 +770,11 @@ export function createHandwritingProfileEditor(context) {
             const result = await fileRequest(secret, name);
             if (!isCurrent(secret, observed))
                 return;
-            const checked = await fetchJson(secret, "/api/handwriting/profile", encodeProfile(parseProfileObject(result.profile, dimensions)));
+            const profile = result.profile;
+            const nativeProfile = parseProfileObject(profile, dimensions);
+            const body = encodeProfile(nativeProfile);
+            const endpoint = "/api/handwriting/profile";
+            const checked = await fetchJson(secret, endpoint, body);
             if (!isCurrent(secret, observed))
                 return;
             showProfile(parseProfile(checked, dimensions));
@@ -783,7 +790,8 @@ export function createHandwritingProfileEditor(context) {
                 throw new Error("Statistics proposal exceeds 1 MiB");
             }
             const name = selectedName();
-            const checked = await fetchJson(secret, "/api/handwriting/profile", proposal);
+            const endpoint = "/api/handwriting/profile";
+            const checked = await fetchJson(secret, endpoint, proposal);
             if (!isCurrent(secret, observed))
                 return;
             const revision = trackedName === name ? trackedRevision : "new";
