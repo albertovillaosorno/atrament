@@ -593,7 +593,7 @@ function hasUnreviewedDocumentAuthority(source, main, typed, paper = false,
         ["document.getElementById(id)", paper || glyph ? 1 : 0],
         ['document.createElement("a")',
             Number(main) + Number(paper) + Number(glyph)],
-        ['document.createElementNS(SVG_NS, "line")', glyph ? 10 : 0],
+        ['document.createElementNS(SVG_NS, "line")', glyph ? 5 : 0],
     ]) {
         if (remaining.split(site).length - 1 !== count) {
             return true;
@@ -1934,10 +1934,10 @@ const REVIEWED_GLYPH_SVG_ATTRIBUTES = [
 // Seven stroke-transform previews repeat only fixed geometry attributes;
 // the last linecap site is shared by nine reviewed pen drawing paths.
 const REVIEWED_REPEAT_GLYPH_ATTRIBUTES = new Map([
-    ['line.setAttribute(axis, String(item[axis]));', 7],
-    ['line.setAttribute("stroke", item.color);', 7],
-    ['line.setAttribute("stroke-width", String(item.width));', 7],
-    ['line.setAttribute("stroke-linecap", "round");', 9],
+    ['line.setAttribute(axis, String(item[axis]));', 2],
+    ['line.setAttribute("stroke", item.color);', 2],
+    ['line.setAttribute("stroke-width", String(item.width));', 2],
+    ['line.setAttribute("stroke-linecap", "round");', 4],
 ]);
 
 function stripReviewedGlyphDrawing(source) {
@@ -1954,7 +1954,7 @@ function stripReviewedGlyphDrawing(source) {
         + '["x2", to.x], ["y2", to.y], ]';
     if (remaining.split(connectorAxes).length - 1 !== 1) return null;
     const createLine = 'document.createElementNS(SVG_NS, "line")';
-    if (remaining.split(createLine).length - 1 !== 10) return null;
+    if (remaining.split(createLine).length - 1 !== 5) return null;
     return remaining.replaceAll(createLine, "");
 }
 
