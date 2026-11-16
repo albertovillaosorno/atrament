@@ -804,8 +804,8 @@ impl GlyphOverlay {
         if gap_exceeds_join_limit(start, end) {
             return Err("curved closure exceeds 1200 um gap limit".into());
         }
-        let dx = i64::from(start.0) - i64::from(end.0);
-        let dy = i64::from(start.1) - i64::from(end.1);
+        let dx = i64::from(start.0).saturating_sub(i64::from(end.0));
+        let dy = i64::from(start.1).saturating_sub(i64::from(end.1));
         if collinear_offsets((i64::from(bend_x), i64::from(bend_y)),
             (dx, dy)) {
             return Err("curved closure requires a transverse bend".into());
@@ -818,7 +818,9 @@ impl GlyphOverlay {
             bend_x, bend_y,
         )?;
         let mut revised = self.strokes.clone();
-        drop(revised.splice(last_slot + 1..last_slot + 1, segments));
+        let insert = last_slot.checked_add(1)
+            .ok_or("closure insertion index overflow")?;
+        drop(revised.splice(insert..insert, segments));
         let original = replace(&mut self.strokes, revised);
         if let Err(error) = self.encode_file() {
             self.strokes = original;
@@ -848,9 +850,9 @@ impl GlyphOverlay {
         let next = self.strokes.get(next_slot)
             .ok_or("next path stroke outside library")?;
         if last.width_um != next.width_um || last.rgb != next.rgb {
-            return Err(concat!(
-                "joining paths requires matching pen width and RGB"
-            ).into());
+            return Err(
+                "joining paths requires matching pen width and RGB".into()
+            );
         }
         let start = last.end_um;
         let end = next.start_um;
@@ -908,8 +910,8 @@ impl GlyphOverlay {
         if start == end {
             return Err("candidate paths are already continuous".into());
         }
-        let dx = i64::from(start.0) - i64::from(end.0);
-        let dy = i64::from(start.1) - i64::from(end.1);
+        let dx = i64::from(start.0).saturating_sub(i64::from(end.0));
+        let dy = i64::from(start.1).saturating_sub(i64::from(end.1));
         if gap_exceeds_join_limit(start, end) {
             return Err("curved path gap exceeds 1200 um join limit".into());
         }
@@ -2556,10 +2558,12 @@ impl GlyphOverlay {
             let reflect = |point: &mut (u32, u32)|
                 -> Result<(), String> {
                 let selected = if axis == "x" { point.0 } else { point.1 };
-                let next = i64::from(pivot) * 2 - i64::from(selected);
-                let twice = next * 2;
+                let next = i64::from(pivot).saturating_mul(2)
+                    .saturating_sub(i64::from(selected));
+                let twice = next.saturating_mul(2);
                 let pen = i64::from(stroke.width_um);
-                let limit = i64::from(maximum) * 2 - pen;
+                let limit = i64::from(maximum).saturating_mul(2)
+                    .saturating_sub(pen);
                 let (other, other_max) = if axis == "x" {
                     (i64::from(point.1), 4500i64)
                 } else {
@@ -2568,8 +2572,9 @@ impl GlyphOverlay {
                 // Check both axes even when only one coordinate changes:
                 // imported pen caps may already clip the untouched axis.
                 if twice < pen || twice > limit
-                    || other * 2 < pen
-                    || other * 2 > other_max * 2 - pen {
+                    || other.saturating_mul(2) < pen
+                    || other.saturating_mul(2)
+                        > other_max.saturating_mul(2).saturating_sub(pen) {
                     return Err(
                         "reflected pen contour clips glyph cell".into()
                     );
@@ -3204,15 +3209,18 @@ impl GlyphOverlay {
             let reflect = |point: (u32, u32)|
                 -> Result<(u32, u32), String> {
                 let mirror = |value: u32| {
-                    i64::from(pivot) * 2 - i64::from(value)
+                    i64::from(pivot).saturating_mul(2)
+                        .saturating_sub(i64::from(value))
                 };
                 let x = if axis == "x" { mirror(point.0) }
                     else { i64::from(point.0) };
                 let y = if axis == "y" { mirror(point.1) }
                     else { i64::from(point.1) };
                 let pen = i64::from(stroke.width_um);
-                if x * 2 < pen || x * 2 > 7000 - pen
-                    || y * 2 < pen || y * 2 > 9000 - pen {
+                if x.saturating_mul(2) < pen
+                    || x.saturating_mul(2) > 7000i64.saturating_sub(pen)
+                    || y.saturating_mul(2) < pen
+                    || y.saturating_mul(2) > 9000i64.saturating_sub(pen) {
                     return Err("reflected pen contour clips glyph cell".into());
                 }
                 Ok((u32::try_from(x)
@@ -3703,8 +3711,8 @@ fn sample_curved_bridge(
     grapheme: &str, start: (u32, u32), end: (u32, u32),
     width_um: u32, rgb: [u8; 3], bend_x: i32, bend_y: i32,
 ) -> Result<Vec<GlyphStroke>, String> {
-    let dx = i64::from(start.0) - i64::from(end.0);
-    let dy = i64::from(start.1) - i64::from(end.1);
+    let dx = i64::from(start.0).saturating_sub(i64::from(end.0));
+    let dy = i64::from(start.1).saturating_sub(i64::from(end.1));
     let sampled = |index: u32| -> Result<(u32, u32), String> {
         Ok((
             quadratic_bridge_coordinate(start.0, end.0, bend_x, index)
@@ -4082,8 +4090,8 @@ fn sample_curved_text_join(
     bridge: NotebookInkLine, bend: (i32, i32),
 ) -> Result<Vec<NotebookInkLine>, String> {
     let (start, end) = (bridge.start_um, bridge.end_um);
-    let dx = i64::from(start.0) - i64::from(end.0);
-    let dy = i64::from(start.1) - i64::from(end.1);
+    let dx = i64::from(start.0).saturating_sub(i64::from(end.0));
+    let dy = i64::from(start.1).saturating_sub(i64::from(end.1));
     if collinear_offsets((i64::from(bend.0), i64::from(bend.1)),
         (dx, dy)) {
         return Err("curved text join requires transverse bend".into());
