@@ -32,12 +32,17 @@
 
 //! Educational content coverage evidence regression tests.
 
+use std::ptr;
+
 use atrament_educational_coverage_evidence::{
     EducationalCoverageError, EducationalCoverageObservation,
     EducationalEvidenceStatus, EducationalSubject,
     REQUIRED_EDUCATIONAL_SUBJECTS as SUBJECTS,
     project_educational_coverage_by_subject, validate_educational_coverage,
 };
+
+const HISTORY_IDENTITY: &str =
+    "historia: M\u{e9}xico \u{2014} 1910 \u{1f1f2}\u{1f1fd}";
 
 fn observation(
     subject: EducationalSubject,
@@ -70,17 +75,25 @@ fn validated_projection_groups_exact_observations_in_required_subject_order() {
         readable_organization: EducationalEvidenceStatus::Established,
         subject: EducationalSubject::History,
     });
-    let review = project_educational_coverage_by_subject(&observations)
-        .expect("complete evidence projects for review");
-    assert_eq!(review.len(), SUBJECTS.len());
-    for (group, subject) in review.iter().zip(SUBJECTS) {
-        assert_eq!(group.subject(), subject);
-    }
-    let history = &review[2];
-    assert_eq!(history.subject(), EducationalSubject::History);
-    assert_eq!(history.observations().len(), 2);
-    assert!(std::ptr::eq(history.observations()[0], &observations[2]));
-    assert!(std::ptr::eq(history.observations()[1], &observations[6]));
+    assert!(project_educational_coverage_by_subject(&observations)
+        .is_ok_and(|review| {
+            assert_eq!(review.len(), SUBJECTS.len());
+            for (group, subject) in review.iter().zip(SUBJECTS) {
+                assert_eq!(group.subject(), subject);
+            }
+            let Some(history) = review.get(2) else {
+                return false;
+            };
+            assert_eq!(history.subject(), EducationalSubject::History);
+            assert_eq!(history.observations().len(), 2);
+            let first_matches = history.observations().first()
+                .zip(observations.get(2))
+                .is_some_and(|(actual, expected)| ptr::eq(*actual, expected));
+            let second_matches = history.observations().get(1)
+                .zip(observations.get(6))
+                .is_some_and(|(actual, expected)| ptr::eq(*actual, expected));
+            first_matches && second_matches
+        }));
 }
 
 #[test]
@@ -135,7 +148,7 @@ fn property_evidence_fails_in_bilingual_dense_readable_order() {
 fn extra_observations_and_exact_artifact_identity_remain_caller_owned() {
     let mut observations = SUBJECTS.map(observation).to_vec();
     observations.push(EducationalCoverageObservation {
-        artifact_identity: String::from("historia: México — 1910 🇲🇽"),
+        artifact_identity: String::from(HISTORY_IDENTITY),
         bilingual: EducationalEvidenceStatus::Established,
         dense_organization: EducationalEvidenceStatus::Established,
         readable_organization: EducationalEvidenceStatus::Established,
@@ -143,25 +156,25 @@ fn extra_observations_and_exact_artifact_identity_remain_caller_owned() {
     });
     assert_eq!(validate_educational_coverage(&observations), Ok(()));
     assert_eq!(
-        observations[6].artifact_identity,
-        "historia: México — 1910 🇲🇽",
+        observations.get(6).map(|value| value.artifact_identity.as_str()),
+        Some(HISTORY_IDENTITY),
     );
 }
 
 #[test]
 fn every_subject_presence_mask_matches_first_missing_subject_oracle() {
-    let mut cases = 0_u8;
-    for subject_mask in 0_u8..64 {
+    let mut cases = 0u8;
+    for subject_mask in 0u8..64 {
         let observations = SUBJECTS
             .into_iter()
             .enumerate()
-            .filter(|(index, _)| subject_mask & (1_u8 << index) != 0)
+            .filter(|(index, _)| subject_mask & (1u8 << index) != 0)
             .map(|(_, subject)| observation(subject))
             .collect::<Vec<_>>();
         let expected = SUBJECTS
             .into_iter()
             .enumerate()
-            .find(|(index, _)| subject_mask & (1_u8 << index) == 0)
+            .find(|(index, _)| subject_mask & (1u8 << index) == 0)
             .map_or(Ok(()), |(_, subject)| {
                 Err(EducationalCoverageError::SubjectAbsent(subject))
             });
@@ -173,9 +186,8 @@ fn every_subject_presence_mask_matches_first_missing_subject_oracle() {
         match expected {
             Ok(()) => assert_eq!(
                 project_educational_coverage_by_subject(&observations)
-                    .expect("complete mask projects")
-                    .len(),
-                SUBJECTS.len(),
+                    .map(|review| review.len()),
+                Ok(SUBJECTS.len()),
             ),
             Err(error) => assert_eq!(
                 project_educational_coverage_by_subject(&observations),
@@ -189,28 +201,32 @@ fn every_subject_presence_mask_matches_first_missing_subject_oracle() {
 
 #[test]
 fn every_property_mask_at_every_position_matches_evidence_precedence() {
-    let mut cases = 0_u8;
+    let mut cases = 0u8;
     for observation_index in 0..SUBJECTS.len() {
-        for established_mask in 0_u8..8 {
+        for established_mask in 0u8..8 {
             let mut observations = SUBJECTS.map(observation);
-            let current = observations
-                .get_mut(observation_index)
-                .expect("six enumerated observations exist");
-            current.bilingual = if established_mask & 0b001 != 0 {
-                EducationalEvidenceStatus::Established
-            } else {
-                EducationalEvidenceStatus::NotEstablished
-            };
-            current.dense_organization = if established_mask & 0b010 != 0 {
-                EducationalEvidenceStatus::Established
-            } else {
-                EducationalEvidenceStatus::NotEstablished
-            };
-            current.readable_organization = if established_mask & 0b100 != 0 {
-                EducationalEvidenceStatus::Established
-            } else {
-                EducationalEvidenceStatus::NotEstablished
-            };
+            assert!(observations.get_mut(observation_index).is_some_and(
+                |current| {
+                    current.bilingual = if established_mask & 0b001 != 0 {
+                        EducationalEvidenceStatus::Established
+                    } else {
+                        EducationalEvidenceStatus::NotEstablished
+                    };
+                    current.dense_organization =
+                        if established_mask & 0b010 != 0 {
+                        EducationalEvidenceStatus::Established
+                    } else {
+                        EducationalEvidenceStatus::NotEstablished
+                    };
+                    current.readable_organization =
+                        if established_mask & 0b100 != 0 {
+                        EducationalEvidenceStatus::Established
+                    } else {
+                        EducationalEvidenceStatus::NotEstablished
+                    };
+                    true
+                }
+            ));
             let expected = if established_mask & 0b001 == 0 {
                 Err(EducationalCoverageError::BilingualEvidenceMissing {
                     observation_index,
@@ -258,33 +274,37 @@ fn every_six_observation_property_state_preserves_global_precedence() {
     const OBSERVATION_COUNT: u32 = 6;
     const CASES: u32 = STATES_PER_OBSERVATION.pow(OBSERVATION_COUNT);
 
-    let mut cases = 0_u32;
+    let mut cases = 0u32;
     for encoded in 0..CASES {
         let mut value = encoded;
         let mut observations = SUBJECTS.map(observation);
         let mut expected = Ok(());
 
         for observation_index in 0..SUBJECTS.len() {
-            let state = (value % STATES_PER_OBSERVATION) as u8;
+            let state = value.checked_rem(STATES_PER_OBSERVATION)
+                .and_then(|remainder| u8::try_from(remainder).ok())
+                .unwrap_or_default();
             value /= STATES_PER_OBSERVATION;
-            let current = observations
-                .get_mut(observation_index)
-                .expect("six enumerated observations exist");
-            current.bilingual = if state & 0b001 != 0 {
-                EducationalEvidenceStatus::Established
-            } else {
-                EducationalEvidenceStatus::NotEstablished
-            };
-            current.dense_organization = if state & 0b010 != 0 {
-                EducationalEvidenceStatus::Established
-            } else {
-                EducationalEvidenceStatus::NotEstablished
-            };
-            current.readable_organization = if state & 0b100 != 0 {
-                EducationalEvidenceStatus::Established
-            } else {
-                EducationalEvidenceStatus::NotEstablished
-            };
+            assert!(observations.get_mut(observation_index).is_some_and(
+                |current| {
+                    current.bilingual = if state & 0b001 != 0 {
+                        EducationalEvidenceStatus::Established
+                    } else {
+                        EducationalEvidenceStatus::NotEstablished
+                    };
+                    current.dense_organization = if state & 0b010 != 0 {
+                        EducationalEvidenceStatus::Established
+                    } else {
+                        EducationalEvidenceStatus::NotEstablished
+                    };
+                    current.readable_organization = if state & 0b100 != 0 {
+                        EducationalEvidenceStatus::Established
+                    } else {
+                        EducationalEvidenceStatus::NotEstablished
+                    };
+                    true
+                }
+            ));
 
             if expected.is_ok() {
                 expected = if state & 0b001 == 0 {
