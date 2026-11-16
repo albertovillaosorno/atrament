@@ -491,7 +491,7 @@ fn every_quality_dimension_subset_matches_completeness_oracle() {
             });
         assert_eq!(
             validate_held_out_quality_report(&samples, &report),
-            expected.clone(),
+            expected,
             "dimension subset mask {mask:#08b}",
         );
         match expected {
@@ -580,7 +580,7 @@ fn every_compact_measurement_role_sequence_matches_first_failure_oracle() {
         };
         assert_eq!(
             validate_held_out_quality_report(&samples, &report),
-            expected.clone(),
+            expected,
             "measurement role sequence {encoded}",
         );
         match expected {

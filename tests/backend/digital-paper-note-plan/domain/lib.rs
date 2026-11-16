@@ -87,7 +87,7 @@ fn readability_result_is_independent_of_caller_owned_effect_values() {
         };
         let not_established = DigitalPaperNotePlan {
             readable_contrast: DigitalPaperNoteContrast::NotEstablished,
-            ..readable.clone()
+            ..readable
         };
         assert_eq!(validate_digital_paper_note_plan(&readable), Ok(()));
         let validated = validate_digital_paper_note_plan_view(&readable);

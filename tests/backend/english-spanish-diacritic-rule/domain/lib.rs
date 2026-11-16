@@ -46,11 +46,12 @@ use atrament_handwriting_glyph_coverage::{
 };
 
 #[test]
-fn all_fourteen_decomposed_inventory_entries_have_exact_rule_evidence() {
-    let mut acute = 0_usize;
-    let mut diaeresis = 0_usize;
-    let mut tilde = 0_usize;
-    let mut total = 0_usize;
+fn all_fourteen_decomposed_inventory_entries_have_exact_rule_evidence()
+-> Result<(), String> {
+    let mut acute = 0usize;
+    let mut diaeresis = 0usize;
+    let mut tilde = 0usize;
+    let mut total = 0usize;
     for required in REQUIRED_TEXT_GRAPHEMES.iter().filter(|required| {
         required.category
             == EnglishSpanishGraphemeCategory::SpanishDecomposedEquivalent
@@ -59,14 +60,16 @@ fn all_fourteen_decomposed_inventory_entries_have_exact_rule_evidence() {
             Some(EnglishSpanishDiacriticRule::Acute) => acute += 1,
             Some(EnglishSpanishDiacriticRule::Diaeresis) => diaeresis += 1,
             Some(EnglishSpanishDiacriticRule::Tilde) => tilde += 1,
-            None => panic!("missing rule for {:?}", required.grapheme),
+            None => return Err(format!("missing rule for {:?}", required.grapheme)),
         }
         total += 1;
     }
-    assert_eq!(acute, 10);
-    assert_eq!(diaeresis, 2);
-    assert_eq!(tilde, 2);
-    assert_eq!(total, 14);
+    if (acute, diaeresis, tilde, total) != (10, 2, 2, 14) {
+        return Err(format!(
+            "unexpected diacritic counts: {acute}, {diaeresis}, {tilde}, {total}",
+        ));
+    }
+    Ok(())
 }
 
 #[test]
@@ -89,7 +92,7 @@ fn near_miss_spellings_do_not_gain_language_rule_evidence() {
     for grapheme in [
         "Y\u{301}", "y\u{301}", "N\u{301}", "n\u{301}",
         "A\u{308}", "a\u{308}", "\u{301}", "\u{303}",
-        "\u{308}", "á", "ñ", "ü",
+        "\u{308}", "\u{e1}", "\u{f1}", "\u{fc}",
     ] {
         assert_eq!(applicable_english_spanish_diacritic_rule(grapheme), None);
     }
@@ -133,5 +136,5 @@ fn language_rule_evidence_completes_required_profile_coverage() {
     assert_eq!(required.len(), 114);
     assert_eq!(profile.exact_graphemes.len(), 100);
     assert_eq!(matched_rules.iter().flatten().count(), 14);
-    assert!(missing_handwriting_coverage(&profile, &queries).is_empty());
+    assert_eq!(missing_handwriting_coverage(&profile, &queries).len(), 0);
 }
