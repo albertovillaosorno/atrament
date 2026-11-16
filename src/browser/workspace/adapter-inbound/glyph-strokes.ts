@@ -6160,7 +6160,11 @@ export function createGlyphStrokeEditor(): {
         placeholder.textContent = "Choose a stroke to edit";
         selected.replaceChildren(placeholder, ...options);
         selected.value = selectedIndex === null ? "" : String(selectedIndex);
-        selected.disabled = !active || shown.length === 0;
+        selected.disabled = !active || drawing !== null
+            || shown.length === 0;
+        for (const action of [source, add, copy, compose, construct]) {
+            action.disabled = !active || drawing !== null;
+        }
         slantAuthored.disabled = !active || shown.length === 0
             || drawing !== null;
         scaleHeight.disabled = !active || shown.length === 0
@@ -6175,8 +6179,10 @@ export function createGlyphStrokeEditor(): {
             || drawing !== null;
         reflectGlyph.disabled = !active || shown.length === 0
             || drawing !== null;
-        update.disabled = !active || selectedIndex === null;
-        remove.disabled = !active || selectedIndex === null;
+        update.disabled = !active || drawing !== null
+            || selectedIndex === null;
+        remove.disabled = !active || drawing !== null
+            || selectedIndex === null;
         subdivide.disabled = !active || drawing !== null
             || selectedIndex === null || strokes.length >= MAX_STROKES
             || subdivisionMidpoint(strokes[selectedIndex]!) === null;
@@ -6188,7 +6194,8 @@ export function createGlyphStrokeEditor(): {
         merge.disabled = !active || drawing !== null || mergeTarget === null;
         clearGlyph.disabled = !active || shown.length === 0
             || drawing !== null;
-        reverse.disabled = !active || selectedIndex === null;
+        reverse.disabled = !active || drawing !== null
+            || selectedIndex === null;
         const chosenPosition = shown.findIndex(({ index }) => {
             return index === selectedIndex;
         }) + 1;
@@ -6196,9 +6203,9 @@ export function createGlyphStrokeEditor(): {
             return chosenPosition >= path.first
                 && chosenPosition <= path.last;
         });
-        reversePath.disabled = !active || !chosenPath
+        reversePath.disabled = !active || drawing !== null || !chosenPath
             || chosenPath.first === chosenPath.last;
-        startPath.disabled = !active || !chosenPath
+        startPath.disabled = !active || drawing !== null || !chosenPath
             || chosenPath.first === chosenPath.last
             || chosenPosition === chosenPath.first
             || chosenPath.start.x !== chosenPath.end.x
@@ -6206,7 +6213,7 @@ export function createGlyphStrokeEditor(): {
         const closureGap = chosenPath ?
             (chosenPath.end.x - chosenPath.start.x) ** 2
             + (chosenPath.end.y - chosenPath.start.y) ** 2 : 0;
-        closePath.disabled = !active || !chosenPath
+        closePath.disabled = !active || drawing !== null || !chosenPath
             || chosenPath.first === chosenPath.last || closureGap === 0
             || closureGap > 1200 * 1200 || strokes.length >= MAX_STROKES;
         closePathCurved.disabled = !active || drawing !== null
@@ -6227,7 +6234,8 @@ export function createGlyphStrokeEditor(): {
             || chosenPath.width !== followingPath.width
             || chosenPath.color !== followingPath.color
             || bridgeGap === 0 || bridgeGap > 1200 * 1200;
-        translatePath.disabled = !active || !chosenPath;
+        translatePath.disabled = !active || drawing !== null
+            || !chosenPath;
         scalePath.disabled = !active || drawing !== null || !chosenPath;
         rotatePath.disabled = !active || drawing !== null || !chosenPath;
         shearPath.disabled = !active || drawing !== null || !chosenPath;
@@ -6239,12 +6247,12 @@ export function createGlyphStrokeEditor(): {
             || strokes.length >= MAX_STROKES;
         copyShiftedPath.disabled = copyPath.disabled;
         const pathIndex = paths.indexOf(chosenPath!);
-        earlierPath.disabled = !active || pathIndex <= 0;
-        laterPath.disabled = !active || pathIndex < 0
+        earlierPath.disabled = !active || drawing !== null || pathIndex <= 0;
+        laterPath.disabled = !active || drawing !== null || pathIndex < 0
             || pathIndex >= paths.length - 1;
-        earlier.disabled = !active || neighbor(-1) === null;
-        later.disabled = !active || neighbor(1) === null;
-        join.disabled = !active || neighbor(1) === null;
+        earlier.disabled = !active || drawing !== null || neighbor(-1) === null;
+        later.disabled = !active || drawing !== null || neighbor(1) === null;
+        join.disabled = !active || drawing !== null || neighbor(1) === null;
         const lines = shown.map(({ stroke, index }) => {
             const line = document.createElementNS(SVG_NS, "line");
             for (const axis of ["x1", "y1", "x2", "y2"] as const) {
@@ -6257,11 +6265,13 @@ export function createGlyphStrokeEditor(): {
                 line.setAttribute("data-selected", "true");
             }
             line.addEventListener("click", () => {
-                if (active) choose(index);
+                if (active && drawing === null) choose(index);
             });
             line.addEventListener("pointerdown", (event) => {
                 event.stopPropagation();
-                if (active && event.button === 0) choose(index);
+                if (active && drawing === null && event.button === 0) {
+                    choose(index);
+                }
             });
             return line;
         });
@@ -6517,6 +6527,11 @@ export function createGlyphStrokeEditor(): {
         next: Stroke[], target: string, kind: EditKind,
         selection: number | null,
     ): void => {
+        // Pointer capture is a single draft transaction. Other ink edits
+        // must not interleave with a trace that has yet to be released.
+        if (drawing !== null) {
+            throw new Error("Finish the pen trace before editing ink");
+        }
         const before = draftBytes(strokes);
         const after = draftBytes(next);
         // A no-op transform or edit is not a new history step. Any invalid
@@ -7116,7 +7131,8 @@ export function createGlyphStrokeEditor(): {
         }
     });
     update.addEventListener("click", () => {
-        if (!active || selectedIndex === null) return;
+        if (!active || selectedIndex === null
+            || drawing !== null) return;
         try {
             const changed = editable();
             const index = selectedIndex;
@@ -7168,7 +7184,8 @@ export function createGlyphStrokeEditor(): {
         }
     });
     reverse.addEventListener("click", () => {
-        if (!active || selectedIndex === null) return;
+        if (!active || selectedIndex === null
+            || drawing !== null) return;
         const index = selectedIndex;
         const existing = strokes[index];
         if (existing?.grapheme !== character.value) return;
@@ -7182,7 +7199,8 @@ export function createGlyphStrokeEditor(): {
         message("Reversed selected pen stroke; unsaved");
     });
     reversePath.addEventListener("click", () => {
-        if (!active || selectedIndex === null) return;
+        if (!active || selectedIndex === null
+            || drawing !== null) return;
         try {
             const glyph = character.value;
             const changed = reverseCandidatePath(strokes, glyph, selectedIndex);
@@ -7194,7 +7212,8 @@ export function createGlyphStrokeEditor(): {
         }
     });
     startPath.addEventListener("click", () => {
-        if (!active || selectedIndex === null) return;
+        if (!active || selectedIndex === null
+            || drawing !== null) return;
         try {
             const changed = rotateClosedCandidatePath(
                 strokes, character.value, selectedIndex,
@@ -7206,7 +7225,8 @@ export function createGlyphStrokeEditor(): {
         }
     });
     closePath.addEventListener("click", () => {
-        if (!active || selectedIndex === null) return;
+        if (!active || selectedIndex === null
+            || drawing !== null) return;
         try {
             const glyph = character.value;
             const changed = closeCandidatePath(strokes, glyph, selectedIndex);
@@ -7319,7 +7339,8 @@ export function createGlyphStrokeEditor(): {
         }
     });
     translatePath.addEventListener("click", () => {
-        if (!active || selectedIndex === null) return;
+        if (!active || selectedIndex === null
+            || drawing !== null) return;
         try {
             const changed = translateCandidatePath(
                 strokes, character.value, selectedIndex,
@@ -7389,7 +7410,8 @@ export function createGlyphStrokeEditor(): {
         }
     });
     const movePath = (direction: -1 | 1): void => {
-        if (!active || selectedIndex === null) return;
+        if (!active || selectedIndex === null
+            || drawing !== null) return;
         try {
             const glyph = character.value;
             const index = selectedIndex;
@@ -7406,7 +7428,8 @@ export function createGlyphStrokeEditor(): {
     earlierPath.addEventListener("click", () => movePath(-1));
     laterPath.addEventListener("click", () => movePath(1));
     const move = (offset: -1 | 1): void => {
-        if (!active || selectedIndex === null) return;
+        if (!active || selectedIndex === null
+            || drawing !== null) return;
         const index = selectedIndex;
         const target = neighbor(offset);
         if (target === null) return;
@@ -7419,7 +7442,8 @@ export function createGlyphStrokeEditor(): {
     earlier.addEventListener("click", () => move(-1));
     later.addEventListener("click", () => move(1));
     join.addEventListener("click", () => {
-        if (!active || selectedIndex === null) return;
+        if (!active || selectedIndex === null
+            || drawing !== null) return;
         try {
             const first = strokes[selectedIndex];
             const target = neighbor(1);
@@ -7462,7 +7486,8 @@ export function createGlyphStrokeEditor(): {
         }
     });
     remove.addEventListener("click", () => {
-        if (!active || selectedIndex === null) return;
+        if (!active || selectedIndex === null
+            || drawing !== null) return;
         if (strokes[selectedIndex]?.grapheme !== character.value) return;
         const next = strokes.slice();
         next.splice(selectedIndex, 1);
@@ -7483,7 +7508,7 @@ export function createGlyphStrokeEditor(): {
             + "undoable, unsaved");
     });
     source.addEventListener("change", async () => {
-        if (!active) return;
+        if (!active || drawing !== null) return;
         const file = source.files?.[0];
         if (file === undefined) return;
         generation += 1;
@@ -7494,7 +7519,8 @@ export function createGlyphStrokeEditor(): {
                 throw new Error("Glyph file exceeds 512 KiB");
             }
             const bytes = await file.arrayBuffer();
-            if (!active || generation !== expected) return;
+            if (!active || drawing !== null
+                || generation !== expected) return;
             // Keep a leading BOM visible to the strict native TSV header
             // check. TextDecoder normally drops it and would silently admit
             // a file that Rust rejects as a different source format.

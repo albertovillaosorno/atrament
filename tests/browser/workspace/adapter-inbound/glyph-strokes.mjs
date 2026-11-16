@@ -1440,6 +1440,139 @@ test("pointer drawing validates segments on release", async () => {
     }
 });
 
+// An active captured gesture owns the draft until pointer release or cancel.
+// Dispatch directly too: a forged disabled-button event cannot write history.
+test("pending pen trace admits no concurrent glyph or path mutations",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        const source = [
+            { ...stroke("ñ"), x1: 500, y1: 600, x2: 900, y2: 1000 },
+            { ...stroke("ñ"), x1: 900, y1: 1000, x2: 1100, y2: 1200 },
+            { ...stroke("ñ"), x1: 1500, y1: 600, x2: 1700, y2: 800 },
+        ];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(source));
+        const preview = get("preview");
+        const pointer = (x, y) => ({
+            clientX: x, clientY: y,
+            pointerId: 18, isPrimary: true, button: 0,
+        });
+        editor.start();
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("selected").value = "1";
+        get("selected").dispatch("change");
+        assert.equal(get("path-close").disabled, false);
+        assert.equal(get("reverse-path").disabled, false);
+        assert.equal(get("path-later").disabled, false);
+        assert.equal(get("path-translate").disabled, false);
+        const original = encodeGlyphLibrary(source);
+        preview.dispatch("pointerdown", pointer(50, 50));
+        assert.equal(preview.hasPointerCapture(18), true);
+        for (const name of ["add", "update", "remove", "reverse",
+            "reverse-path", "path-close", "path-translate", "path-later",
+            "earlier", "later", "join", "copy", "compose",
+            "construct", "load", "selected"]) {
+            assert.equal(get(name).disabled, true,
+                name + " must be locked during a pen gesture");
+        }
+        let readSource = false;
+        get("load").files = [{
+            size: bytes.length,
+            arrayBuffer: async () => {
+                readSource = true;
+                return bytes.buffer;
+            },
+        }];
+        await get("load").dispatch("change");
+        assert.equal(readSource, false, "a trace cannot race a file import");
+        get("path-dx").value = "100";
+        for (const name of ["add", "reverse", "reverse-path", "path-close",
+            "path-translate", "path-later", "update", "remove", "join",
+            "copy", "compose", "construct"]) {
+            get(name).dispatch("click");
+        }
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), original,
+            "forced edit events must not alter ink during a trace");
+        assert.equal(preview.hasPointerCapture(18), true,
+            "a rejected edit must not cancel pointer capture");
+        preview.dispatch("pointerup", pointer(250, 300));
+        assert.equal(preview.hasPointerCapture(18), false);
+        assert.equal(get("selected").disabled, false);
+        assert.equal(get("add").disabled, false);
+        assert.equal(get("reverse").disabled, false);
+        get("save").dispatch("click");
+        const final = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(final.slice(0, source.length), source);
+        assert.equal(final.length, source.length + 1,
+            "only the released physical pen segment may append");
+        assert.equal(get("slant-undo").textContent, "Undo last pen trace");
+        get("slant-undo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), original,
+            "one undo recovers the original before the captured trace");
+    } finally {
+        ui.restore();
+    }
+});
+
+// Loading a file awaits untrusted bytes. A later captured pointer gesture
+// must also stop an import that began before the trace was captured.
+test("pending file read cannot replace ink during a later pen trace",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        const original = [stroke("ñ")];
+        const incoming = [stroke("∞")];
+        const first = new TextEncoder().encode(encodeGlyphLibrary(original));
+        const next = new TextEncoder().encode(encodeGlyphLibrary(incoming));
+        editor.start();
+        get("load").files = [{
+            size: first.length, arrayBuffer: async () => first.buffer,
+        }];
+        await get("load").dispatch("change");
+        let resolveRead;
+        const pendingRead = new Promise((resolve) => {
+            resolveRead = resolve;
+        });
+        get("load").files = [{
+            size: next.length, arrayBuffer: async () => pendingRead,
+        }];
+        const pendingImport = get("load").dispatch("change");
+        const preview = get("preview");
+        const pointer = (x, y) => ({
+            clientX: x, clientY: y,
+            pointerId: 19, button: 0, isPrimary: true,
+        });
+        preview.dispatch("pointerdown", pointer(50, 50));
+        assert.equal(preview.hasPointerCapture(19), true);
+        resolveRead(next.buffer);
+        await pendingImport;
+        assert.equal(preview.hasPointerCapture(19), true,
+            "an obsolete async import cannot release pointer capture");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(original));
+        preview.dispatch("pointerup", pointer(250, 300));
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved.slice(0, 1), original);
+        assert.equal(saved.length, 2,
+            "the trace adds one stroke without importing stale bytes");
+        get("slant-undo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(original));
+    } finally {
+        ui.restore();
+    }
+});
+
 test("curved pointer traces preserve samples and refuse excess", async () => {
     const ui = mountEditor();
     try {
