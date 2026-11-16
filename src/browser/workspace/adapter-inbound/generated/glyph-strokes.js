@@ -69,6 +69,9 @@ function isNonmarkingScalar(value) {
         || /^[\u{1D173}-\u{1D17A}\u{E0000}-\u{E0FFF}]$/u
             .test(value);
 }
+// Repeated 4096-stroke previews must not create one ICU segmenter per row.
+// Keep a single locale-neutral grapheme boundary authority for this module.
+let graphemeSegmenter;
 function exactGrapheme(value) {
     // In Unicode mode an astral scalar is one character; lone UTF-16
     // surrogates still match. TextEncoder would silently replace them with
@@ -86,9 +89,10 @@ function exactGrapheme(value) {
     }
     if (typeof Intl.Segmenter !== "function")
         return false;
-    return [...new Intl.Segmenter(undefined, {
-            granularity: "grapheme",
-        }).segment(value)].length === 1;
+    graphemeSegmenter ??= new Intl.Segmenter(undefined, {
+        granularity: "grapheme",
+    });
+    return [...graphemeSegmenter.segment(value)].length === 1;
 }
 function boundedInteger(raw, maximum, label) {
     if (!/^[0-9]+$/.test(raw)) {

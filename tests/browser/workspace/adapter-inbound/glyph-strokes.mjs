@@ -43,6 +43,37 @@ test("exact Unicode shape identity survives TSV", () => {
     }]);
 });
 
+test("glyph segmentation reuses its authority and still fails closed",
+    async () => {
+        const original = Intl.Segmenter;
+        let constructions = 0;
+        try {
+            Intl.Segmenter = class extends original {
+                constructor(...args) {
+                    super(...args);
+                    constructions += 1;
+                }
+            };
+            // Isolate the module cache without changing the loaded editor.
+            const path = "../../../../src/browser/workspace/adapter-inbound/"
+                + "generated/glyph-strokes.js?segmentation-cache-regression";
+            const { encodeGlyphLibrary: encode, parseGlyphLibrary: parse } =
+                await import(new URL(path, import.meta.url).href);
+            const keys = ["ñ", "n\u0303", "👩\u200D💻", "∞"];
+            const rows = Array.from({ length: 64 }, (_, index) =>
+                stroke(keys[index % keys.length]));
+            const text = encode(rows);
+            assert.deepEqual(parse(text), rows);
+            assert.equal(constructions, 1,
+                "multiple Unicode rows share one grapheme segmenter");
+            Intl.Segmenter = undefined;
+            assert.throws(() => encode(rows), /visible Unicode grapheme/,
+                "unavailable segmentation must not reuse the cached instance");
+        } finally {
+            Intl.Segmenter = original;
+        }
+    });
+
 test("invalid UTF-16 glyphs cannot silently become replacement ink", () => {
     const validAstral = stroke("🖋");
     const bytes = new TextEncoder().encode(
@@ -4173,7 +4204,8 @@ test("fill missing punctuation never replaces custom ink", async () => {
     }
 });
 
-test("punctuation batch refuses invalid geometry and too much ink", async () => {
+test("punctuation batch refuses invalid geometry and too much ink",
+    async () => {
     const ui = mountEditor();
     try {
         const { editor, get, downloads } = ui;
@@ -7584,7 +7616,8 @@ test("baseline browser button is explicit, idempotent and session-gated",
         }
     });
 
-test("refused baseline browser fill preserves an imported custom i", async () => {
+test("refused baseline browser fill preserves an imported custom i",
+    async () => {
     const ui = mountEditor();
     try {
         const { editor, get, downloads } = ui;
