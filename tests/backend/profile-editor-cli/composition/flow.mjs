@@ -10226,3 +10226,71 @@ test('fitting bare integer rows retain exact native PDF/PNG ink', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('authored numeric uncertainties retain exact native PDF/PNG ink', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-uncertainties-'));
+    try {
+        const region = ['--flow-region', '30000', '40000',
+            '33000', '72000'];
+        const cases = [
+            ['abc1.2±0.4', 'abc', '1.2±0.4', '±', 'U+00B1'],
+            ['abc1.2∓0.4', 'abc', '1.2∓0.4', '∓', 'U+2213'],
+            ['abcd±.25', 'abcd', '±.25', '±', 'U+00B1'],
+            ['abcd∓.25', 'abcd', '∓.25', '∓', 'U+2213'],
+        ];
+        const stroke = (glyph) => [
+            '--glyph-stroke', glyph, '600', '500', '1800',
+            '3000', '250', '#123456',
+        ];
+        for (const [source, first, last, omitted, point] of cases) {
+            const glyphs = [...new Set([...source].filter(
+                (glyph) => glyph !== 'a'))];
+            const authored = glyphs.flatMap(stroke);
+            const incomplete = glyphs.filter(
+                (glyph) => glyph !== omitted).flatMap(stroke);
+            for (const flag of ['--flow-text', '--flow-markdown']) {
+                const inspected = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    'notebook', '--inspect-flow', ...region, flag, source,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(inspected.status, 0, inspected.stderr);
+                assert.ok(inspected.stdout.includes(
+                    `Page 1 x=32500 um y=42500 um: "${first}"`));
+                assert.ok(inspected.stdout.includes(
+                    `Page 1 x=32500 um y=51500 um: "${last}"`));
+                for (const format of ['pdf', 'png']) {
+                    const manualPath = join(dir, `manual-${format}`);
+                    const manual = spawnSync(cargo, [
+                        'run', '--offline', '--quiet',
+                        '-p', 'atrament_profile_editor_cli', '--',
+                        ...base, ...authored,
+                        '--place-text', '1', '32500', '42500', first,
+                        '--place-text', '1', '32500', '51500', last,
+                        '--export-paper', format,
+                        ...(format === 'png' ? ['--dpi', '72'] : []),
+                        '--output', manualPath, '--replace',
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(manual.status, 0, manual.stderr);
+                    const expected = readFileSync(manualPath);
+                    const flowed = render(dir, source, format,
+                        [...region, ...authored], flag);
+                    assert.equal(flowed.result.status, 0,
+                        flowed.result.stderr);
+                    assert.deepEqual(readFileSync(flowed.output), expected,
+                        `${source} ${flag} ${format}: exact physical ink`);
+                    const refused = render(dir, source, format,
+                        [...region, ...incomplete], flag);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.match(refused.result.stderr,
+                        /missing authored glyph|no authored strokes/i);
+                    assert.ok(refused.result.stderr.includes(point));
+                    assert.deepEqual(readFileSync(refused.output), expected,
+                        'missing uncertainty cannot overwrite valid ink');
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

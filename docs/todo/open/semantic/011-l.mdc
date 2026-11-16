@@ -5327,7 +5327,9 @@ number's advisory cluster. Missing right-hand digits do not acquire ties.
 
 Two Rust regressions cover both source modes, physical row dimensions,
 complete and incomplete suffixes, and narrow-sheet exact-grapheme fallback.
-All 155 native flow tests pass. The behavior uses existing authored glyph
-shapes and does not invent mathematical syntax, font positioning, a numeric
-calculator or persisted semantic notebook state. The full saved-content
-render/export journey remains open.
+All 155 native flow tests pass. A real CLI process regression confirms
+PDF/transparent PNG bytes equal independently placed authored strokes for
+four uncertainty expressions in both modes. Omitting the sign glyph refuses
+without overwriting an accepted export. The behavior invents neither math
+syntax nor font positioning, and does not persist semantic notebook state.
+The full saved-content render/export journey remains open.
