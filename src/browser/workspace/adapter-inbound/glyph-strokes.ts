@@ -4714,6 +4714,25 @@ export function varyGlyphStrokes(
     });
 }
 
+// All six physical glyph edit previews render the same candidate ink.
+// The requested Unicode glyph alone gets a preview; unrelated strokes remain
+// in the proposed TSV only, never on this diagnostic SVG surface.
+function previewGlyphStrokes(
+    candidate: readonly Stroke[], grapheme: string,
+): SVGLineElement[] {
+    return candidate.filter((item) => item.grapheme === grapheme)
+        .map((item) => {
+            const line = document.createElementNS(SVG_NS, "line");
+            for (const axis of ["x1", "y1", "x2", "y2"] as const) {
+                line.setAttribute(axis, String(item[axis]));
+            }
+            line.setAttribute("stroke", item.color);
+            line.setAttribute("stroke-width", String(item.width));
+            line.setAttribute("stroke-linecap", "round");
+            return line;
+        });
+}
+
 function required<T extends Element>(id: string): T {
     const node = document.getElementById(id);
     if (node === null) throw new Error(`Missing glyph editor control: ${id}`);
@@ -5780,17 +5799,7 @@ export function createGlyphStrokeEditor(): {
             const candidate = scaleGlyphHeight(strokes, target,
                 decimalWhole(heightPercent.value),
                 decimalWhole(heightBaseline.value));
-            const lines = candidate.filter((item) =>
-                item.grapheme === target).map((item) => {
-                const line = document.createElementNS(SVG_NS, "line");
-                for (const axis of ["x1", "y1", "x2", "y2"] as const) {
-                    line.setAttribute(axis, String(item[axis]));
-                }
-                line.setAttribute("stroke", item.color);
-                line.setAttribute("stroke-width", String(item.width));
-                line.setAttribute("stroke-linecap", "round");
-                return line;
-            });
+            const lines = previewGlyphStrokes(candidate, target);
             heightPreview.replaceChildren(...lines);
             heightPreviewStatus.textContent = `${lines.length} proposed `
                 + "height-scaled segments; preview only, draft unchanged";
@@ -5824,17 +5833,7 @@ export function createGlyphStrokeEditor(): {
             const candidate = scaleGlyphWidth(strokes, target,
                 decimalWhole(widthPercent.value),
                 decimalWhole(widthAnchor.value));
-            const lines = candidate.filter((item) =>
-                item.grapheme === target).map((item) => {
-                const line = document.createElementNS(SVG_NS, "line");
-                for (const axis of ["x1", "y1", "x2", "y2"] as const) {
-                    line.setAttribute(axis, String(item[axis]));
-                }
-                line.setAttribute("stroke", item.color);
-                line.setAttribute("stroke-width", String(item.width));
-                line.setAttribute("stroke-linecap", "round");
-                return line;
-            });
+            const lines = previewGlyphStrokes(candidate, target);
             widthPreview.replaceChildren(...lines);
             widthPreviewStatus.textContent = `${lines.length} proposed `
                 + "width-scaled segments; preview only, draft unchanged";
@@ -5866,17 +5865,7 @@ export function createGlyphStrokeEditor(): {
             }
             const candidate = scaleGlyphInk(strokes, target,
                 decimalWhole(inkPercent.value));
-            const lines = candidate.filter((item) =>
-                item.grapheme === target).map((item) => {
-                const line = document.createElementNS(SVG_NS, "line");
-                for (const axis of ["x1", "y1", "x2", "y2"] as const) {
-                    line.setAttribute(axis, String(item[axis]));
-                }
-                line.setAttribute("stroke", item.color);
-                line.setAttribute("stroke-width", String(item.width));
-                line.setAttribute("stroke-linecap", "round");
-                return line;
-            });
+            const lines = previewGlyphStrokes(candidate, target);
             inkPreview.replaceChildren(...lines);
             inkPreviewStatus.textContent = `${lines.length} proposed `
                 + "thickness-scaled segments; preview only, draft unchanged";
@@ -5911,17 +5900,7 @@ export function createGlyphStrokeEditor(): {
                 decimalWhole(rotateAngle.value, true),
                 decimalWhole(rotatePivotX.value),
                 decimalWhole(rotatePivotY.value));
-            const lines = candidate.filter((item) =>
-                item.grapheme === target).map((item) => {
-                const line = document.createElementNS(SVG_NS, "line");
-                for (const axis of ["x1", "y1", "x2", "y2"] as const) {
-                    line.setAttribute(axis, String(item[axis]));
-                }
-                line.setAttribute("stroke", item.color);
-                line.setAttribute("stroke-width", String(item.width));
-                line.setAttribute("stroke-linecap", "round");
-                return line;
-            });
+            const lines = previewGlyphStrokes(candidate, target);
             rotatePreview.replaceChildren(...lines);
             rotatePreviewStatus.textContent = `${lines.length} proposed `
                 + "rotated segments; preview only, draft unchanged";
@@ -5954,17 +5933,7 @@ export function createGlyphStrokeEditor(): {
             const candidate = reflectGlyphStrokes(strokes, target,
                 reflectAxis.value as "x" | "y",
                 decimalWhole(reflectPivot.value));
-            const lines = candidate.filter((item) =>
-                item.grapheme === target).map((item) => {
-                const line = document.createElementNS(SVG_NS, "line");
-                for (const axis of ["x1", "y1", "x2", "y2"] as const) {
-                    line.setAttribute(axis, String(item[axis]));
-                }
-                line.setAttribute("stroke", item.color);
-                line.setAttribute("stroke-width", String(item.width));
-                line.setAttribute("stroke-linecap", "round");
-                return line;
-            });
+            const lines = previewGlyphStrokes(candidate, target);
             reflectPreview.replaceChildren(...lines);
             reflectPreviewStatus.textContent = `${lines.length} proposed `
                 + "reflected segments; preview only, draft unchanged";
@@ -5997,17 +5966,7 @@ export function createGlyphStrokeEditor(): {
             const candidate = translateGlyphStrokes(strokes, target,
                 decimalWhole(moveX.value, true),
                 decimalWhole(moveY.value, true));
-            const lines = candidate.filter((item) =>
-                item.grapheme === target).map((item) => {
-                const line = document.createElementNS(SVG_NS, "line");
-                for (const axis of ["x1", "y1", "x2", "y2"] as const) {
-                    line.setAttribute(axis, String(item[axis]));
-                }
-                line.setAttribute("stroke", item.color);
-                line.setAttribute("stroke-width", String(item.width));
-                line.setAttribute("stroke-linecap", "round");
-                return line;
-            });
+            const lines = previewGlyphStrokes(candidate, target);
             movePreview.replaceChildren(...lines);
             movePreviewStatus.textContent = `${lines.length} proposed `
                 + "positioned segments; preview only, draft unchanged";
