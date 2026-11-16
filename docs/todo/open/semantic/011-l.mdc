@@ -5098,7 +5098,9 @@ notation and decimal/comma/time grouping retain their previous behavior.
 The physical preference is advisory: longer text still uses the existing
 measured fallback instead of clipping or refusing otherwise printable ink.
 It never converts characters, creates digits or supplies missing glyph
-strokes. Two pure Rust tests check positive and negative contextual ties,
+strokes.
+
+Two pure Rust tests check positive and negative contextual ties,
 a 4,096-grapheme scan, actual row placement and narrow-row source identity.
 A native CLI subprocess regression compares six cases, both text modes and
 both PDF/transparent PNG against independently authored placed strokes.
@@ -5342,7 +5344,9 @@ number's advisory cluster. Missing right-hand digits do not acquire ties.
 
 Two Rust regressions cover both source modes, physical row dimensions,
 complete and incomplete suffixes, and narrow-sheet exact-grapheme fallback.
-All 155 native flow tests pass. A real CLI process regression confirms
+All 155 native flow tests pass.
+
+A real CLI process regression confirms
 PDF/transparent PNG bytes equal independently placed authored strokes for
 four uncertainty expressions in both modes. Omitting the sign glyph refuses
 without overwriting an accepted export. The behavior invents neither math

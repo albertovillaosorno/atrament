@@ -1115,7 +1115,9 @@ The localhost editor can clear the full set of authored segments for the
 selected exact Unicode grapheme as one bounded undoable step. All other
 NFC/NFD spellings, unrelated glyphs, and their original ordered TSV rows
 remain unchanged. Empty drafts stay in memory only; native TSV download
-still refuses zero strokes. Redo reapplies the whole removal, and session
+still refuses zero strokes.
+
+Redo reapplies the whole removal, and session
 end clears its history. The action is disabled when the selected glyph has
 no ink or a live pen trace is unfinished, with no implicit file write.
 
@@ -1188,7 +1190,9 @@ segments when their endpoints touch, ink widths and colors agree, and their
 integer vectors are precisely collinear and forward-directed. Other Unicode
 glyphs interleaved between those source rows retain their positions. This is
 a reversible session edit, not an implicit file save or a new Rust shape
-primitive. A midpoint split can be merged only if rounding has not placed
+primitive.
+
+A midpoint split can be merged only if rounding has not placed
 its seam off the original straight line; turns, backtracks, mismatched ink
 and non-touching segments refuse. Focused browser tests cover Unicode
 identity, full native TSV cap, unchanged source on refusal and undo/redo.
@@ -1233,7 +1237,9 @@ primitive diagonals refuse instead of rounding off the original line.
 Both new strokes retain the selected exact NFC/NFD Unicode key, RGB, width,
 order and pen direction. Other interleaved graphemes keep their TSV slots.
 The existing rounded midpoint split remains available for editable shape
-changes. An exact split followed by the existing same-pen collinear merge
+changes.
+
+An exact split followed by the existing same-pen collinear merge
 restores the source TSV byte-for-byte, including negative travel direction.
 The browser records a single bounded undoable in-memory change and never
 silently downloads or saves; the native CLI likewise requires explicit
@@ -1471,6 +1477,7 @@ bend must visibly change the ink from a straight connector.
 The two original paths retain their directed strokes, style and interleaved
 exact Unicode TSV rows. The editor records one undoable session-only change;
 its native v1 output still has ordinary segments, not saved curve controls.
+
 Both implementations refuse absent following paths, mismatched pen widths
 or colors, gaps over 1200 µm, collapsed or straight-only rounded samples,
 any round-pen clip of the 3500 x 4500 µm cell, and library overflow. No
@@ -1610,7 +1617,9 @@ remains unchanged.
 The 4096-segment boundary has an exact test: 4092 original physical
 segments plus four curved pieces admit, but one more original segment
 refuses before replacing an approved output; the one-piece straight
-connector still fits. Seven malformed curved-join flags also refuse
+connector still fits.
+
+Seven malformed curved-join flags also refuse
 before reading a deliberately unclosed glyph-library stdin pipe.
 Together these cases extend the native curved-join suite to 15 tests.
 They do not add persisted curve controls, inferred pen lifts, editor

@@ -541,6 +541,7 @@ of strokes. Since every visible glyph must have at least one pen segment,
 the inspector can identify a **minimum over budget** result when known
 segments plus these unresolved uses exceed 4,096. Otherwise missing shapes
 keep the result **incomplete**, never an exportability guarantee.
+
 Add `--inspect-flow-inventory` and
 `--inspect-flow-page-inventory` for breakdowns on every physical sheet,
 including empty ones. The native limit applies **across all pages**, not
@@ -669,7 +670,9 @@ Add `--inspect-flow-ink-length-by-color` after the length flag to split
 that same measured pen-down distance by exact RGB ink. The ordered report
 provides global and page-local totals and stroke counts for each color,
 including marker bands and authored glyph colors. Sheets without drawn ink
-report `empty`. It is a read-only physical inventory, not a prediction of
+report `empty`.
+
+It is a read-only physical inventory, not a prediction of
 ink volume, print time, color blending or plotter travel. The previous
 length report stays byte-identical without this additional flag.
 
@@ -2286,6 +2289,7 @@ and target must be two distinct, exact visible Unicode graphemes; NFC and
 NFD forms remain separate identities. Unrelated and interleaved rows retain
 their order. The path index follows the same adjacency and pen agreement
 rules reported by `--inspect-paths`; it can change after intervening edits.
+
 Missing paths, oversized libraries and invalid keys refuse without writing
 an output file. The browser's **Copy selected continuous pen path to glyph**
 control offers the same opt-in action with one-step undo/redo. It uses an
@@ -2313,6 +2317,7 @@ without replacing a selected file. In the browser, choose a source
 stroke, enter the target glyph and set **Selected path horizontal/vertical
 shift**. Then choose **Copy selected path with signed X/Y shift**.
 Session undo/redo and explicit TSV download work as for ordinary copy.
+
 Neither operation persists analytic curves.
 
 These are copied pen segments, not live references, saved pen lifts,
@@ -2483,7 +2488,9 @@ or horizontal Y coordinate (0–4500 µm). It reflects ordered, directed
 sampled endpoints without reversing their pen directions, changing widths
 or pigment, or touching any sibling glyph. A read-only SVG preview shows
 up to 128 proposed strokes; full edits accept the native 4,096-stroke TSV
-limit. Invalid axes, nondecimal pivots and clipped round pen caps refuse
+limit.
+
+Invalid axes, nondecimal pivots and clipped round pen caps refuse
 without changing authored ink. Each accepted reflection is one bounded
 undo/redo step, and downloading TSV remains a separate explicit action.
 
@@ -2878,8 +2885,12 @@ Unlike the pre-existing `--rotate-path` (which changes the first stroke of a
 closed loop), `--rotate-path-ink` changes actual pen geometry. Pivots must be
 within X 0–3500 and Y 0–4500 µm. Full round pen caps must remain inside the
 cell; collapsed segments, rounded no-ops, invalid selections and clipping
-refuse without changing the source or existing output. Unicode NFC/NFD keys
-and other same-glyph paths remain distinct. The CLI and browser agree across
+refuse without changing the source or existing output.
+
+Unicode NFC/NFD keys
+and other same-glyph paths remain distinct.
+
+The CLI and browser agree across
 256 deterministic accepted/refused exact TSV cases. No path metadata or
 synthetic handwriting is persisted by this editing action.
 
@@ -2986,6 +2997,7 @@ path index from `--inspect-paths`; after a join the two paths become one,
 so later path numbers can change. The complete TSV is validated before
 writing, including the 4096-segment cap. Missing next paths, different
 pen styles, long or clipped bridges refuse without replacing output.
+
 Saved TSV is accepted by the same Rust PDF and transparent PNG compositor.
 Malformed path options also refuse before attempting to read a selected
 unclosed stdin glyph source. This is not automatic cursive joining, analytic
@@ -2997,7 +3009,9 @@ and vertical bends (each -600..600 µm) from the midpoint of the selected
 path's end and the next path's start. A nonzero *transverse* bend samples a
 quadratic arc into four directed, whole-micrometre segments. This makes a
 small smooth-looking connector without replacing source segments or adding
-a new v1 TSV curve field. The joined contour can be inspected, edited,
+a new v1 TSV curve field.
+
+The joined contour can be inspected, edited,
 exported, and reversed with the existing path tools.
 
 The equivalent native command is:
@@ -3012,7 +3026,9 @@ The two candidate paths must have identical RGB/pen width, distinct endpoints
 at most 1200 µm apart, and enough space for four extra segments under the
 4096-stroke and 512-KiB bounds. All sampled round caps must fit the full
 3500 × 4500 µm cell, and no new segment may collapse or form an unchanged
-straight connection after rounding. Invalid integers, style mismatches,
+straight connection after rounding.
+
+Invalid integers, style mismatches,
 clipped geometry, missing next paths and exhausted capacity refuse without
 changing the library or any existing output. The CLI checks malformed
 operands before opening a selected stdin glyph library. In the browser the
