@@ -1,7 +1,9 @@
 // Copyright © 2026 Alberto Villa Osorno. SPDX-License-Identifier: MIT
-// Paper-only form adapter: exercises authenticated Rust requests and local files.
+// Paper-only form adapter: exercises authenticated Rust requests and
+// local files.
 import assert from "node:assert/strict";
 import test from "node:test";
+// jig-ignore-next-line: Static ESM imports need an intact literal path.
 import { createPaperProfileEditor, readBoundedPaperExport } from "../../../../src/browser/workspace/adapter-inbound/generated/paper-profile.js";
 
 const numericIds = ["paper-width", "paper-height", "paper-spacing",
@@ -234,7 +236,9 @@ test("paper editor exports Rust PDF and PNG", async () => {
         assert.equal(elements.get("paper-export-png").disabled, true);
         assert.equal(elements.get("paper-png-dpi").value, "150");
         assert.ok(urls.some((url) => url.startsWith("revoke:")));
-        assert.equal(requests.filter((r) => r.endpoint === "./api/paper/pdf").length, 1);
+        assert.equal(requests.filter(
+            (r) => r.endpoint === "./api/paper/pdf",
+        ).length, 1);
         const pngDownloads = requests.filter(
             (r) => r.endpoint === "./api/paper/png",
         );
@@ -249,7 +253,9 @@ test("paper editor exports Rust PDF and PNG", async () => {
 });
 
 
-test("paper export streams exact binary bytes without Response.blob", async () => {
+test(
+    "paper export streams exact binary bytes without Response.blob",
+    async () => {
     const bytes = Uint8Array.of(0x89, 80, 78, 71, 0, 255, 128, 4);
     const reply = new Response(new ReadableStream({
         start(stream) {
@@ -270,7 +276,9 @@ test("paper export streams exact binary bytes without Response.blob", async () =
 });
 
 
-test("paper export rejects malformed declared length and incomplete payload", async () => {
+test(
+    "paper export rejects malformed declared length and incomplete payload",
+    async () => {
     for (const length of ["0", "-1", "+4", "1e3", "4.0", "24000001",
         "18446744073709551615"]) {
         await assert.rejects(readBoundedPaperExport(new Response("four", {
@@ -285,7 +293,9 @@ test("paper export rejects malformed declared length and incomplete payload", as
             ? /exceeds declared byte count/
             : /Incomplete native paper export response/);
     }
-    await assert.rejects(readBoundedPaperExport(new Response(null), "image/png"),
+    await assert.rejects(readBoundedPaperExport(
+        new Response(null), "image/png",
+    ),
         /has no body/);
     await assert.rejects(readBoundedPaperExport(
         new Response(new Uint8Array()), "image/png"),
@@ -312,7 +322,9 @@ test("paper export cancels oversized and rejects broken streams", async () => {
 });
 
 
-test("paper export cancels bad announced length before reading bytes", async () => {
+test(
+    "paper export cancels bad announced length before reading bytes",
+    async () => {
     let pulls = 0;
     let cancelled = false;
     const reply = new Response(new ReadableStream({
@@ -328,7 +340,9 @@ test("paper export cancels bad announced length before reading bytes", async () 
     assert.equal(pulls, 0, "declared overlong body is not consumed");
 });
 
-test("paper export allows intermittent empty chunks after real progress", async () => {
+test(
+    "paper export allows intermittent empty chunks after real progress",
+    async () => {
     let cancelled = false;
     const bytes = Uint8Array.from({ length: 9 }, (_, index) => index + 1);
     let step = 0;
@@ -355,7 +369,9 @@ test("paper export allows intermittent empty chunks after real progress", async 
         "empty chunks across successful reads cannot exhaust a stall budget");
 });
 
-test("paper export refuses infinite empty chunks within a finite budget", async () => {
+test(
+    "paper export refuses infinite empty chunks within a finite budget",
+    async () => {
     let cancelled = false;
     let pulls = 0;
     const reply = new Response(new ReadableStream({

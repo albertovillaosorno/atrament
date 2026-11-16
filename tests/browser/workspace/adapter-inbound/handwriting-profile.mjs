@@ -144,7 +144,9 @@ function edit(elements, id, value, event = "input") {
     control.dispatch(event);
 }
 
-test("native numeric preview uses unsaved glyph edits and is not persisted", async () => {
+test(
+    "native numeric preview uses unsaved glyph edits and is not persisted",
+    async () => {
     const b = mountBackend();
     try {
         await b.editor.start("private-session-credential");
@@ -232,7 +234,10 @@ test("handwriting numeric drafts refuse nondecimal spellings", async () => {
     }
 });
 
-test("native numeric preview refuses malformed response without retaining output", async () => {
+test(
+    "native numeric preview refuses malformed response"
+        + " without retaining output",
+    async () => {
     const b = mountBackend({
         fetch(endpoint, init) {
             if (endpoint === "./api/handwriting/dimensions") {
@@ -562,7 +567,9 @@ const nativeResponse = (body) => new Response(body, {
     headers: { "Content-Type": "application/json" },
 });
 
-test("handwriting editor round-trips full u64 seeds without JS rounding", async () => {
+test(
+    "handwriting editor round-trips full u64 seeds without JS rounding",
+    async () => {
     const maximum = "18446744073709551615";
     const b = mountBackend({
         fetch(endpoint, init) {
@@ -607,7 +614,9 @@ test("handwriting editor round-trips full u64 seeds without JS rounding", async 
     }
 });
 
-test("handwriting editor refuses out-of-range u64 and untrusted seed tokens", async () => {
+test(
+    "handwriting editor refuses out-of-range u64 and untrusted seed tokens",
+    async () => {
     const badSeeds = ["18446744073709551616", "-1", "1e3", "1.5", "", "a"];
     for (const raw of badSeeds) {
         const b = mountBackend();
@@ -678,7 +687,9 @@ test("local handwriting file restores exact maximum u64 seed", async () => {
     } finally { b.restore(); }
 });
 
-test("handwriting local file stores checked revisions and declines stale saves", async () => {
+test(
+    "handwriting local file stores checked revisions and declines stale saves",
+    async () => {
     let diskProfile = null;
     let diskRevision = null;
     let revisionStep = 0;
@@ -709,7 +720,8 @@ test("handwriting local file stores checked revisions and declines stale saves",
                 }
                 diskProfile = JSON.parse(init.body);
                 revisionStep += 1;
-                diskRevision = "sha256:" + String.fromCharCode(96 + revisionStep).repeat(64);
+                diskRevision = "sha256:"
+                    + String.fromCharCode(96 + revisionStep).repeat(64);
                 return Response.json({ revision: diskRevision });
             }
             if (init.method === "GET") return Response.json(defaultProfile());

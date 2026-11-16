@@ -2,6 +2,7 @@
 // Local notebook form adapter: native Rust JSON admission, no ambient state.
 import assert from "node:assert/strict";
 import test from "node:test";
+// jig-ignore-next-line: Static ESM imports need an intact literal path.
 import { createNotebookProfileEditor } from "../../../../src/browser/workspace/adapter-inbound/generated/paper-profile.js";
 
 const ids = ["notebook-date-style", "notebook-date-placement",
@@ -45,7 +46,9 @@ class Control {
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-test("notebook form validates page metadata and downloads native JSON", async () => {
+test(
+    "notebook form validates page metadata and downloads native JSON",
+    async () => {
     const saved = {
         document: globalThis.document,
         fetch: globalThis.fetch,
@@ -100,7 +103,8 @@ test("notebook form validates page metadata and downloads native JSON", async ()
             }
             diskProfile = JSON.parse(init.body);
             revisionStep += 1;
-            diskRevision = "sha256:" + String.fromCharCode(96 + revisionStep).repeat(64);
+            diskRevision = "sha256:"
+                + String.fromCharCode(96 + revisionStep).repeat(64);
             return Response.json({ revision: diskRevision });
         }
         if (url.startsWith("./api/notebook/paper/")) {
