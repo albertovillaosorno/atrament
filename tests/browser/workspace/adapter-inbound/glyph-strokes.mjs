@@ -74,6 +74,47 @@ test("glyph segmentation reuses its authority and still fails closed",
         }
     });
 
+test("broken or missing Intl rejects new glyphs without leaking errors",
+    async () => {
+        const original = globalThis.Intl;
+        const moduleUrl = "../../../../src/browser/workspace/adapter-inbound/"
+            + "generated/glyph-strokes.js?broken-icu-regression";
+        const { encodeGlyphLibrary: encode, parseGlyphLibrary: parse } =
+            await import(new URL(moduleUrl, import.meta.url).href);
+        const glyph = [stroke("ñ")];
+        const raw = header + "ñ\t100\t200\t3000\t4200\t250\t#A1B2C3\n";
+        try {
+            globalThis.Intl = undefined;
+            assert.throws(() => encode(glyph), /visible Unicode grapheme/);
+            assert.throws(() => parse(raw), /visible Unicode grapheme/);
+            const broken = [
+                class { constructor() { throw Error("private constructor"); } },
+                class {
+                    segment() { throw Error("private segment failure"); }
+                },
+                class {
+                    segment() {
+                        return { [Symbol.iterator]() {
+                            throw Error("private iterator failure");
+                        } };
+                    }
+                },
+            ];
+            for (const Segmenter of broken) {
+                globalThis.Intl = { Segmenter };
+                assert.throws(() => encode(glyph),
+                    /visible Unicode grapheme/);
+                assert.throws(() => parse(raw),
+                    /visible Unicode grapheme/);
+            }
+            globalThis.Intl = original;
+            assert.deepEqual(parse(encode(glyph)), glyph,
+                "restored ICU can admit the exact key after refusal");
+        } finally {
+            globalThis.Intl = original;
+        }
+    });
+
 test("repeated Unicode glyph admission is exact, bounded and reusable",
     async () => {
         const original = Intl.Segmenter;

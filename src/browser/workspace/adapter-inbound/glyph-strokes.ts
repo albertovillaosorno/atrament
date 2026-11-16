@@ -95,7 +95,8 @@ const admittedGraphemes = new Set<string>();
 let graphemeSegmenter: Intl.Segmenter | undefined;
 
 function exactGrapheme(value: string): boolean {
-    if (typeof Intl.Segmenter !== "function") return false;
+    if (typeof Intl === "undefined"
+        || typeof Intl.Segmenter !== "function") return false;
     if (admittedGraphemes.has(value)) return true;
     // In Unicode mode an astral scalar is one character; lone UTF-16
     // surrogates still match. TextEncoder would silently replace them with
@@ -111,12 +112,21 @@ function exactGrapheme(value: string): boolean {
         || [...value].every(isNonmarkingScalar)) {
         return false;
     }
-    graphemeSegmenter ??= new Intl.Segmenter(undefined, {
-        granularity: "grapheme",
-    });
+    // Fail closed when ICU construction or iteration becomes unavailable.
+    // Never leak browser-specific exceptions into the glyph editor.
+    try {
+        graphemeSegmenter ??= new Intl.Segmenter(undefined, {
+            granularity: "grapheme",
+        });
+        if ([...graphemeSegmenter.segment(value)].length !== 1) {
+            return false;
+        }
+    } catch {
+        graphemeSegmenter = undefined;
+        return false;
+    }
     // Only successful admissions may be reused; invalid keys still refuse
     // on every attempt. Clear rather than retain an unbounded key history.
-    if ([...graphemeSegmenter.segment(value)].length !== 1) return false;
     if (admittedGraphemes.size >= MAX_CACHED_GRAPHEMES) {
         admittedGraphemes.clear();
     }
@@ -5619,7 +5629,8 @@ export function createGlyphStrokeEditor(): {
             idealDiacritic.setAttribute("visibility", active && composedMarks
                 ? "visible" : "hidden");
             const guideLabel = connected
-                ? `Manual connected-pen ${form.value} draft, no adjacent joining`
+                ? `Manual connected-pen ${form.value} draft, `
+                    + "no adjacent joining"
                 : isMath
                 ? `Exact mathematical ${form.value} ink guide`
                 : isCurrency
@@ -6802,7 +6813,8 @@ export function createGlyphStrokeEditor(): {
             const count = new Set(next.map((line) => line.grapheme)).size
                 - new Set(strokes.map((line) => line.grapheme)).size;
             const added = next.length - strokes.length;
-            commitInkEdit(next, character.value, "connected lowercase fill", null);
+            commitInkEdit(next, character.value,
+                "connected lowercase fill", null);
             message(`Filled ${count} missing connected lowercase glyphs (`
                 + `${added} sampled strokes); unsaved draft`);
         } catch (error) {
@@ -6844,7 +6856,9 @@ export function createGlyphStrokeEditor(): {
             const count = new Set(next.map((line) => line.grapheme)).size
                 - new Set(strokes.map((line) => line.grapheme)).size;
             const added = next.length - strokes.length;
-            commitInkEdit(next, character.value, form === "cursive" ? "connected bilingual fill" : "bilingual fill", null);
+            commitInkEdit(next, character.value,
+                form === "cursive"
+                    ? "connected bilingual fill" : "bilingual fill", null);
             const style = form === "cursive" ? "connected " : "";
             message(`Filled ${count} missing ${style}bilingual baseline `
                 + `glyphs (`
@@ -7342,7 +7356,8 @@ export function createGlyphStrokeEditor(): {
             const next = removeCandidatePath(strokes, glyph, selectedIndex);
             const removed = strokes.length - next.length;
             commitInkEdit(next, glyph, "pen path removal", null);
-            message("Removed " + removed + " selected pen path strokes; unsaved");
+            message("Removed " + removed
+                + " selected pen path strokes; unsaved");
         } catch (error) {
             message(String(error));
         }

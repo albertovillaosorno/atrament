@@ -308,6 +308,59 @@ test("statistics glyph checks reuse segmentation and refuse its loss",
         }
     });
 
+test("statistics editing refuses broken ICU and keeps the draft",
+    async () => {
+        const original = globalThis.Intl;
+        const moduleUrl = "../../../../src/browser/workspace/adapter-inbound/"
+            + "generated/handwriting-profile.js?broken-icu-regression";
+        const { createHandwritingProfileEditor: createEditor } =
+            await import(new URL(moduleUrl, import.meta.url).href);
+        const b = mountBackend({ createEditor });
+        try {
+            await b.editor.start("private-session-credential");
+            edit(b.elements, "handwriting-scope", "glyph", "change");
+            const requests = b.requests.length;
+            const broken = [
+                undefined,
+                { Segmenter: class {
+                    constructor() { throw Error("private constructor"); }
+                } },
+                { Segmenter: class {
+                    segment() { throw Error("private segment failure"); }
+                } },
+                { Segmenter: class {
+                    segment() {
+                        return { [Symbol.iterator]() {
+                            throw Error("private iterator failure");
+                        } };
+                    }
+                } },
+            ];
+            for (const icu of broken) {
+                globalThis.Intl = icu;
+                edit(b.elements, "handwriting-new-glyph", "ñ");
+                b.elements.get("handwriting-add-glyph").dispatch("click");
+                assert.equal(b.elements.get("handwriting-glyph")
+                    .children.length, 0);
+                edit(b.elements, "handwriting-sample-glyph", "ñ");
+                b.elements.get("handwriting-sample").dispatch("click");
+                await tick();
+                assert.equal(b.requests.length, requests,
+                    "invalid sampling cannot reach the native endpoint");
+                assert.equal(b.links.length, 0);
+            }
+            globalThis.Intl = original;
+            edit(b.elements, "handwriting-new-glyph", "ñ");
+            b.elements.get("handwriting-add-glyph").dispatch("click");
+            assert.equal(b.elements.get("handwriting-glyph")
+                .children.length, 1,
+                "restored ICU admits the same exact glyph");
+        } finally {
+            globalThis.Intl = original;
+            b.restore();
+        }
+    });
+
 test("handwriting refuses non-native glyph identity before draft and sample",
     async () => {
     const b = mountBackend();

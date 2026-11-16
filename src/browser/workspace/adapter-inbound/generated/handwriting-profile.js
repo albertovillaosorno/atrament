@@ -48,12 +48,21 @@ function exactNativeGrapheme(value) {
     if (!value || /[\uD800-\uDFFF]/u.test(value)
         || /[\p{Cc}\u2028\u2029]/u.test(value)
         || new TextEncoder().encode(value).length > 64
+        || typeof Intl === "undefined"
         || typeof Intl.Segmenter !== "function")
         return false;
-    graphemeSegmenter ??= new Intl.Segmenter(undefined, {
-        granularity: "grapheme",
-    });
-    return [...graphemeSegmenter.segment(value)].length === 1;
+    // A broken ICU implementation must never commit a malformed glyph key
+    // or leak its exception into the editing session.
+    try {
+        graphemeSegmenter ??= new Intl.Segmenter(undefined, {
+            granularity: "grapheme",
+        });
+        return [...graphemeSegmenter.segment(value)].length === 1;
+    }
+    catch {
+        graphemeSegmenter = undefined;
+        return false;
+    }
 }
 // Never round Rust's u64 through a JavaScript Number. Canonicalize its
 // decimal spelling before injecting a numeric token into a JSON envelope.
@@ -254,9 +263,11 @@ export function createHandwritingProfileEditor(context) {
     }
     function selectedName() {
         const value = localName.value;
-        if (value.length > 64 || !/^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.json$/.test(value)
+        if (value.length > 64
+            || !/^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.json$/.test(value)
             || value.includes("..")) {
-            throw new Error("Choose a simple .json filename (max 64 characters)");
+            throw new Error("Choose a simple .json filename "
+                + "(max 64 characters)");
         }
         return value;
     }
@@ -519,11 +530,13 @@ export function createHandwritingProfileEditor(context) {
         catch (error) {
             if (isCurrent(secret, observed)) {
                 if (error instanceof Error && error.message === "stale-file") {
-                    status.textContent = "Local handwriting changed; reopen first. "
+                    status.textContent = "Local handwriting changed; "
+                        + "reopen first. "
                         + "No overwrite.";
                     return;
                 }
-                if (error instanceof Error && error.message === "disabled-file") {
+                if (error instanceof Error
+                    && error.message === "disabled-file") {
                     status.textContent = "Local files disabled; launch Rust "
                         + "with --profiles-dir.";
                     return;
@@ -742,7 +755,8 @@ export function createHandwritingProfileEditor(context) {
                 + `${JSON.stringify(grapheme)} / ${dim.key} / #${occurrence}: `
                 + `${result.value} ${dim.unit}. `
                 + "Seeded estimate only; no glyph ink or calibrated moments.";
-            status.textContent = "Native numeric preview generated from unsaved "
+            status.textContent = "Native numeric preview generated from "
+                + "unsaved "
                 + "statistics. No profile was saved.";
         });
     });
