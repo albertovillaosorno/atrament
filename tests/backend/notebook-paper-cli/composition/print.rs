@@ -54,12 +54,12 @@ fn fixture_dir_with_sequence(
 ) -> io::Result<PathBuf> {
     // The PID may be reused after a crashed prior test leaves artifacts.
     // create_dir_all would silently adopt that process's existing files.
-    for _ in 0..64 {
+    for _ in 0u8..64 {
         let number = sequence.fetch_add(1, Ordering::Relaxed);
         let dir = base.join(format!(
             "atrament-print-fixture-{process_id}-{number}",
         ));
-        match fs::create_dir(&dir) {
+        match fs::DirBuilder::new().create(&dir) {
             Ok(()) => return Ok(dir),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {},
             Err(error) => return Err(error),
@@ -73,11 +73,11 @@ fn fixture_dir_with_sequence(
 fn stale_process_fixture_does_not_get_reused() {
     let outer = fixture_dir();
     let stale = outer.join("atrament-print-fixture-42-0");
-    fs::create_dir(&stale).expect("create stale fixture");
+    fs::DirBuilder::new().create(&stale).expect("create stale fixture");
     let sentinel = stale.join("keep-previous-run");
     fs::write(&sentinel, b"unchanged").expect("write stale sentinel");
     let sequence = AtomicU64::new(0);
-    let fresh = fixture_dir_with_sequence(&outer, 42, &sequence)
+    let fresh = fixture_dir_with_sequence(&outer, 42u32, &sequence)
         .expect("reserve new fixture instead of stale path");
     assert_ne!(fresh, stale, "a prior run cannot own our fixture");
     assert!(fresh.is_dir(), "fresh fixture must be a real directory");
@@ -89,14 +89,14 @@ fn stale_process_fixture_does_not_get_reused() {
 #[test]
 fn exhausted_stale_print_fixtures_fail_closed() {
     let outer = fixture_dir();
-    for number in 0..64 {
+    for number in 0u64..64 {
         let occupied = outer.join(format!(
             "atrament-print-fixture-42-{number}",
         ));
-        fs::create_dir(occupied).expect("prepopulate stale owned fixture");
+        fs::DirBuilder::new().create(occupied).expect("prepopulate stale owned fixture");
     }
     let sequence = AtomicU64::new(0);
-    let error = fixture_dir_with_sequence(&outer, 42, &sequence)
+    let error = fixture_dir_with_sequence(&outer, 42u32, &sequence)
         .expect_err("all 64 stale paths must be refused");
     assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
     assert_eq!(sequence.load(Ordering::Relaxed), 64);
@@ -192,12 +192,15 @@ fn stream_without_self_index_pdf() -> Vec<u8> {
     let length_at = unowned.windows(length_key.len())
         .position(|part| part == length_key)
         .expect("five-row stream length");
-    unowned[length_at..length_at + length_key.len()]
+    unowned.get_mut(length_at..length_at.saturating_add(length_key.len()))
+        .expect("known bounded fixture length header")
         .copy_from_slice(b"/Length 28");
     let row_start = unowned.windows(b"stream\n".len())
         .position(|part| part == b"stream\n")
-        .expect("xref stream data") + b"stream\n".len();
-    drop(unowned.drain(row_start + 28..row_start + 35));
+        .expect("xref stream data")
+        .saturating_add(b"stream\n".len());
+    drop(unowned.drain(row_start.saturating_add(28)..
+        row_start.saturating_add(35)));
     unowned
 }
 
@@ -916,16 +919,17 @@ fn unfiltered_xref_stream_length_must_cover_all_indexed_rows() {
     let original = one_page_xref_stream_pdf("1.5", " /Index [0 5]");
     assert!(supported_pdf_cross_reference(&original),
         "complete five-row xref stream must remain eligible");
-    let mut short = original.clone();
+    let mut short = original;
     let length = short.windows(b"/Length 35".len())
         .position(|part| part == b"/Length 35")
         .expect("known xref length");
-    short[length..length + b"/Length 35".len()]
+    short.get_mut(length..length.saturating_add(b"/Length 35".len()))
+        .expect("known fixture length slot")
         .copy_from_slice(b"/Length 34");
     let data = short.windows(b"stream\n".len())
         .position(|part| part == b"stream\n")
         .expect("xref stream start") + b"stream\n".len();
-    let _removed_byte = short.remove(data + 34);
+    let _removed_byte = short.remove(data.saturating_add(34));
     assert!(!supported_pdf_cross_reference(&short),
         "the final unfiltered row cannot lose a byte");
     assert_fake_spool_rejected(
@@ -942,12 +946,15 @@ fn zlib_stored_block(bytes: &[u8]) -> Vec<u8> {
     encoded.extend_from_slice(&length.to_le_bytes());
     encoded.extend_from_slice(&(!length).to_le_bytes());
     encoded.extend_from_slice(bytes);
-    let (mut a, mut b) = (1u32, 0u32);
+    let (mut adler_low, mut adler_high) = (1u32, 0u32);
     for byte in bytes {
-        a = (a + u32::from(*byte)) % 65_521;
-        b = (b + a) % 65_521;
+        adler_low = adler_low.wrapping_add(u32::from(*byte))
+            .checked_rem(65_521).expect("nonzero Adler modulus");
+        adler_high = adler_high.wrapping_add(adler_low)
+            .checked_rem(65_521).expect("nonzero Adler modulus");
     }
-    encoded.extend_from_slice(&((b << 16) | a).to_be_bytes());
+    encoded.extend_from_slice(
+        &((adler_high << 16) | adler_low).to_be_bytes());
     encoded
 }
 
@@ -1972,6 +1979,165 @@ fn previous_xref_free_link_accepts_last_bounded_object_index() {
 }
 
 #[cfg(unix)]
+fn revised_hybrid_pdf(source: &[u8], trailer: &str) -> Vec<u8> {
+    [source, format!(
+        "xref\n0 1\n0000000000 65535 f \n\
+         trailer\n<< /Size 5 /Root 1 0 R {trailer} >>\n\
+         startxref\n{}\n%%EOF\n", source.len(),
+    ).as_bytes()].concat()
+}
+
+#[cfg(unix)]
+fn assert_hybrid_index_owner_cases(
+    prior: usize, pdf: &Path, request: &PrintRequest,
+    fake_spool: &Path, spooled: &Path,
+) {
+    // In a hybrid file the traditional table may carry the xref stream's
+    // own object entry. The stream's /Index then need not repeat it.
+    let mut hybrid_stream = one_page_xref_stream_pdf(
+        "1.5", " /Index [0 4]",
+    );
+    let length_key = b"/Length 35";
+    let length_at = hybrid_stream.windows(length_key.len())
+        .position(|part| part == length_key)
+        .expect("five-row source length");
+    hybrid_stream.get_mut(length_at..length_at.saturating_add(length_key.len()))
+        .expect("known fixture stream Length entry")
+        .copy_from_slice(b"/Length 28");
+    let row_start = hybrid_stream.windows(b"stream\n".len())
+        .position(|part| part == b"stream\n")
+        .expect("one encoded xref stream")
+        .saturating_add(b"stream\n".len());
+    let _removed_xref_row: Vec<_> =
+        hybrid_stream.drain(row_start.saturating_add(28)..
+            row_start.saturating_add(35)).collect();
+    let terminal_locator = hybrid_stream.windows(b"startxref\n".len())
+        .rposition(|part| part == b"startxref\n")
+        .expect("terminal pointer follows stream");
+    hybrid_stream.truncate(terminal_locator);
+    let hybrid = [
+        hybrid_stream.as_slice(),
+        format!(
+            "xref\n4 1\n{prior:010} 00000 n \n\
+             trailer\n<< /Size 5 /Root 1 0 R /XRefStm {prior} >>\n\
+             startxref\n{}\n%%EOF\n", hybrid_stream.len(),
+        ).as_bytes(),
+    ].concat();
+    assert!(supported_pdf_cross_reference(&hybrid),
+        "table-owned stream must not require a duplicate /Index entry");
+    fs::write(pdf, &hybrid).expect("hybrid PDF with table-owned stream");
+    assert_eq!(submit_selected(request, fake_spool)
+        .expect("table-owned stream reaches fake spool"),
+        sha256_profile_bytes(&hybrid).bytes());
+    assert_eq!(fs::read(spooled).expect("hybrid spool bytes"), hybrid);
+    fs::remove_file(spooled).expect("clear hybrid spool");
+
+    // The owning entry can appear after a disjoint free-list subsection;
+    // a bounded second pass must not stop at the first subsection.
+    let multi_section_hybrid = [
+        hybrid_stream.as_slice(),
+        format!(
+            "xref\n0 1\n0000000000 65535 f \n\
+             4 1\n{prior:010} 00000 n \n\
+             trailer\n<< /Size 5 /Root 1 0 R /XRefStm {prior} >>\n\
+             startxref\n{}\n%%EOF\n", hybrid_stream.len(),
+        ).as_bytes(),
+    ].concat();
+    assert!(supported_pdf_cross_reference(&multi_section_hybrid),
+        "hybrid ownership in a later table subsection remains eligible");
+    fs::write(pdf, &multi_section_hybrid)
+        .expect("hybrid PDF with two sections");
+    assert_eq!(submit_selected(request, fake_spool)
+        .expect("multi-section hybrid reaches fake spool"),
+        sha256_profile_bytes(&multi_section_hybrid).bytes());
+    assert_eq!(fs::read(spooled).expect("spooled bytes"),
+        multi_section_hybrid);
+    fs::remove_file(spooled).expect("clear multi-section spool");
+
+    // A sparse hybrid stream may omit its own /Index row only when the
+    // traditional table actually owns that indirect object. A free-only
+    // table cannot justify the missing self entry merely by naming the
+    // stream through /XRefStm.
+    let unowned = [
+        hybrid_stream.as_slice(),
+        format!(
+            "xref\n0 1\n0000000000 65535 f \n\
+             trailer\n<< /Size 5 /Root 1 0 R /XRefStm {prior} >>\n\
+             startxref\n{}\n%%EOF\n", hybrid_stream.len(),
+        ).as_bytes(),
+    ].concat();
+    assert!(!supported_pdf_cross_reference(&unowned),
+        "hybrid stream without a self-index or table entry must refuse");
+    assert_fake_spool_rejected(
+        pdf, request, fake_spool, spooled, &unowned);
+
+}
+
+#[cfg(unix)]
+fn assert_hybrid_bad_pointer_cases(
+    prefix: &[u8], prior: usize, pdf: &Path, request: &PrintRequest,
+    fake_spool: &Path, spooled: &Path,
+) {
+    for trailer in [
+        "/XRefStm 0".into(), "/XRefStm -1".into(),
+        "/XRefStm abc".into(),
+        format!("/XRefStm {}", prior.saturating_add(1)),
+        format!("/XRefStm {}", prefix.len()),
+        format!("/XRefStm {prior} /XRefStm {prior}"),
+        format!("/XRefStm {prior} /XR#65fStm {prior}"),
+    ] {
+        let candidate = revised_hybrid_pdf(prefix, &trailer);
+        assert!(!supported_pdf_cross_reference(&candidate),
+            "invalid hybrid pointer must refuse: {trailer}");
+        assert_fake_spool_rejected(
+            pdf, request, fake_spool, spooled, &candidate);
+    }
+    let last_endobj = prefix.windows(b"endobj\n".len())
+        .rposition(|part| part == b"endobj\n")
+        .expect("prior stream closing object");
+    let missing_endobj = [
+        prefix.get(..last_endobj).expect("prefix before endobj"),
+        prefix.get(last_endobj.saturating_add(b"endobj\n".len())..)
+            .expect("prefix after endobj"),
+    ].concat();
+    let forged = revised_hybrid_pdf(&missing_endobj, &format!("/XRefStm {prior}"));
+    assert!(!supported_pdf_cross_reference(&forged),
+        "hybrid pointer cannot name a stream without its endobj");
+    assert_fake_spool_rejected(
+        pdf, request, fake_spool, spooled, &forged);
+
+    // A prior stream's own /Prev must have a direct bounded numeric value,
+    // even when we deliberately do not follow older revision chains.
+    let previous_length_key = b"/Length ";
+    let before_length = prefix.windows(previous_length_key.len())
+        .rposition(|part| part == previous_length_key)
+        .expect("prior xref stream has direct Length");
+    for invalid_prev in [
+        "abc".to_owned(), "-1".to_owned(),
+        "0".to_owned(), "9999999999".to_owned(),
+        prior.to_string(), (prior.saturating_add(1)).to_string(),
+    ] {
+        let malformed = [
+            prefix.get(..before_length).expect("prior stream prefix"),
+            format!("/Prev {invalid_prev} ").as_bytes(),
+            prefix.get(before_length..).expect("prior stream suffix"),
+        ].concat();
+        let candidate = revised_hybrid_pdf(&malformed, &format!("/XRefStm {prior}"));
+        assert!(!supported_pdf_cross_reference(&candidate),
+            "prior stream /Prev must be a bounded decimal: {invalid_prev}");
+        assert_fake_spool_rejected(
+            pdf, request, fake_spool, spooled, &candidate);
+    }
+
+    let mut obsolete = revised_hybrid_pdf(prefix, &format!("/XRefStm {prior}"));
+    *obsolete.get_mut(7).expect("PDF minor version") = b'4';
+    assert!(!supported_pdf_cross_reference(&obsolete),
+        "PDF 1.4 cannot declare a hybrid-reference stream");
+    assert_fake_spool_rejected(
+        pdf, request, fake_spool, spooled, &obsolete);
+}
+
+#[cfg(unix)]
 #[test]
 fn hybrid_xref_table_pointer_requires_a_complete_prior_stream() {
     use std::os::unix::fs::PermissionsExt as _;
@@ -1995,14 +2161,6 @@ fn hybrid_xref_table_pointer_requires_a_complete_prior_stream() {
         .expect("original terminal locator");
     let prefix = original.get(..locator)
         .expect("prefix before native startxref");
-    let revised = |source: &[u8], trailer: &str| [
-        source,
-        format!(
-            "xref\n0 1\n0000000000 65535 f \n\
-             trailer\n<< /Size 5 /Root 1 0 R {trailer} >>\n\
-             startxref\n{}\n%%EOF\n", source.len(),
-        ).as_bytes(),
-    ].concat();
     let request = PrintRequest {
         pdf: pdf.clone(), printer: "Queue_1".into(),
         dry_run: false, expected_sha256: None,
@@ -2012,7 +2170,7 @@ fn hybrid_xref_table_pointer_requires_a_complete_prior_stream() {
         format!("/XR#65fStm {prior}"),
         format!("/XRefStm {prior} /Meta << /XRefStm 0 >>"),
     ] {
-        let candidate = revised(prefix, &trailer);
+        let candidate = revised_hybrid_pdf(prefix, &trailer);
         assert!(supported_pdf_cross_reference(&candidate),
             "framed hybrid stream should remain eligible: {trailer}");
         fs::write(&pdf, &candidate).expect("write reviewed PDF");
@@ -2022,139 +2180,10 @@ fn hybrid_xref_table_pointer_requires_a_complete_prior_stream() {
         assert_eq!(fs::read(&spooled).expect("spooled bytes"), candidate);
         fs::remove_file(&spooled).expect("clear test spool");
     }
-    // In a hybrid file the traditional table may carry the xref stream's
-    // own object entry. The stream's /Index then need not repeat it.
-    let mut hybrid_stream = one_page_xref_stream_pdf(
-        "1.5", " /Index [0 4]",
-    );
-    let length_key = b"/Length 35";
-    let length_at = hybrid_stream.windows(length_key.len())
-        .position(|part| part == length_key)
-        .expect("five-row source length");
-    hybrid_stream[length_at..length_at + length_key.len()]
-        .copy_from_slice(b"/Length 28");
-    let row_start = hybrid_stream.windows(b"stream\n".len())
-        .position(|part| part == b"stream\n")
-        .expect("one encoded xref stream") + b"stream\n".len();
-    let _removed_xref_row: Vec<_> =
-        hybrid_stream.drain(row_start + 28..row_start + 35).collect();
-    let locator = hybrid_stream.windows(b"startxref\n".len())
-        .rposition(|part| part == b"startxref\n")
-        .expect("terminal pointer follows stream");
-    hybrid_stream.truncate(locator);
-    let hybrid = [
-        hybrid_stream.as_slice(),
-        format!(
-            "xref\n4 1\n{prior:010} 00000 n \n\
-             trailer\n<< /Size 5 /Root 1 0 R /XRefStm {prior} >>\n\
-             startxref\n{}\n%%EOF\n", hybrid_stream.len(),
-        ).as_bytes(),
-    ].concat();
-    assert!(supported_pdf_cross_reference(&hybrid),
-        "table-owned stream must not require a duplicate /Index entry");
-    fs::write(&pdf, &hybrid).expect("hybrid PDF with table-owned stream");
-    assert_eq!(submit_selected(&request, &fake_spool)
-        .expect("table-owned stream reaches fake spool"),
-        sha256_profile_bytes(&hybrid).bytes());
-    assert_eq!(fs::read(&spooled).expect("hybrid spool bytes"), hybrid);
-    fs::remove_file(&spooled).expect("clear hybrid spool");
-
-    // The owning entry can appear after a disjoint free-list subsection;
-    // a bounded second pass must not stop at the first subsection.
-    let multi_section_hybrid = [
-        hybrid_stream.as_slice(),
-        format!(
-            "xref\n0 1\n0000000000 65535 f \n\
-             4 1\n{prior:010} 00000 n \n\
-             trailer\n<< /Size 5 /Root 1 0 R /XRefStm {prior} >>\n\
-             startxref\n{}\n%%EOF\n", hybrid_stream.len(),
-        ).as_bytes(),
-    ].concat();
-    assert!(supported_pdf_cross_reference(&multi_section_hybrid),
-        "hybrid ownership in a later table subsection remains eligible");
-    fs::write(&pdf, &multi_section_hybrid)
-        .expect("hybrid PDF with two sections");
-    assert_eq!(submit_selected(&request, &fake_spool)
-        .expect("multi-section hybrid reaches fake spool"),
-        sha256_profile_bytes(&multi_section_hybrid).bytes());
-    assert_eq!(fs::read(&spooled).expect("spooled bytes"),
-        multi_section_hybrid);
-    fs::remove_file(&spooled).expect("clear multi-section spool");
-
-    // A sparse hybrid stream may omit its own /Index row only when the
-    // traditional table actually owns that indirect object. A free-only
-    // table cannot justify the missing self entry merely by naming the
-    // stream through /XRefStm.
-    let unowned = [
-        hybrid_stream.as_slice(),
-        format!(
-            "xref\n0 1\n0000000000 65535 f \n\
-             trailer\n<< /Size 5 /Root 1 0 R /XRefStm {prior} >>\n\
-             startxref\n{}\n%%EOF\n", hybrid_stream.len(),
-        ).as_bytes(),
-    ].concat();
-    assert!(!supported_pdf_cross_reference(&unowned),
-        "hybrid stream without a self-index or table entry must refuse");
-    assert_fake_spool_rejected(
-        &pdf, &request, &fake_spool, &spooled, &unowned);
-
-    for trailer in [
-        "/XRefStm 0".into(), "/XRefStm -1".into(),
-        "/XRefStm abc".into(),
-        format!("/XRefStm {}", prior + 1),
-        format!("/XRefStm {}", prefix.len()),
-        format!("/XRefStm {prior} /XRefStm {prior}"),
-        format!("/XRefStm {prior} /XR#65fStm {prior}"),
-    ] {
-        let candidate = revised(prefix, &trailer);
-        assert!(!supported_pdf_cross_reference(&candidate),
-            "invalid hybrid pointer must refuse: {trailer}");
-        assert_fake_spool_rejected(
-            &pdf, &request, &fake_spool, &spooled, &candidate);
-    }
-    let last_endobj = prefix.windows(b"endobj\n".len())
-        .rposition(|part| part == b"endobj\n")
-        .expect("prior stream closing object");
-    let missing_endobj = [
-        prefix.get(..last_endobj).expect("prefix before endobj"),
-        prefix.get(last_endobj + b"endobj\n".len()..)
-            .expect("prefix after endobj"),
-    ].concat();
-    let forged = revised(&missing_endobj, &format!("/XRefStm {prior}"));
-    assert!(!supported_pdf_cross_reference(&forged),
-        "hybrid pointer cannot name a stream without its endobj");
-    assert_fake_spool_rejected(
-        &pdf, &request, &fake_spool, &spooled, &forged);
-
-    // A prior stream's own /Prev must have a direct bounded numeric value,
-    // even when we deliberately do not follow older revision chains.
-    let length_key = b"/Length ";
-    let before_length = prefix.windows(length_key.len())
-        .rposition(|part| part == length_key)
-        .expect("prior xref stream has direct Length");
-    for invalid_prev in [
-        "abc".to_owned(), "-1".to_owned(),
-        "0".to_owned(), "9999999999".to_owned(),
-        prior.to_string(), (prior + 1).to_string(),
-    ] {
-        let malformed = [
-            prefix.get(..before_length).expect("prior stream prefix"),
-            format!("/Prev {invalid_prev} ").as_bytes(),
-            prefix.get(before_length..).expect("prior stream suffix"),
-        ].concat();
-        let candidate = revised(&malformed, &format!("/XRefStm {prior}"));
-        assert!(!supported_pdf_cross_reference(&candidate),
-            "prior stream /Prev must be a bounded decimal: {invalid_prev}");
-        assert_fake_spool_rejected(
-            &pdf, &request, &fake_spool, &spooled, &candidate);
-    }
-
-    let mut obsolete = revised(prefix, &format!("/XRefStm {prior}"));
-    *obsolete.get_mut(7).expect("PDF minor version") = b'4';
-    assert!(!supported_pdf_cross_reference(&obsolete),
-        "PDF 1.4 cannot declare a hybrid-reference stream");
-    assert_fake_spool_rejected(
-        &pdf, &request, &fake_spool, &spooled, &obsolete);
+    assert_hybrid_index_owner_cases(
+        prior, &pdf, &request, &fake_spool, &spooled);
+    assert_hybrid_bad_pointer_cases(
+        prefix, prior, &pdf, &request, &fake_spool, &spooled);
     fs::remove_dir_all(&directory).expect("remove test fixtures");
 }
 
@@ -2400,7 +2429,7 @@ fn xref_table_prev_accepts_earlier_xref_stream_on_pdf_15() {
     // A standalone predecessor cannot omit its own xref object from
     // /Index: no older table is available to own that stream object.
     let unowned = stream_without_self_index_pdf();
-    let previous = unowned.windows(b"4 0 obj\n".len())
+    let preceding_stream_offset = unowned.windows(b"4 0 obj\n".len())
         .position(|part| part == b"4 0 obj\n")
         .expect("xref stream object header");
     let table_at = unowned.len();
@@ -2408,7 +2437,7 @@ fn xref_table_prev_accepts_earlier_xref_stream_on_pdf_15() {
         unowned.as_slice(),
         format!(
             "xref\n0 1\n0000000000 65535 f \n\
-             trailer\n<< /Size 5 /Root 1 0 R /Prev {previous} >>\n\
+             trailer\n<< /Size 5 /Root 1 0 R /Prev {preceding_stream_offset} >>\n\
              startxref\n{table_at}\n%%EOF\n",
         ).as_bytes(),
     ].concat();
@@ -2477,6 +2506,40 @@ fn terminal_xref_stream_accepts_prior_native_xref_table() {
     assert_eq!(fs::read(&pdf).expect("selected source unchanged"),
         candidate);
     fs::remove_dir_all(&directory).expect("remove fixture directory");
+}
+
+#[cfg(unix)]
+fn assert_unindexed_predecessor_rejected(
+    pdf: &Path, request: &PrintRequest, fake_spool: &Path,
+    spooled: &Path,
+) {
+    // The same missing self-index is not rescued by a newer standalone
+    // xref stream's /Prev; the earlier revision has no owning table.
+    let unowned = stream_without_self_index_pdf();
+    let prior = unowned.windows(b"4 0 obj\n".len())
+        .position(|part| part == b"4 0 obj\n")
+        .expect("prior unindexed stream header");
+    let new_at = unowned.len();
+    let mut new_row = vec![1u8];
+    new_row.extend_from_slice(&u32::try_from(new_at)
+        .expect("small new xref offset").to_be_bytes());
+    new_row.extend_from_slice(&0u16.to_be_bytes());
+    let candidate = [
+        unowned.as_slice(),
+        format!(
+            "5 0 obj\n<< /Type /XRef /Size 6 /Index [5 1] \
+             /W [1 4 2] /Root 1 0 R /Prev {prior} \
+             /Length 7 >>\nstream\n",
+        ).as_bytes(),
+        new_row.as_slice(),
+        format!(
+            "\nendstream\nendobj\nstartxref\n{new_at}\n%%EOF\n",
+        ).as_bytes(),
+    ].concat();
+    assert!(!supported_pdf_cross_reference(&candidate),
+        "terminal stream /Prev cannot admit unindexed prior standalone");
+    assert_fake_spool_rejected(
+        pdf, request, fake_spool, spooled, &candidate);
 }
 
 #[cfg(unix)]
@@ -2560,37 +2623,12 @@ fn terminal_xref_stream_prev_must_point_back_to_a_prior_xref() {
         assert_eq!(fs::read(&pdf).expect("selected bytes intact"),
             candidate);
     }
-    // The same missing self-index is not rescued by a newer standalone
-    // xref stream's /Prev; the earlier revision has no owning table.
-    let unowned = stream_without_self_index_pdf();
-    let prior = unowned.windows(b"4 0 obj\n".len())
-        .position(|part| part == b"4 0 obj\n")
-        .expect("prior unindexed stream header");
-    let new_at = unowned.len();
-    let mut new_row = vec![1u8];
-    new_row.extend_from_slice(&u32::try_from(new_at)
-        .expect("small new xref offset").to_be_bytes());
-    new_row.extend_from_slice(&0u16.to_be_bytes());
-    let candidate = [
-        unowned.as_slice(),
-        format!(
-            "5 0 obj\n<< /Type /XRef /Size 6 /Index [5 1] \
-             /W [1 4 2] /Root 1 0 R /Prev {prior} \
-             /Length 7 >>\nstream\n",
-        ).as_bytes(),
-        new_row.as_slice(),
-        format!(
-            "\nendstream\nendobj\nstartxref\n{new_at}\n%%EOF\n",
-        ).as_bytes(),
-    ].concat();
-    assert!(!supported_pdf_cross_reference(&candidate),
-        "terminal stream /Prev cannot admit unindexed prior standalone");
     let request = PrintRequest {
         pdf: pdf.clone(), printer: "Queue_1".into(),
         dry_run: false, expected_sha256: None,
     };
-    assert_fake_spool_rejected(
-        &pdf, &request, &fake_spool, &spooled, &candidate);
+    assert_unindexed_predecessor_rejected(
+        &pdf, &request, &fake_spool, &spooled);
     fs::remove_dir_all(&directory).expect("remove fixture directory");
 }
 
