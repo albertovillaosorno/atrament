@@ -4289,7 +4289,7 @@ fn long_markdown_body_balances_a_lone_final_row_when_previous_page_has_three()
 
     // A two-row sheet cannot leave two rows on the prior sheet and
     // move two to the new sheet; retain its original physical splits.
-    let five = vec!["aaaaaa"; 5].join(" ");
+    let five = ["aaaaaa"; 5].join(" ");
     let (short, _, short_pages) = render(&five, FlowFormat::Markdown,
         23_000)?;
     assert_eq!(short_pages, 3);
@@ -4299,8 +4299,8 @@ fn long_markdown_body_balances_a_lone_final_row_when_previous_page_has_three()
     // Plain physical lines and literal fenced Markdown rows never gain
     // this paragraph-tail optimization.
     for (source, format) in [
-        (vec!["aaaaaa"; 4].join("\n"), FlowFormat::Plain),
-        (format!("```\n{}\n```", vec!["aaaaaa"; 4].join("\n")),
+        (["aaaaaa"; 4].join("\n"), FlowFormat::Plain),
+        (format!("```\n{}\n```", ["aaaaaa"; 4].join("\n")),
             FlowFormat::Markdown),
     ] {
         let (rows, _, pages) = render(&source, format, 32_000)?;
@@ -4322,7 +4322,7 @@ fn long_markdown_body_balances_a_lone_final_row_when_previous_page_has_three()
 
     // A later paragraph starts at the real repositioned cursor rather
     // than overwriting the second row on the rebalanced last sheet.
-    let with_following = format!("{}\n\na", vec!["aaaaaa"; 4].join(" "));
+    let with_following = format!("{}\n\na", ["aaaaaa"; 4].join(" "));
     let (continued, _, continued_pages) = render(&with_following,
         FlowFormat::Markdown, 32_000)?;
     assert_eq!(continued_pages, 3);
@@ -4332,8 +4332,8 @@ fn long_markdown_body_balances_a_lone_final_row_when_previous_page_has_three()
     // Decorated quote/list blocks share the same balanced physical
     // tail as body paragraphs; ornament placement is checked below.
     for source in [
-        format!("- {}", vec!["aaaaaa"; 4].join(" ")),
-        format!("> {}", vec!["aaaaaa"; 4].join(" ")),
+        format!("- {}", ["aaaaaa"; 4].join(" ")),
+        format!("> {}", ["aaaaaa"; 4].join(" ")),
     ] {
         let (rows, marks, pages) = render(&source,
             FlowFormat::Markdown, 32_000)?;
@@ -4345,7 +4345,7 @@ fn long_markdown_body_balances_a_lone_final_row_when_previous_page_has_three()
 
     // A heading retains its first following body row. Later rows may
     // rebalance without changing the heading or its underline.
-    let source = format!("# a\n{}", vec!["aaaaaa"; 6].join(" "));
+    let source = format!("# a\n{}", ["aaaaaa"; 6].join(" "));
     let (rows, marks, pages) = render(&source, FlowFormat::Markdown,
         32_000)?;
     assert_eq!(pages, 3);
@@ -4372,7 +4372,7 @@ fn long_markdown_decorated_blocks_balance_lone_tail_with_ink_marks()
             }),
         )
     };
-    let words = vec!["aaaaaa"; 4].join(" ");
+    let words = ["aaaaaa"; 4].join(" ");
     for (source, quote, marker_count) in [
         (format!("- {words}"), false, 1),
         (format!("- [ ] {words}"), false, 4),
@@ -4405,7 +4405,7 @@ fn long_markdown_decorated_blocks_balance_lone_tail_with_ink_marks()
 
     // The measured numbered hanging indent remains unchanged across
     // rebalanced pages, including a second tail on page three.
-    let ordered = format!("1. {}", vec!["aaa"; 7].join(" "));
+    let ordered = format!("1. {}", ["aaa"; 7].join(" "));
     let (numbered, no_marks, numbered_pages) = render(&ordered, 32_000)?;
     assert_eq!(numbered_pages, 3);
     assert!(no_marks.is_empty());
@@ -4431,7 +4431,7 @@ fn long_markdown_decorated_blocks_balance_lone_tail_with_ink_marks()
     // A two-row sheet cannot move a full tail without also disturbing
     // the first-row widow guard, so it retains its original page breaks.
     let (short, short_marks, short_pages) = render(
-        &format!("> {}", vec!["aaaaaa"; 5].join(" ")), 23_000)?;
+        &format!("> {}", ["aaaaaa"; 5].join(" ")), 23_000)?;
     assert_eq!(short_pages, 3);
     assert_eq!(short.iter().map(|row| row.page)
         .collect::<Vec<_>>(), [1, 1, 2, 2, 3]);
