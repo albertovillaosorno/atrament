@@ -491,8 +491,12 @@ fn update_zlib_checksums(
                 .ok_or("PNG CRC lookup outside the byte table")?;
             *crc = (*crc >> 8u32) ^ part;
         }
-        *first %= 65_521;
-        *second %= 65_521;
+        // Adler-32 arithmetic is modulo the nonzero RFC 1950 prime.
+        // Use checked arithmetic so an invalid divisor would fail closed.
+        *first = first.checked_rem(65_521)
+            .ok_or("PNG Adler first modulus refused")?;
+        *second = second.checked_rem(65_521)
+            .ok_or("PNG Adler second modulus refused")?;
     }
     Ok(())
 }
