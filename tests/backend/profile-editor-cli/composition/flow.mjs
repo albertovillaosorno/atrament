@@ -10254,6 +10254,10 @@ test('parenthesized numeric uncertainties retain exact native PDF/PNG ink',
                     65000, '^', 'U+005E'],
                 ['abcde1.2(3)×10⁽⁻²⁾', 'abcde', '1.2(3)×10⁽⁻²⁾',
                     65000, '⁽', 'U+207D'],
+                ['abcde1×10^(-2)(4)', 'abcde', '1×10^(-2)(4)',
+                    65000, '(', 'U+0028'],
+                ['abcde1×10⁽⁻²⁾(4)', 'abcde', '1×10⁽⁻²⁾(4)',
+                    65000, '(', 'U+0028'],
             ];
             const stroke = (glyph) => [
                 '--glyph-stroke', glyph, '600', '500', '1800',
