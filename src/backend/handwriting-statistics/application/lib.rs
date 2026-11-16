@@ -38,14 +38,6 @@
 //! NFC and NFD spellings remain separate exact keys, as required by the
 //! language inventory. A bounded numeric preview is isolated in its module.
 
-#![cfg_attr(
-    test,
-    expect(
-        unused_crate_dependencies,
-        reason = "Integration fixtures use the Unicode adapter"
-    )
-)]
-
 mod preview;
 
 pub use preview::preview_value;

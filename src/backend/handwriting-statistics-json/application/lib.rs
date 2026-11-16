@@ -33,14 +33,6 @@
 
 //! Bounded Rust-only JSON codec for manually authored handwriting statistics.
 
-#![cfg_attr(
-    test,
-    expect(
-        unused_crate_dependencies,
-        reason = "Integration fixtures use the Unicode adapter"
-    )
-)]
-
 use std::fmt::Write as _;
 use std::str::from_utf8;
 
