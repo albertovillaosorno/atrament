@@ -2350,6 +2350,30 @@ fn scientific_multiplier_end(
     Some(digits)
 }
 
+// Bind a complete authored uncertainty in the conventional 1.23(4)
+// form without interpreting its value. Parentheses with letters, missing
+// digits, or no closing mark remain independent literal ink.
+fn parenthesized_uncertainty_end(
+    glyphs: &[MeasuredGrapheme<'_>], from: usize,
+) -> Option<usize> {
+    if glyphs.get(from)?.0 != "(" {
+        return None;
+    }
+    let mut cursor = from.checked_add(1)?;
+    if !glyphs.get(cursor)
+        .is_some_and(|item| matches!(item.0.as_bytes(), [b'0'..=b'9'])) {
+        return None;
+    }
+    while glyphs.get(cursor)
+        .is_some_and(|item| matches!(item.0.as_bytes(), [b'0'..=b'9'])) {
+        cursor = cursor.checked_add(1)?;
+    }
+    if glyphs.get(cursor)?.0 != ")" {
+        return None;
+    }
+    cursor.checked_add(1)
+}
+
 // A bounded ASCII number (including bare integers, decimal and thousands
 // separators, clock colons, digit fractions/dates and numeric ranges) is one
 // advisory ink cluster when it fits. Numeric comparison prefixes also bind the
@@ -2454,6 +2478,12 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
                 cursor = cursor.saturating_add(1);
             }
         }
+        // The parenthesized last-digit uncertainty may precede a power
+        // of ten, as in 1.23(4)e-2 or 1.23(4)×10³.
+        if let Some(end) = parenthesized_uncertainty_end(glyphs, cursor) {
+            has_separator = true;
+            cursor = end;
+        }
         // Bind a complete ASCII scientific exponent to its mantissa,
         // including the optional signed power. An incomplete 1e or
         // 1e+ remains ordinary authored ink and may wrap as before.
@@ -2525,6 +2555,12 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
         // This is a measured preference for a complete scientific
         // product, not generic multiplication or an exponent renderer.
         if let Some(end) = scientific_multiplier_end(glyphs, cursor) {
+            has_separator = true;
+            cursor = end;
+        }
+        // An uncertainty can also follow a completed exponent or power.
+        // The full numeric ink is only advisory when a real row fits.
+        if let Some(end) = parenthesized_uncertainty_end(glyphs, cursor) {
             has_separator = true;
             cursor = end;
         }

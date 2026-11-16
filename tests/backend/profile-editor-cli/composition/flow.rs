@@ -9576,6 +9576,66 @@ fn complete_scientific_uncertainties_attach_to_exponent_ink()
 }
 
 #[test]
+fn parenthesized_numeric_uncertainties_wrap_with_measured_values()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    for source in [
+        "1.2(3)", "12(3)", "1e3(2)", "1.2(3)e-2", "1e-3(4)",
+        "1.2(3)±.2", "1×10³(4)",
+    ] {
+        let glyphs = super::measured_word(source, None)?.0;
+        let ties = super::numeric_separator_joins(&glyphs);
+        assert!(ties.iter().all(|tied| *tied),
+            "{source:?} detached parenthesized uncertainty: {ties:?}");
+    }
+    for (source, boundary) in [
+        ("1.2(3", 2), ("1.2()", 2), ("1.2(x)", 2),
+        ("1e3(4", 2), ("1e3(x)", 2),
+    ] {
+        let glyphs = super::measured_word(source, None)?.0;
+        let ties = super::numeric_separator_joins(&glyphs);
+        assert!(ties[..boundary].iter().all(|tied| *tied),
+            "{source:?} detached the preceding numeric value");
+        assert!(!ties[boundary],
+            "{source:?} attached an incomplete uncertainty");
+    }
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 33_000, height: 90_000,
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        for (source, first, second) in [
+            ("abc1.2(3)", "abc", "1.2(3)"),
+            ("abc1e3(2)", "abc", "1e3(2)"),
+            ("abc12(3)", "abc", "12(3)"),
+        ] {
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            assert_eq!(pages, 1, "{source}");
+            assert!(marks.is_empty(), "{source}");
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>(), [first, second],
+                "{source} {format:?}");
+        }
+        let narrow = super::FlowRegion {
+            width: 9_000, height: 140_000, ..region
+        };
+        let source = "1.2(3)";
+        let (rows, _, _) = super::layout_flow_with_region(
+            &FlowSource::new(format, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(), Some(narrow),
+        )?;
+        assert_eq!(rows.iter().map(|row| row.text.as_str())
+            .collect::<String>(), source);
+    }
+    Ok(())
+}
+
+#[test]
 fn uncertainty_ties_require_a_complete_numeric_neighbor() {
     let joins = |source: &str| {
         let glyphs = source.chars().map(|character| {

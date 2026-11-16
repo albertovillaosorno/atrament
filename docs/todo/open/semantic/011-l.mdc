@@ -5366,3 +5366,20 @@ independently positioned PDF and transparent PNG pen strokes for both source
 modes, plus missing-glyph refusal without replacing accepted output.
 This is advisory print layout, not interpreted mathematics, a generated glyph,
 or persisted semantic notebook content.
+
+## Parenthesized measurement uncertainty grouping (partial) — 2026-11-15
+
+The CLI-only measured flow keeps a complete authored last-digit uncertainty
+with the preceding numeric value when the exact row fits, including `1.2(3)`,
+`1e3(2)`, `1.2(3)e-2` and `1.2(3)×10³`. An open parenthesis, missing digits,
+letters inside the parentheses or a missing closing mark do not gain an
+uncertainty tie. Narrow physical rows retain every authored grapheme using
+the existing fallback rather than clipping ink or refusing a valid source.
+
+A failing-before-fix Rust regression covers complete and incomplete notation,
+plain/Markdown row boundaries, and exact narrow-region fallback. A real CLI
+process test compares PDF and transparent PNG bytes with independently placed
+authored strokes, including missing-glyph refusal without overwriting a valid
+export. This is only advisory physical line breaking: no mathematical value
+is parsed, no glyph shapes are generated, and the full persisted notebook
+Export journey remains unfinished.
