@@ -4395,14 +4395,23 @@ test(
             })())`);
             await waitStatus("notebook-status",
                 "Rendered PNG preview for page 2.");
-            const previewed = await browserScript(`JSON.stringify((() => ({
-                visible: !document.getElementById(
-                    "notebook-preview-frame").hidden,
-                naturalWidth: document.getElementById(
-                    "notebook-preview-image").naturalWidth,
-                naturalHeight: document.getElementById(
-                    "notebook-preview-image").naturalHeight,
-            }))())`);
+            // Rendering updates the status as soon as the PNG object URL
+            // is assigned; image decoding completes asynchronously. Wait
+            // for actual image dimensions, not merely the status string.
+            let previewed;
+            for (let attempt = 0; attempt < 100; attempt += 1) {
+                previewed = await browserScript(`JSON.stringify((() => ({
+                    visible: !document.getElementById(
+                        "notebook-preview-frame").hidden,
+                    naturalWidth: document.getElementById(
+                        "notebook-preview-image").naturalWidth,
+                    naturalHeight: document.getElementById(
+                        "notebook-preview-image").naturalHeight,
+                }))())`);
+                if (previewed.visible && previewed.naturalWidth > 0
+                    && previewed.naturalHeight > 0) break;
+                await new Promise((resolve) => setTimeout(resolve, 50));
+            }
             assert.equal(previewed.visible, true);
             assert.ok(previewed.naturalWidth > 0);
             assert.ok(previewed.naturalHeight > 0);
