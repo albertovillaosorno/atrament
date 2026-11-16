@@ -43,12 +43,12 @@ use atrament_device_coordinate_calibration::{
 fn coordinate_transform_retains_origin_axes_scale_and_skew() {
     let transform = CoordinateTransformCalibration {
         axis_orientation: "x-right/y-down",
-        origin: (1_200_i32, -350_i32),
-        scale: (1_000_u32, 1_002_u32),
-        skew: (3_i16, -2_i16),
+        origin: (1_200i32, -350i32),
+        scale: (1_000u32, 1_002u32),
+        skew: (3i16, -2i16),
     };
     assert_eq!(transform.axis_orientation, "x-right/y-down");
-    assert_eq!(transform.origin, (1_200, -350));
+    assert_eq!(transform.origin, (1_200i32, -350i32));
     assert_eq!(transform.scale, (1_000, 1_002));
     assert_eq!(transform.skew, (3, -2));
 }
@@ -56,10 +56,10 @@ fn coordinate_transform_retains_origin_axes_scale_and_skew() {
 #[test]
 fn pen_motion_retains_heights_speed_and_acceleration() {
     let motion = PenMotionCalibration {
-        acceleration: 32_u16,
-        contact_height: 410_u16,
-        pen_up_height: 920_u16,
-        speed: 75_u16,
+        acceleration: 32u16,
+        contact_height: 410u16,
+        pen_up_height: 920u16,
+        speed: 75u16,
     };
     assert_eq!(motion.pen_up_height, 920);
     assert_eq!(motion.contact_height, 410);
@@ -70,9 +70,9 @@ fn pen_motion_retains_heights_speed_and_acceleration() {
 #[test]
 fn sheet_registration_retains_usable_area_clamping_and_clearance() {
     let sheet = SheetRegistrationCalibration {
-        boundary_clearance: 5_000_u32,
+        boundary_clearance: 5_000u32,
         page_clamping: "four-corner-clamps",
-        usable_area: (10_000_u32, 12_000_u32, 190_000_u32, 270_000_u32),
+        usable_area: (10_000u32, 12_000u32, 190_000u32, 270_000u32),
     };
     assert_eq!(sheet.boundary_clearance, 5_000);
     assert_eq!(sheet.page_clamping, "four-corner-clamps");
