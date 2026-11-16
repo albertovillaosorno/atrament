@@ -11,8 +11,8 @@
 // - Owns:
 //   - Browser launch recovery, profile CLI and Linux crash-policy probes.
 // - Must-Not:
-//   - Launch a real browser, inspect application memory, or persist/log
-//     the transient test-owned session credential.
+//   - Launch a real browser, inspect application memory, or persist/log the
+//     transient test-owned session credential.
 // - Allows:
 //   - Inputs: Typed launch errors, test-owned ZIP files and CLI arguments,
 //     test-only opener credentials passed through an in-memory FIFO.
@@ -37,8 +37,6 @@
 #![expect(
     clippy::expect_used,
     clippy::missing_assert_message,
-    clippy::missing_trait_methods,
-    clippy::format_collect,
     reason = "deliberate fail-fast, tiny test-owned fixtures"
 )]
 
@@ -51,27 +49,26 @@
 mod bootstrap;
 
 use std::cell::Cell;
-use std::env;
 use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write as _};
 #[cfg(target_os = "linux")]
 use std::io::{BufRead as _, BufReader, IoSlice, IoSliceMut, Read as _};
-use std::iter;
 #[cfg(target_os = "linux")]
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::{self, Command};
 #[cfg(target_os = "linux")]
 use std::process::{Child, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(target_os = "linux")]
 use std::sync::mpsc;
 #[cfg(target_os = "linux")]
 use std::thread;
 #[cfg(target_os = "linux")]
 use std::time::{Duration, Instant};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::{env, iter};
 
 use atrament_browser_launch::LaunchError;
 use atrament_explicit_file_path_intent::ExplicitOverwriteIntent;
@@ -87,6 +84,71 @@ use atrament_profile_zip_reader::{
 use nix::unistd::Pid;
 
 static TEST_FILE_ID: AtomicU64 = AtomicU64::new(0);
+
+struct OwnedProfileFile(PathBuf);
+
+impl OwnedProfileFile {
+    fn new(bytes: &[u8]) -> Self {
+        let path = env::temp_dir().join(format!(
+            "atrament-cli-inspect-{}-{}.atrament",
+            process::id(),
+            TEST_FILE_ID.fetch_add(1, Ordering::Relaxed),
+        ));
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .expect("create exact test-owned profile path");
+        file.write_all(bytes).expect("write owned profile fixture");
+        Self(path)
+    }
+}
+
+impl Drop for OwnedProfileFile {
+    fn drop(&mut self) {
+        fs::remove_file(&self.0).expect("remove owned test profile only");
+    }
+}
+
+/// Own only the exact test-selected destination, not its parent directory.
+struct OwnedProfileDestination(PathBuf);
+
+impl Drop for OwnedProfileDestination {
+    fn drop(&mut self) {
+        match fs::remove_file(&self.0) {
+            Ok(()) => {},
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {},
+            Err(error) => assert_eq!(
+                error.kind(),
+                io::ErrorKind::NotFound,
+                "cannot remove test-owned destination",
+            ),
+        }
+    }
+}
+
+/// Own only the exact temporary directory created by this test.
+#[cfg(target_os = "linux")]
+struct OwnedProfileDirectory(PathBuf);
+
+#[cfg(target_os = "linux")]
+impl OwnedProfileDirectory {
+    #[expect(
+        clippy::create_dir,
+        reason = "fixture must refuse an existing directory, not reuse it"
+    )]
+    fn new(path: PathBuf) -> Self {
+        fs::create_dir(&path).expect("create test-owned directory");
+        Self(path)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for OwnedProfileDirectory {
+    fn drop(&mut self) {
+        fs::remove_dir(&self.0).expect("remove empty test-owned directory");
+    }
+}
 
 // The live CLI must reject both Linux debugger attachment variants.
 #[cfg(target_os = "linux")]
@@ -114,15 +176,16 @@ fn assert_ready_cli_refuses_ptrace(pid: Pid) {
 #[test]
 #[expect(
     clippy::too_many_lines,
-    reason = "one process lifecycle tests ready and live-draft admission",
+    reason = "one process lifecycle tests ready and live-draft admission"
 )]
 fn linux_ready_and_private_cli_refuse_remote_memory_syscalls() {
+    use std::net::TcpStream;
+    use std::os::unix::fs::PermissionsExt as _;
+
     use nix::errno::Errno;
     use nix::sys::stat::Mode;
     use nix::sys::uio::{RemoteIoVec, process_vm_readv, process_vm_writev};
     use nix::unistd::{Pid, mkfifo};
-    use std::net::TcpStream;
-    use std::os::unix::fs::PermissionsExt as _;
 
     const PRIVATE_DRAFT: &[u8] = b"synthetic-live-kernel-denial-private-draft";
 
@@ -152,9 +215,11 @@ fn linux_ready_and_private_cli_refuse_remote_memory_syscalls() {
         process::id(),
         TEST_FILE_ID.fetch_add(1, Ordering::Relaxed),
     ));
-    #[expect(clippy::create_dir, reason = "scratch directory must be unique")]
-    fs::create_dir(&opener_directory)
-        .expect("unique test opener directory");
+    #[expect(
+        clippy::create_dir,
+        reason = "scratch directory must be unique"
+    )]
+    fs::create_dir(&opener_directory).expect("unique test opener directory");
     let opener = TestOpener(opener_directory);
     let fifo_path = opener.0.join("launch-url.fifo");
     mkfifo(&fifo_path, Mode::S_IRUSR | Mode::S_IWUSR)
@@ -171,7 +236,7 @@ fn linux_ready_and_private_cli_refuse_remote_memory_syscalls() {
         &script,
         b"#!/bin/sh\nprintf '%s\\n' \"$1\" > \"$ATRAMENT_TEST_OPENER_FIFO\"\n",
     )
-        .expect("write in-memory browser opener");
+    .expect("write in-memory browser opener");
     fs::set_permissions(&script, fs::Permissions::from_mode(0o700))
         .expect("make test opener executable");
 
@@ -257,7 +322,8 @@ fn linux_ready_and_private_cli_refuse_remote_memory_syscalls() {
     let exchange = |method: &str, body: &[u8]| {
         let mut stream = TcpStream::connect(("127.0.0.1", port))
             .expect("test parent connects to live CLI loopback");
-        stream.set_read_timeout(Some(Duration::from_secs(2)))
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
             .expect("bounded CLI response read");
         let request = format!(
             concat!(
@@ -273,12 +339,15 @@ fn linux_ready_and_private_cli_refuse_remote_memory_syscalls() {
             secret,
             body.len(),
         );
-        stream.write_all(request.as_bytes())
+        stream
+            .write_all(request.as_bytes())
             .expect("send admitted private draft request");
-        stream.write_all(body)
+        stream
+            .write_all(body)
             .expect("send complete private draft body");
         let mut response = Vec::new();
-        let _read = stream.read_to_end(&mut response)
+        let _read = stream
+            .read_to_end(&mut response)
             .expect("read bounded private draft response");
         response
     };
@@ -345,42 +414,50 @@ fn linux_remote_memory_read_and_write_require_a_dumpable_target() {
             (false, true) => "write-control",
             (true, true) => "write-protected",
         };
-        let mut child = Probe(Command::new(
-            env::current_exe().expect("test executable"),
-        )
-            .args(["--exact", "linux_remote_memory_probe_child", "--nocapture"])
-            .env("ATRAMENT_REMOTE_MEMORY_PROBE", mode)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("spawn child for same-parent memory access"));
+        let mut child = Probe(
+            Command::new(env::current_exe().expect("test executable"))
+                .args([
+                    "--exact",
+                    "linux_remote_memory_probe_child",
+                    "--nocapture",
+                ])
+                .env("ATRAMENT_REMOTE_MEMORY_PROBE", mode)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("spawn child for same-parent memory access"),
+        );
         let output = child.0.stdout.take().expect("child stdout pipe");
         let mut lines = BufReader::new(output).lines();
         let mut maybe_address = None;
         for line_result in (&mut lines).take(8) {
             let line = line_result.expect("read child readiness");
             if let Some((_, value)) = line.split_once("ATRAMENT_PROBE_ADDR=") {
-                maybe_address = Some(value.trim().parse::<usize>()
-                    .expect("synthetic marker address"));
+                maybe_address = Some(
+                    value
+                        .trim()
+                        .parse::<usize>()
+                        .expect("synthetic marker address"),
+                );
                 break;
             }
         }
-        let address = maybe_address
-            .expect("child announced a test-only address");
+        let address =
+            maybe_address.expect("child announced a test-only address");
         let mut buffer = [0u8; 8];
         let length = buffer.len();
-        let pid = Pid::from_raw(i32::try_from(child.0.id())
-            .expect("Linux child PID fits i32"));
-        let remote = [RemoteIoVec { base: address, len: length }];
+        let pid = Pid::from_raw(
+            i32::try_from(child.0.id()).expect("Linux child PID fits i32"),
+        );
+        let remote = [RemoteIoVec {
+            base: address,
+            len: length,
+        }];
         let result = if write {
             process_vm_writev(pid, &[IoSlice::new(b"write-ok")], &remote)
         } else {
-            process_vm_readv(
-                pid,
-                &mut [IoSliceMut::new(&mut buffer)],
-                &remote,
-            )
+            process_vm_readv(pid, &mut [IoSliceMut::new(&mut buffer)], &remote)
         };
         // EOF releases the child without a signal or persistent artifacts.
         drop(child.0.stdin.take());
@@ -390,21 +467,35 @@ fn linux_remote_memory_read_and_write_require_a_dumpable_target() {
     };
 
     let (read, control) = probe_marker(false, false);
-    assert_eq!(read, Ok(control.len()),
-        "parent must read a dumpable child's known synthetic memory");
+    assert_eq!(
+        read,
+        Ok(control.len()),
+        "parent must read a dumpable child's known synthetic memory"
+    );
     assert_eq!(control, *b"guard-ok");
     let (denied, private) = probe_marker(true, false);
-    assert_eq!(denied, Err(Errno::EPERM),
-        "hardened child must refuse process_vm_readv from its own parent");
-    assert_eq!(private, [0u8; 8],
-        "denied syscall must not write private bytes to the caller");
+    assert_eq!(
+        denied,
+        Err(Errno::EPERM),
+        "hardened child must refuse process_vm_readv from its own parent"
+    );
+    assert_eq!(
+        private, [0u8; 8],
+        "denied syscall must not write private bytes to the caller"
+    );
 
     let (written, _) = probe_marker(false, true);
-    assert_eq!(written, Ok(8),
-        "a dumpable child must accept a complete synthetic memory write");
+    assert_eq!(
+        written,
+        Ok(8),
+        "a dumpable child must accept a complete synthetic memory write"
+    );
     let (write_denied, _) = probe_marker(true, true);
-    assert_eq!(write_denied, Err(Errno::EPERM),
-        "hardened child must reject process_vm_writev from its own parent");
+    assert_eq!(
+        write_denied,
+        Err(Errno::EPERM),
+        "hardened child must reject process_vm_writev from its own parent"
+    );
 }
 
 // PTRACE_ATTACH and PTRACE_SEIZE permit inspection without process_vm or
@@ -501,8 +592,9 @@ fn linux_ptrace_attach_and_seize_require_a_dumpable_target() {
 #[cfg(target_os = "linux")]
 #[test]
 fn linux_remote_memory_probe_child() {
-    use nix::sys::prctl;
     use std::hint::black_box;
+
+    use nix::sys::prctl;
 
     let Ok(mode) = env::var("ATRAMENT_REMOTE_MEMORY_PROBE") else {
         return;
@@ -521,8 +613,11 @@ fn linux_remote_memory_probe_child() {
         io::stdout().lock(),
         "ATRAMENT_PROBE_ADDR={}",
         marker.as_ptr().addr(),
-    ).expect("print test-only marker address");
-    io::stdout().flush().expect("flush child address to its parent");
+    )
+    .expect("print test-only marker address");
+    io::stdout()
+        .flush()
+        .expect("flush child address to its parent");
     let mut completion = [0u8; 1];
     assert_eq!(io::stdin().read(&mut completion).expect("parent pipe"), 0);
     let expected = if mode == "write-control" {
@@ -579,71 +674,6 @@ fn linux_dumpability_child_probe() {
     .expect("publish only synthetic guard status");
 }
 
-struct OwnedProfileFile(PathBuf);
-
-impl OwnedProfileFile {
-    fn new(bytes: &[u8]) -> Self {
-        let path = env::temp_dir().join(format!(
-            "atrament-cli-inspect-{}-{}.atrament",
-            process::id(),
-            TEST_FILE_ID.fetch_add(1, Ordering::Relaxed),
-        ));
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .expect("create exact test-owned profile path");
-        file.write_all(bytes).expect("write owned profile fixture");
-        Self(path)
-    }
-}
-
-impl Drop for OwnedProfileFile {
-    fn drop(&mut self) {
-        fs::remove_file(&self.0).expect("remove owned test profile only");
-    }
-}
-
-/// Own only the exact test-selected destination, not its parent directory.
-struct OwnedProfileDestination(PathBuf);
-
-impl Drop for OwnedProfileDestination {
-    fn drop(&mut self) {
-        match fs::remove_file(&self.0) {
-            Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => assert_eq!(
-                error.kind(), io::ErrorKind::NotFound,
-                "cannot remove test-owned destination",
-            ),
-        }
-    }
-}
-
-/// Own only the exact temporary directory created by this test.
-#[cfg(target_os = "linux")]
-struct OwnedProfileDirectory(PathBuf);
-
-#[cfg(target_os = "linux")]
-impl OwnedProfileDirectory {
-    #[expect(
-        clippy::create_dir,
-        reason = "fixture must refuse an existing directory, not reuse it"
-    )]
-    fn new(path: PathBuf) -> Self {
-        fs::create_dir(&path).expect("create test-owned directory");
-        Self(path)
-    }
-}
-
-#[cfg(target_os = "linux")]
-impl Drop for OwnedProfileDirectory {
-    fn drop(&mut self) {
-        fs::remove_dir(&self.0)
-            .expect("remove empty test-owned directory");
-    }
-}
-
 fn assert_recovery_error_is_secret_free(launch_error: &LaunchError) {
     let error = bootstrap::browser_launch_failure(launch_error);
     let message = error.to_string();
@@ -689,11 +719,11 @@ fn browser_launch_io_failures_keep_cli_recovery_secret_free() {
 }
 
 fn digest_hex(bytes: &[u8]) -> String {
-    sha256_profile_bytes(bytes)
-        .bytes()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    let mut digest = String::with_capacity(64);
+    for byte in sha256_profile_bytes(bytes).bytes() {
+        write!(&mut digest, "{byte:02x}").expect("write test-owned hex digest");
+    }
+    digest
 }
 
 fn profile_zip(
@@ -702,7 +732,10 @@ fn profile_zip(
     declared_section: &[u8],
 ) -> Vec<u8> {
     profile_zip_with_media_type(
-        section, asset, declared_section, "application/json",
+        section,
+        asset,
+        declared_section,
+        "application/json",
     )
 }
 
@@ -713,7 +746,11 @@ fn profile_zip_with_media_type(
     media_type: &str,
 ) -> Vec<u8> {
     profile_zip_with_optional_features(
-        section, asset, declared_section, media_type, "[]",
+        section,
+        asset,
+        declared_section,
+        media_type,
+        "[]",
     )
 }
 
@@ -770,9 +807,11 @@ fn profile_zip_with_optional_features(
 
 #[test]
 fn cli_args_reject_unknown_and_incomplete_commands_without_startup() {
-    assert!(bootstrap::inspect_cli_args(Vec::<OsString>::new())
-        .expect("normal startup dispatch")
-        .is_none());
+    assert!(
+        bootstrap::inspect_cli_args(Vec::<OsString>::new())
+            .expect("normal startup dispatch")
+            .is_none()
+    );
     for arguments in [
         vec!["profile"],
         vec!["inspect", "missing"],
@@ -793,8 +832,8 @@ fn cli_args_reject_unknown_and_incomplete_commands_without_startup() {
             bootstrap::inspect_cli_args(
                 arguments.into_iter().map(OsString::from)
             )
-                .expect_err("invalid commands cannot launch")
-                .kind(),
+            .expect_err("invalid commands cannot launch")
+            .kind(),
             io::ErrorKind::InvalidInput,
         );
     }
@@ -828,12 +867,10 @@ fn repack_cli_refuses_ambiguous_bare_option_as_file_path() {
 fn profile_cli_refuses_bare_option_source_without_private_inspection() {
     let section = br#"{"private":"bare-option-section-8712"}"#;
     let asset = b"bare-option-asset-4592";
-    let original = OwnedProfileFile::new(&profile_zip(
-        section, asset, section,
-    ));
-    let folder = OwnedProfileDirectory::new(original.0.with_extension(
-        "option-source-folder",
-    ));
+    let original = OwnedProfileFile::new(&profile_zip(section, asset, section));
+    let folder = OwnedProfileDirectory::new(
+        original.0.with_extension("option-source-folder"),
+    );
     let source = OwnedProfileDestination(folder.0.join("--private"));
     fs::write(&source.0, fs::read(&original.0).expect("owned fixture"))
         .expect("copy test-owned bytes to option-like selected name");
@@ -844,7 +881,7 @@ fn profile_cli_refuses_bare_option_source_without_private_inspection() {
             .output()
             .expect("reject bare source flag before private profile read");
         assert!(!rejected.status.success());
-        assert!(rejected.stdout.is_empty());
+        assert_eq!(rejected.stdout.as_slice(), b"");
         let stderr = String::from_utf8_lossy(&rejected.stderr);
         assert!(stderr.contains("usage:"));
         for private in ["bare-option-section-8712", "bare-option-asset-4592"] {
@@ -857,7 +894,7 @@ fn profile_cli_refuses_bare_option_source_without_private_inspection() {
             .output()
             .expect("explicit relative path selects the exact profile");
         assert!(selected.status.success());
-        assert!(selected.stderr.is_empty());
+        assert_eq!(selected.stderr.as_slice(), b"");
         if operation == "inspect" {
             let readable = String::from_utf8_lossy(&selected.stdout);
             assert!(readable.contains("bare-option-section-8712"));
@@ -880,11 +917,13 @@ fn profile_cli_refuses_bare_option_source_without_private_inspection() {
 fn repack_cli_requires_unambiguous_path_for_option_named_target() {
     let section = br#"{"safe":"literal-option-target"}"#;
     let source = OwnedProfileFile::new(&profile_zip(
-        section, b"private-opaque-option-9013", section,
+        section,
+        b"private-opaque-option-9013",
+        section,
     ));
-    let folder = OwnedProfileDirectory::new(source.0.with_extension(
-        "option-destination-folder",
-    ));
+    let folder = OwnedProfileDirectory::new(
+        source.0.with_extension("option-destination-folder"),
+    );
     let target = OwnedProfileDestination(folder.0.join("--replace"));
     for option in ["--replace", "--replcae", "-x"] {
         let rejected = Command::new(env!("CARGO_BIN_EXE_atrament"))
@@ -895,11 +934,13 @@ fn repack_cli_requires_unambiguous_path_for_option_named_target() {
             .output()
             .expect("run misplaced or unknown bare option");
         assert!(!rejected.status.success());
-        assert!(rejected.stdout.is_empty());
+        assert_eq!(rejected.stdout.as_slice(), b"");
         let stderr = String::from_utf8_lossy(&rejected.stderr);
         assert!(stderr.contains("usage:"));
-        assert!(!folder.0.join(option).exists(),
-            "bare option must not create a file");
+        assert!(
+            !folder.0.join(option).exists(),
+            "bare option must not create a file"
+        );
     }
     assert!(!target.0.exists());
 
@@ -915,17 +956,14 @@ fn repack_cli_requires_unambiguous_path_for_option_named_target() {
         accepted.stdout,
         b"profile repacked (verified; no session import)\n",
     );
-    assert!(accepted.stderr.is_empty());
+    assert_eq!(accepted.stderr.as_slice(), b"");
     let repacked = fs::read(&target.0).expect("literal option target exists");
-    let archive = read_stored_profile_zip(
-        &repacked,
-        ProfileZipReadLimits {
-            maximum_archive_bytes: 4096,
-            maximum_entries: 3,
-            maximum_entry_bytes: 2048,
-            maximum_total_bytes: 3000,
-        },
-    )
+    let archive = read_stored_profile_zip(&repacked, ProfileZipReadLimits {
+        maximum_archive_bytes: 4096,
+        maximum_entries: 3,
+        maximum_entry_bytes: 2048,
+        maximum_total_bytes: 3000,
+    })
     .expect("literal target contains a complete verified ZIP");
     assert_eq!(archive.entries().len(), 3);
 }
@@ -950,7 +988,8 @@ fn cli_rejects_infinite_argument_stream_after_four_values() {
 fn repack_cli_rejects_extra_argument_before_any_source_open() {
     let pulls = Cell::new(0usize);
     let source = ["profile", "repack", "not-a-file", "not-a-target"]
-        .into_iter().map(OsString::from)
+        .into_iter()
+        .map(OsString::from)
         .chain(iter::from_fn(|| {
             pulls.set(pulls.get() + 1usize);
             Some(OsString::from("unexpected extra argument"))
@@ -968,9 +1007,14 @@ fn repack_cli_rejects_extra_argument_before_any_source_open() {
 fn repack_replace_cli_rejects_extra_argument_before_any_source_open() {
     let pulls = Cell::new(0usize);
     let source = [
-        "profile", "repack", "--replace", "not-a-file", "not-a-target",
+        "profile",
+        "repack",
+        "--replace",
+        "not-a-file",
+        "not-a-target",
     ]
-    .into_iter().map(OsString::from)
+    .into_iter()
+    .map(OsString::from)
     .chain(iter::from_fn(|| {
         pulls.set(pulls.get() + 1usize);
         Some(OsString::from("unexpected extra argument"))
@@ -990,7 +1034,10 @@ fn cli_verify_reports_only_fixed_success_after_full_source_admission() {
     let section = br#"{"private":"section-secret-65018"}"#;
     let asset = b"\xff\0opaque-private-24915";
     let source = OwnedProfileFile::new(&profile_zip_with_optional_features(
-        section, asset, section, "application/json",
+        section,
+        asset,
+        section,
+        "application/json",
         r#"["private-optional-feature-72281"]"#,
     ));
     bootstrap::verify_profile(source.0.clone())
@@ -1001,16 +1048,18 @@ fn cli_verify_reports_only_fixed_success_after_full_source_admission() {
         .output()
         .expect("run private selected-profile verification");
     assert!(executed.status.success());
+    assert_eq!(executed.stdout, b"profile verified (no session import)\n",);
+    assert_eq!(executed.stderr.as_slice(), b"");
     assert_eq!(
-        executed.stdout,
-        b"profile verified (no session import)\n",
-    );
-    assert!(executed.stderr.is_empty());
-    assert_eq!(fs::read(&source.0).expect("no mutation"),
+        fs::read(&source.0).expect("no mutation"),
         profile_zip_with_optional_features(
-            section, asset, section, "application/json",
+            section,
+            asset,
+            section,
+            "application/json",
             r#"["private-optional-feature-72281"]"#,
-        ));
+        )
+    );
     for private in [
         "section-secret-65018",
         "opaque-private-24915",
@@ -1031,10 +1080,14 @@ fn cli_verify_refuses_invalid_source_before_any_stdout() {
     assert_eq!(authentic.len(), forged.len());
     let invalid_json = b"[private-invalid-section-1147]";
     let sources = [
-        (profile_zip(forged, b"private-asset-6419", authentic),
-            "DigestMismatch"),
-        (profile_zip(invalid_json, b"private-asset-6419", invalid_json),
-            "SectionJson"),
+        (
+            profile_zip(forged, b"private-asset-6419", authentic),
+            "DigestMismatch",
+        ),
+        (
+            profile_zip(invalid_json, b"private-asset-6419", invalid_json),
+            "SectionJson",
+        ),
     ];
     for (source_bytes, diagnostic) in sources {
         let source = OwnedProfileFile::new(&source_bytes);
@@ -1048,7 +1101,7 @@ fn cli_verify_refuses_invalid_source_before_any_stdout() {
             .output()
             .expect("run rejected private source verification");
         assert!(!executed.status.success());
-        assert!(executed.stdout.is_empty());
+        assert_eq!(executed.stdout.as_slice(), b"");
         let stderr = String::from_utf8_lossy(&executed.stderr);
         assert!(stderr.contains(diagnostic));
         for private in [
@@ -1059,8 +1112,10 @@ fn cli_verify_refuses_invalid_source_before_any_stdout() {
         ] {
             assert!(!stderr.contains(private));
         }
-        assert_eq!(fs::read(&source.0).expect("read-only verification"),
-            source_bytes);
+        assert_eq!(
+            fs::read(&source.0).expect("read-only verification"),
+            source_bytes
+        );
     }
 }
 
@@ -1069,12 +1124,10 @@ fn cli_verify_refuses_invalid_source_before_any_stdout() {
 fn cli_verify_refuses_symlinked_selected_source_without_path_leak() {
     use std::os::unix::fs::symlink;
     let section = br#"{"private":"source-59018"}"#;
-    let source = OwnedProfileFile::new(&profile_zip(
-        section, b"opaque-60228", section,
-    ));
-    let link = OwnedProfileDestination(
-        source.0.with_extension("private-link-2190"),
-    );
+    let source =
+        OwnedProfileFile::new(&profile_zip(section, b"opaque-60228", section));
+    let link =
+        OwnedProfileDestination(source.0.with_extension("private-link-2190"));
     symlink(&source.0, &link.0).expect("create test-owned selection link");
     let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
         .args(["profile", "verify"])
@@ -1082,7 +1135,7 @@ fn cli_verify_refuses_symlinked_selected_source_without_path_leak() {
         .output()
         .expect("verify rejects source symlink");
     assert!(!executed.status.success());
-    assert!(executed.stdout.is_empty());
+    assert_eq!(executed.stdout.as_slice(), b"");
     let stderr = String::from_utf8_lossy(&executed.stderr);
     assert!(stderr.contains("Open("));
     assert!(!stderr.contains("private-link-2190"));
@@ -1109,17 +1162,19 @@ fn cli_check_canonical_distinguishes_integrity_from_canonical_bytes() {
         .output()
         .expect("check noncanonical verified source");
     assert!(!rejected.status.success());
-    assert!(rejected.stdout.is_empty());
+    assert_eq!(rejected.stdout.as_slice(), b"");
     let error = String::from_utf8_lossy(&rejected.stderr);
-    assert!(error.contains(
-        "verified but not canonically encoded: manifest JSON",
-    ));
+    assert!(
+        error.contains("verified but not canonically encoded: manifest JSON",)
+    );
     assert!(!error.contains("canonical-only-49352"));
     assert!(!error.contains("private-opaque-canonical-49252"));
     assert_eq!(fs::read(&source.0).expect("unchanged source"), original);
     assert_eq!(
-        fs::metadata(&source.0).expect("still original")
-            .modified().expect("unchanged modification time"),
+        fs::metadata(&source.0)
+            .expect("still original")
+            .modified()
+            .expect("unchanged modification time"),
         initial.modified().expect("initial modification time"),
     );
 
@@ -1127,9 +1182,11 @@ fn cli_check_canonical_distinguishes_integrity_from_canonical_bytes() {
         source.0.with_extension("canonical-check.atrament"),
     );
     bootstrap::repack_profile(
-        source.0.clone(), target.0.clone(),
+        source.0.clone(),
+        target.0.clone(),
         ExplicitOverwriteIntent::PreserveExisting,
-    ).expect("verified noncanonical profile can be repacked");
+    )
+    .expect("verified noncanonical profile can be repacked");
     let expected = fs::read(&target.0).expect("canonical output exists");
     assert_ne!(expected, original, "root canonicalization changed bytes");
     let canonical = Command::new(env!("CARGO_BIN_EXE_atrament"))
@@ -1142,7 +1199,7 @@ fn cli_check_canonical_distinguishes_integrity_from_canonical_bytes() {
         canonical.stdout,
         b"profile canonical (verified; no session import)\n",
     );
-    assert!(canonical.stderr.is_empty());
+    assert_eq!(canonical.stderr.as_slice(), b"");
     assert_eq!(fs::read(&target.0).expect("check is read-only"), expected);
 }
 
@@ -1152,9 +1209,7 @@ fn cli_check_canonical_never_publishes_forged_source_bytes() {
     let authentic = br#"{"private":"canonical-integrity-70165"}"#;
     let forged = br#"{"private":"canonical-integrity-70166"}"#;
     assert_eq!(authentic.len(), forged.len());
-    let bytes = profile_zip(
-        forged, b"opaque-integrity-70165", authentic,
-    );
+    let bytes = profile_zip(forged, b"opaque-integrity-70165", authentic);
     let source = OwnedProfileFile::new(&bytes);
     let rejected = Command::new(env!("CARGO_BIN_EXE_atrament"))
         .args(["profile", "check-canonical"])
@@ -1162,7 +1217,7 @@ fn cli_check_canonical_never_publishes_forged_source_bytes() {
         .output()
         .expect("reject digest-forged source before canonicality check");
     assert!(!rejected.status.success());
-    assert!(rejected.stdout.is_empty());
+    assert_eq!(rejected.stdout.as_slice(), b"");
     let diagnostic = String::from_utf8_lossy(&rejected.stderr);
     assert!(diagnostic.contains("DigestMismatch"));
     for private in [
@@ -1183,27 +1238,39 @@ fn cli_check_canonical_never_publishes_forged_source_bytes() {
 fn cli_check_canonical_rejects_legacy_zip_metadata_even_with_canonical_root() {
     let section = br#"{"private":"legacy-writer-metadata-51235"}"#;
     let initial = OwnedProfileFile::new(&profile_zip(
-        section, b"private-asset-51235", section,
+        section,
+        b"private-asset-51235",
+        section,
     ));
     let canonical_path = OwnedProfileDestination(
         initial.0.with_extension("metadata-canonical.atrament"),
     );
     bootstrap::repack_profile(
-        initial.0.clone(), canonical_path.0.clone(),
+        initial.0.clone(),
+        canonical_path.0.clone(),
         ExplicitOverwriteIntent::PreserveExisting,
-    ).expect("obtain independently verified canonical ZIP");
-    let mut legacy = fs::read(&canonical_path.0)
-        .expect("canonical writer ZIP");
-    let trailer_offset = legacy.len().checked_sub(6)
+    )
+    .expect("obtain independently verified canonical ZIP");
+    let mut legacy = fs::read(&canonical_path.0).expect("canonical writer ZIP");
+    let trailer_offset = legacy
+        .len()
+        .checked_sub(6)
         .expect("ZIP trailer directory offset is present");
-    let directory_bytes = legacy.get(trailer_offset..trailer_offset + 4)
+    let directory_bytes = legacy
+        .get(trailer_offset..trailer_offset + 4)
         .expect("ZIP directory offset bytes");
     let directory = usize::try_from(u32::from_le_bytes(
-        directory_bytes.try_into().expect("four directory offset bytes"),
-    )).expect("ZIP directory offset fits usize");
-    legacy.get_mut(4..6).expect("first local version slot")
+        directory_bytes
+            .try_into()
+            .expect("four directory offset bytes"),
+    ))
+    .expect("ZIP directory offset fits usize");
+    legacy
+        .get_mut(4..6)
+        .expect("first local version slot")
         .copy_from_slice(&10u16.to_le_bytes());
-    legacy.get_mut(directory + 6..directory + 8)
+    legacy
+        .get_mut(directory + 6..directory + 8)
         .expect("first central version slot")
         .copy_from_slice(&10u16.to_le_bytes());
     let source = OwnedProfileFile::new(&legacy);
@@ -1215,14 +1282,17 @@ fn cli_check_canonical_rejects_legacy_zip_metadata_even_with_canonical_root() {
         .output()
         .expect("check legacy header framing");
     assert!(!result.status.success());
-    assert!(result.stdout.is_empty());
+    assert_eq!(result.stdout.as_slice(), b"");
     let error = String::from_utf8_lossy(&result.stderr);
-    assert!(error.contains(
-        "verified but not canonically encoded: ZIP framing",
-    ));
+    assert!(
+        error.contains("verified but not canonically encoded: ZIP framing",)
+    );
     assert!(!error.contains("legacy-writer-metadata-51235"));
     assert!(!error.contains("private-asset-51235"));
-    assert_eq!(fs::read(&source.0).expect("source remains unchanged"), legacy);
+    assert_eq!(
+        fs::read(&source.0).expect("source remains unchanged"),
+        legacy
+    );
 }
 
 #[cfg(target_os = "linux")]
@@ -1235,7 +1305,8 @@ fn cli_repack_handles_root_only_profile_without_phantom_members() {
     );
     let original = write_stored_profile_zip(
         &[ProfileStoredZipMember {
-            name: "manifest.json", bytes: root.as_bytes(),
+            name: "manifest.json",
+            bytes: root.as_bytes(),
         }],
         ProfileStoredZipWriteLimits {
             maximum_archive_bytes: 4096,
@@ -1243,7 +1314,8 @@ fn cli_repack_handles_root_only_profile_without_phantom_members() {
             maximum_entry_bytes: 2048,
             maximum_total_bytes: 3000,
         },
-    ).expect("root-only input is valid ZIP");
+    )
+    .expect("root-only input is valid ZIP");
     let source = OwnedProfileFile::new(&original);
     let verified = Command::new(env!("CARGO_BIN_EXE_atrament"))
         .args(["profile", "verify"])
@@ -1252,7 +1324,7 @@ fn cli_repack_handles_root_only_profile_without_phantom_members() {
         .expect("root-only profile verification");
     assert!(verified.status.success());
     assert_eq!(verified.stdout, b"profile verified (no session import)\n");
-    assert!(verified.stderr.is_empty());
+    assert_eq!(verified.stderr.as_slice(), b"");
     let destination = OwnedProfileDestination(
         source.0.with_extension("empty-repack.atrament"),
     );
@@ -1263,20 +1335,22 @@ fn cli_repack_handles_root_only_profile_without_phantom_members() {
         .output()
         .expect("root-only selected source repack");
     assert!(executed.status.success());
-    assert!(executed.stderr.is_empty());
+    assert_eq!(executed.stderr.as_slice(), b"");
     let bytes = fs::read(&destination.0).expect("root-only canonical ZIP");
-    let archive = read_stored_profile_zip(
-        &bytes,
-        ProfileZipReadLimits {
-            maximum_archive_bytes: 4096,
-            maximum_entries: 1,
-            maximum_entry_bytes: 2048,
-            maximum_total_bytes: 3000,
-        },
-    ).expect("repacked root-only ZIP independently parses");
+    let archive = read_stored_profile_zip(&bytes, ProfileZipReadLimits {
+        maximum_archive_bytes: 4096,
+        maximum_entries: 1,
+        maximum_entry_bytes: 2048,
+        maximum_total_bytes: 3000,
+    })
+    .expect("repacked root-only ZIP independently parses");
     assert_eq!(archive.entries().len(), 1);
     assert_eq!(
-        archive.entries().first().expect("root manifest member").name(),
+        archive
+            .entries()
+            .first()
+            .expect("root manifest member")
+            .name(),
         "manifest.json",
     );
     assert!(archive.matches_stored_writer_framing());
@@ -1304,9 +1378,8 @@ fn cli_repack_rejects_selected_source_symlink_before_target_creation() {
         source.0.with_extension("source-link.atrament"),
     );
     symlink(&source.0, &link.0).expect("untrusted link selected by caller");
-    let destination = OwnedProfileDestination(
-        source.0.with_extension("from-link.atrament"),
-    );
+    let destination =
+        OwnedProfileDestination(source.0.with_extension("from-link.atrament"));
     let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
         .args(["profile", "repack"])
         .arg(&link.0)
@@ -1314,7 +1387,7 @@ fn cli_repack_rejects_selected_source_symlink_before_target_creation() {
         .output()
         .expect("attempt to repack source through disallowed symlink");
     assert!(!executed.status.success());
-    assert!(executed.stdout.is_empty());
+    assert_eq!(executed.stdout.as_slice(), b"");
     assert!(!destination.0.exists());
     assert_eq!(fs::read(&source.0).expect("original untouched"), original);
     let stderr = String::from_utf8_lossy(&executed.stderr);
@@ -1336,7 +1409,7 @@ fn cli_repack_refuses_same_source_and_target_without_in_place_rewrite() {
         .output()
         .expect("self-repack without overwrite authorization");
     assert!(!executed.status.success());
-    assert!(executed.stdout.is_empty());
+    assert_eq!(executed.stdout.as_slice(), b"");
     assert!(String::from_utf8_lossy(&executed.stderr).contains("TargetExists"));
     assert_eq!(fs::read(&source.0).expect("same file untouched"), original);
 }
@@ -1366,12 +1439,14 @@ fn cli_repack_hardlinked_target_requires_replace_without_mutating_source() {
         .output()
         .expect("try to repack into hardlinked existing target");
     assert!(!refused.status.success());
-    assert!(refused.stdout.is_empty());
+    assert_eq!(refused.stdout.as_slice(), b"");
     assert!(String::from_utf8_lossy(&refused.stderr).contains("TargetExists"));
     assert_eq!(fs::read(&source.0).expect("source preserved"), original);
     assert_eq!(fs::read(&destination.0).expect("alias preserved"), original);
     assert_eq!(
-        fs::metadata(&destination.0).expect("same linked inode").ino(),
+        fs::metadata(&destination.0)
+            .expect("same linked inode")
+            .ino(),
         source_inode,
     );
 
@@ -1382,7 +1457,7 @@ fn cli_repack_hardlinked_target_requires_replace_without_mutating_source() {
         .output()
         .expect("explicitly replace one hardlink destination");
     assert!(replaced.status.success());
-    assert!(replaced.stderr.is_empty());
+    assert_eq!(replaced.stderr.as_slice(), b"");
     assert_eq!(
         replaced.stdout,
         b"profile repacked (verified; no session import)\n",
@@ -1395,7 +1470,9 @@ fn cli_repack_hardlinked_target_requires_replace_without_mutating_source() {
         source_inode,
     );
     assert_ne!(
-        fs::metadata(&destination.0).expect("new selected inode").ino(),
+        fs::metadata(&destination.0)
+            .expect("new selected inode")
+            .ino(),
         source_inode,
     );
     let inspection = bootstrap::inspect_profile(destination.0.clone())
@@ -1412,12 +1489,15 @@ fn cli_repack_canonically_preserves_verified_sections_assets_and_features() {
     let section = br#"{"private":"verified-section-9570"}"#;
     let asset = b"\0\xffopaque-repack-asset-3262";
     let original = profile_zip_with_optional_features(
-        section, asset, section, "application/json", r#"["future.writer"]"#,
+        section,
+        asset,
+        section,
+        "application/json",
+        r#"["future.writer"]"#,
     );
     let source = OwnedProfileFile::new(&original);
-    let destination = OwnedProfileDestination(
-        source.0.with_extension("canonical.atrament"),
-    );
+    let destination =
+        OwnedProfileDestination(source.0.with_extension("canonical.atrament"));
     let output = Command::new(env!("CARGO_BIN_EXE_atrament"))
         .args(["profile", "repack"])
         .arg(&source.0)
@@ -1429,19 +1509,17 @@ fn cli_repack_canonically_preserves_verified_sections_assets_and_features() {
         output.stdout,
         b"profile repacked (verified; no session import)\n",
     );
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr.as_slice(), b"");
     assert_eq!(fs::read(&source.0).expect("source remains"), original);
     let repacked = fs::read(&destination.0).expect("complete repacked ZIP");
     assert_ne!(repacked, original, "noncanonical manifest is normalized");
-    let archive = read_stored_profile_zip(
-        &repacked,
-        ProfileZipReadLimits {
-            maximum_archive_bytes: 4096,
-            maximum_entries: 3,
-            maximum_entry_bytes: 2048,
-            maximum_total_bytes: 3000,
-        },
-    ).expect("repacked archive passes independent CRC framing");
+    let archive = read_stored_profile_zip(&repacked, ProfileZipReadLimits {
+        maximum_archive_bytes: 4096,
+        maximum_entries: 3,
+        maximum_entry_bytes: 2048,
+        maximum_total_bytes: 3000,
+    })
+    .expect("repacked archive passes independent CRC framing");
     assert!(archive.matches_stored_writer_framing());
     let entries = archive.entries();
     assert_eq!(entries.len(), 3);
@@ -1475,7 +1553,7 @@ fn cli_repack_canonically_preserves_verified_sections_assets_and_features() {
         .output()
         .expect("repack already-canonical output");
     assert!(repeated.status.success());
-    assert!(repeated.stderr.is_empty());
+    assert_eq!(repeated.stderr.as_slice(), b"");
     assert_eq!(
         fs::read(&repeat.0).expect("canonical repeated output"),
         repacked,
@@ -1483,7 +1561,9 @@ fn cli_repack_canonically_preserves_verified_sections_assets_and_features() {
     assert_eq!(
         fs::metadata(&destination.0)
             .expect("persisted output metadata")
-            .permissions().mode() & 0o777,
+            .permissions()
+            .mode()
+            & 0o777,
         0o600,
         "new output should be private to the owning process user",
     );
@@ -1496,10 +1576,16 @@ fn cli_repack_preserves_exact_non_utf8_destination_selection() {
 
     let section = br#"{"verified":true}"#;
     let source = OwnedProfileFile::new(&profile_zip(
-        section, b"non-utf8-asset", section,
+        section,
+        b"non-utf8-asset",
+        section,
     ));
-    let mut name = source.0.file_name()
-        .expect("owned source filename").as_bytes().to_vec();
+    let mut name = source
+        .0
+        .file_name()
+        .expect("owned source filename")
+        .as_bytes()
+        .to_vec();
     name.extend_from_slice(b"-destination-");
     name.push(0xff);
     name.extend_from_slice(b".atrament");
@@ -1513,7 +1599,7 @@ fn cli_repack_preserves_exact_non_utf8_destination_selection() {
         .output()
         .expect("OS argv can preserve non-UTF8 destination bytes");
     assert!(executed.status.success());
-    assert!(executed.stderr.is_empty());
+    assert_eq!(executed.stderr.as_slice(), b"");
     assert!(destination.0.is_file());
     let observed = bootstrap::inspect_profile(destination.0.clone())
         .expect("new exact output passes independent selected Import");
@@ -1527,10 +1613,16 @@ fn cli_repack_replace_preserves_raw_non_utf8_target_in_both_states() {
 
     let section = br#"{"verified":"raw-output-selection-9631"}"#;
     let source = OwnedProfileFile::new(&profile_zip(
-        section, b"raw-destination-asset-3015", section,
+        section,
+        b"raw-destination-asset-3015",
+        section,
     ));
-    let mut name = source.0.file_name()
-        .expect("test-owned source name").as_bytes().to_vec();
+    let mut name = source
+        .0
+        .file_name()
+        .expect("test-owned source name")
+        .as_bytes()
+        .to_vec();
     name.extend_from_slice(b"-replace-");
     name.push(0xff);
     name.extend_from_slice(b".atrament");
@@ -1555,7 +1647,7 @@ fn cli_repack_replace_preserves_raw_non_utf8_target_in_both_states() {
             output.stdout,
             b"profile repacked (verified; no session import)\n",
         );
-        assert!(output.stderr.is_empty());
+        assert_eq!(output.stderr.as_slice(), b"");
         let canonical = fs::read(&destination.0)
             .expect("complete canonical output selected by raw path");
         if let Some(previous) = &first {
@@ -1576,9 +1668,8 @@ fn cli_repack_refuses_existing_target_without_replacing_private_bytes() {
     let section = br#"{"private":"profile-secret-1954"}"#;
     let original = profile_zip(section, b"asset-secret-5688", section);
     let source = OwnedProfileFile::new(&original);
-    let destination = OwnedProfileDestination(
-        source.0.with_extension("existing.atrament"),
-    );
+    let destination =
+        OwnedProfileDestination(source.0.with_extension("existing.atrament"));
     fs::write(&destination.0, b"important original output")
         .expect("pre-existing test-owned target");
     let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
@@ -1588,7 +1679,7 @@ fn cli_repack_refuses_existing_target_without_replacing_private_bytes() {
         .output()
         .expect("run existing-target repack");
     assert!(!executed.status.success());
-    assert!(executed.stdout.is_empty());
+    assert_eq!(executed.stdout.as_slice(), b"");
     assert!(String::from_utf8_lossy(&executed.stderr).contains("TargetExists"));
     assert_eq!(
         fs::read(&destination.0).expect("old target is untouched"),
@@ -1626,27 +1717,28 @@ fn cli_repack_requires_explicit_replace_to_update_existing_target() {
         executed.stdout,
         b"profile repacked (verified; no session import)\n",
     );
-    assert!(executed.stderr.is_empty());
+    assert_eq!(executed.stderr.as_slice(), b"");
     let rewritten = fs::read(&destination.0).expect("complete replacement");
     assert_ne!(rewritten, b"older profile artifact");
     assert_eq!(fs::read(&source.0).expect("source unchanged"), original);
-    let archived = read_stored_profile_zip(
-        &rewritten,
-        ProfileZipReadLimits {
-            maximum_archive_bytes: 4096,
-            maximum_entries: 3,
-            maximum_entry_bytes: 2048,
-            maximum_total_bytes: 3000,
-        },
-    ).expect("complete canonical output");
+    let archived = read_stored_profile_zip(&rewritten, ProfileZipReadLimits {
+        maximum_archive_bytes: 4096,
+        maximum_entries: 3,
+        maximum_entry_bytes: 2048,
+        maximum_total_bytes: 3000,
+    })
+    .expect("complete canonical output");
     assert!(archived.matches_stored_writer_framing());
     let inspected = bootstrap::inspect_profile(destination.0.clone())
         .expect("replaced file re-verifies independently");
     assert!(inspected.contains("new-section-content-1633"));
     assert!(!inspected.contains("new-opaque-asset-content-1105"));
     assert_eq!(
-        fs::metadata(&destination.0).expect("new metadata")
-            .permissions().mode() & 0o777,
+        fs::metadata(&destination.0)
+            .expect("new metadata")
+            .permissions()
+            .mode()
+            & 0o777,
         0o600,
     );
 }
@@ -1664,7 +1756,7 @@ fn cli_repack_replace_can_canonicalize_the_selected_source_in_place() {
         .output()
         .expect("explicit in-place repack");
     assert!(executed.status.success());
-    assert!(executed.stderr.is_empty());
+    assert_eq!(executed.stderr.as_slice(), b"");
     assert_eq!(
         executed.stdout,
         b"profile repacked (verified; no session import)\n",
@@ -1684,7 +1776,9 @@ fn cli_repack_replace_refuses_invalid_source_without_touching_target() {
     let claimed = br#"{"private":"other-content-2841"}"#;
     assert_eq!(actual.len(), claimed.len());
     let source = OwnedProfileFile::new(&profile_zip(
-        actual, b"private-asset-5938", claimed,
+        actual,
+        b"private-asset-5938",
+        claimed,
     ));
     let destination = OwnedProfileDestination(
         source.0.with_extension("invalid-replace.atrament"),
@@ -1698,12 +1792,14 @@ fn cli_repack_replace_refuses_invalid_source_without_touching_target() {
         .output()
         .expect("attempt invalid replace source");
     assert!(!executed.status.success());
-    assert!(executed.stdout.is_empty());
+    assert_eq!(executed.stdout.as_slice(), b"");
     assert_eq!(fs::read(&destination.0).expect("target survived"), previous);
     let stderr = String::from_utf8_lossy(&executed.stderr);
     assert!(stderr.contains("DigestMismatch"));
     for private in [
-        "wrong-content-3275", "other-content-2841", "private-asset-5938",
+        "wrong-content-3275",
+        "other-content-2841",
+        "private-asset-5938",
         "invalid-replace.atrament",
     ] {
         assert!(!stderr.contains(private));
@@ -1715,7 +1811,9 @@ fn cli_repack_replace_refuses_invalid_source_without_touching_target() {
 fn cli_repack_replace_refuses_directory_target_without_modification() {
     let section = br#"{"secret":"directory-refusal-5915"}"#;
     let source = OwnedProfileFile::new(&profile_zip(
-        section, b"opaque-directory-9343", section,
+        section,
+        b"opaque-directory-9343",
+        section,
     ));
     let target = OwnedProfileDirectory::new(
         source.0.with_extension("existing-directory"),
@@ -1727,14 +1825,16 @@ fn cli_repack_replace_refuses_directory_target_without_modification() {
         .output()
         .expect("attempt directory replacement");
     assert!(!output.status.success());
-    assert!(output.stdout.is_empty());
+    assert_eq!(output.stdout.as_slice(), b"");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("InvalidExistingTarget"));
     assert!(!stderr.contains("directory-refusal-5915"));
     assert!(!stderr.contains("opaque-directory-9343"));
     assert!(target.0.is_dir());
     assert_eq!(
-        fs::read_dir(&target.0).expect("unchanged directory").count(),
+        fs::read_dir(&target.0)
+            .expect("unchanged directory")
+            .count(),
         0,
     );
 }
@@ -1746,14 +1846,14 @@ fn cli_repack_replace_refuses_symlinked_parent_before_writing() {
 
     let section = br#"{"secret":"ancestor-refusal-7586"}"#;
     let source = OwnedProfileFile::new(&profile_zip(
-        section, b"opaque-ancestor-2327", section,
+        section,
+        b"opaque-ancestor-2327",
+        section,
     ));
-    let actual_directory = OwnedProfileDirectory::new(
-        source.0.with_extension("real-parent"),
-    );
-    let alias = OwnedProfileDestination(
-        source.0.with_extension("linked-parent"),
-    );
+    let actual_directory =
+        OwnedProfileDirectory::new(source.0.with_extension("real-parent"));
+    let alias =
+        OwnedProfileDestination(source.0.with_extension("linked-parent"));
     symlink(&actual_directory.0, &alias.0)
         .expect("link to test-owned selected parent");
     let target = alias.0.join("new-profile.atrament");
@@ -1764,7 +1864,7 @@ fn cli_repack_replace_refuses_symlinked_parent_before_writing() {
         .output()
         .expect("attempt forbidden symlink ancestor");
     assert!(!output.status.success());
-    assert!(output.stdout.is_empty());
+    assert_eq!(output.stdout.as_slice(), b"");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("profile repack target refused"));
     assert!(!stderr.contains("ancestor-refusal-7586"));
@@ -1773,7 +1873,8 @@ fn cli_repack_replace_refuses_symlinked_parent_before_writing() {
     assert!(actual_directory.0.is_dir());
     assert_eq!(
         fs::read_dir(&actual_directory.0)
-            .expect("linked directory remains untouched").count(),
+            .expect("linked directory remains untouched")
+            .count(),
         0,
     );
     assert_eq!(
@@ -1789,7 +1890,9 @@ fn cli_repack_replace_refuses_symlink_target_without_following_victim() {
 
     let section = br#"{"private":"replacement-secret-3769"}"#;
     let source = OwnedProfileFile::new(&profile_zip(
-        section, b"private-asset-3379", section,
+        section,
+        b"private-asset-3379",
+        section,
     ));
     let victim = OwnedProfileDestination(
         source.0.with_extension("replace-victim.atrament"),
@@ -1807,7 +1910,7 @@ fn cli_repack_replace_refuses_symlink_target_without_following_victim() {
         .output()
         .expect("replace request must refuse linked target");
     assert!(!executed.status.success());
-    assert!(executed.stdout.is_empty());
+    assert_eq!(executed.stdout.as_slice(), b"");
     let stderr = String::from_utf8_lossy(&executed.stderr);
     assert!(stderr.contains("InvalidExistingTarget"));
     assert!(!stderr.contains("replacement-secret-3769"));
@@ -1829,16 +1932,16 @@ fn cli_repack_refuses_symlink_destination_without_touching_victim() {
 
     let section = br#"{"private":"selection-3791"}"#;
     let source = OwnedProfileFile::new(&profile_zip(
-        section, b"private-asset-9045", section,
+        section,
+        b"private-asset-9045",
+        section,
     ));
-    let victim = OwnedProfileDestination(
-        source.0.with_extension("victim.atrament"),
-    );
+    let victim =
+        OwnedProfileDestination(source.0.with_extension("victim.atrament"));
     fs::write(&victim.0, b"victim must not change")
         .expect("test-owned non-selected victim");
-    let destination = OwnedProfileDestination(
-        source.0.with_extension("linked.atrament"),
-    );
+    let destination =
+        OwnedProfileDestination(source.0.with_extension("linked.atrament"));
     symlink(&victim.0, &destination.0)
         .expect("attacker-controlled link at selected output");
     let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
@@ -1848,7 +1951,7 @@ fn cli_repack_refuses_symlink_destination_without_touching_victim() {
         .output()
         .expect("run repack into symlinked target");
     assert!(!executed.status.success());
-    assert!(executed.stdout.is_empty());
+    assert_eq!(executed.stdout.as_slice(), b"");
     assert_eq!(
         fs::read_link(&destination.0).expect("symlink remains"),
         victim.0,
@@ -1877,27 +1980,36 @@ fn cli_repack_refuses_invalid_later_section_without_partial_target() {
             r#"{{"path":"sections/z.json","media_type":"application/json", "#,
             r#""byte_length":{},"sha256":"{}"}}]}}"#,
         ),
-        early.len(), digest_hex(early), late.len(), digest_hex(late),
+        early.len(),
+        digest_hex(early),
+        late.len(),
+        digest_hex(late),
     );
-    let source = OwnedProfileFile::new(&write_stored_profile_zip(
-        &[
-            ProfileStoredZipMember {
-                name: "manifest.json", bytes: root.as_bytes(),
+    let source = OwnedProfileFile::new(
+        &write_stored_profile_zip(
+            &[
+                ProfileStoredZipMember {
+                    name: "manifest.json",
+                    bytes: root.as_bytes(),
+                },
+                ProfileStoredZipMember {
+                    name: "sections/a.json",
+                    bytes: early,
+                },
+                ProfileStoredZipMember {
+                    name: "sections/z.json",
+                    bytes: late,
+                },
+            ],
+            ProfileStoredZipWriteLimits {
+                maximum_archive_bytes: 4096,
+                maximum_entries: 3,
+                maximum_entry_bytes: 2048,
+                maximum_total_bytes: 3000,
             },
-            ProfileStoredZipMember {
-                name: "sections/a.json", bytes: early,
-            },
-            ProfileStoredZipMember {
-                name: "sections/z.json", bytes: late,
-            },
-        ],
-        ProfileStoredZipWriteLimits {
-            maximum_archive_bytes: 4096,
-            maximum_entries: 3,
-            maximum_entry_bytes: 2048,
-            maximum_total_bytes: 3000,
-        },
-    ).expect("authentic SHA-valid but section-invalid source"));
+        )
+        .expect("authentic SHA-valid but section-invalid source"),
+    );
     let destination = OwnedProfileDestination(
         source.0.with_extension("late-invalid.atrament"),
     );
@@ -1908,7 +2020,7 @@ fn cli_repack_refuses_invalid_later_section_without_partial_target() {
         .output()
         .expect("run late-section-invalid repack");
     assert!(!executed.status.success());
-    assert!(executed.stdout.is_empty());
+    assert_eq!(executed.stdout.as_slice(), b"");
     assert!(!destination.0.exists());
     let stderr = String::from_utf8_lossy(&executed.stderr);
     assert!(stderr.contains("SectionJson { index: 1"));
@@ -1922,7 +2034,9 @@ fn cli_repack_refuses_sha_forgery_without_creating_any_output() {
     let claimed = br#"{"valid":true}"#;
     assert_eq!(actual.len(), claimed.len());
     let source = OwnedProfileFile::new(&profile_zip(
-        actual, b"opaque-private-7684", claimed,
+        actual,
+        b"opaque-private-7684",
+        claimed,
     ));
     let destination = OwnedProfileDestination(
         source.0.with_extension("forgery-out.atrament"),
@@ -1934,7 +2048,7 @@ fn cli_repack_refuses_sha_forgery_without_creating_any_output() {
         .output()
         .expect("run forged source repack");
     assert!(!executed.status.success());
-    assert!(executed.stdout.is_empty());
+    assert_eq!(executed.stdout.as_slice(), b"");
     assert!(!destination.0.exists());
     let stderr = String::from_utf8_lossy(&executed.stderr);
     assert!(stderr.contains("DigestMismatch"));
@@ -1958,7 +2072,7 @@ fn cli_never_substitutes_a_missing_path_with_another_profile() {
         .output()
         .expect("run missing-source profile CLI");
     assert!(!executed.status.success());
-    assert!(executed.stdout.is_empty());
+    assert_eq!(executed.stdout.as_slice(), b"");
     let stderr = String::from_utf8_lossy(&executed.stderr);
     assert!(stderr.contains("NotFound"));
     for private in [
@@ -1977,7 +2091,9 @@ fn cli_rejects_symlinked_selection_before_any_output() {
     use std::os::unix::fs::symlink;
     let section = br#"{"valid":"private-link-section-3096"}"#;
     let owned = OwnedProfileFile::new(&profile_zip(
-        section, b"private-link-asset-5742", section,
+        section,
+        b"private-link-asset-5742",
+        section,
     ));
     let link = owned.0.with_extension("private-selected-link-8331");
     symlink(&owned.0, &link).expect("create test-owned symlink");
@@ -1988,7 +2104,7 @@ fn cli_rejects_symlinked_selection_before_any_output() {
         .expect("run symlink-refusal profile CLI");
     fs::remove_file(&link).expect("remove test-owned symlink");
     assert!(!executed.status.success());
-    assert!(executed.stdout.is_empty());
+    assert_eq!(executed.stdout.as_slice(), b"");
     let stderr = String::from_utf8_lossy(&executed.stderr);
     assert!(stderr.contains("SymlinkForbidden"));
     for private in [
@@ -2013,11 +2129,14 @@ fn cli_inspects_verified_section_without_extracting_opaque_assets() {
     let readable = bootstrap::inspect_profile(owned.0.clone())
         .expect("securely inspect exact local CLI-selected file");
     assert!(readable.contains("manifest.json (verified)"));
-    assert!(readable.contains(
-        "sections/writer.json (syntax-checked; untyped)"
-    ));
+    assert!(
+        readable.contains("sections/writer.json (syntax-checked; untyped)")
+    );
     assert!(readable.contains("{\"strokes\":[1,2,3]}"));
-    assert!(readable.contains("assets/raw.bin"), "manifest retains asset");
+    assert!(
+        readable.contains("assets/raw.bin"),
+        "manifest retains asset"
+    );
     assert!(!readable.contains("opaque-asset-secret-123"));
     assert!(!readable.contains("#session="));
     let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
@@ -2027,7 +2146,7 @@ fn cli_inspects_verified_section_without_extracting_opaque_assets() {
         .expect("run real CLI without browser");
     assert!(executed.status.success());
     assert_eq!(executed.stdout, readable.as_bytes());
-    assert!(executed.stderr.is_empty());
+    assert_eq!(executed.stderr.as_slice(), b"");
 }
 
 #[cfg(target_os = "linux")]
@@ -2051,7 +2170,8 @@ fn cli_inspection_preserves_exact_large_section_after_output_planning() {
                 r#""media_type":"application/json"}}],"#,
                 r#""container_version":"atrament.profile/1"}}"#,
             ),
-            digest, section.len(),
+            digest,
+            section.len(),
         );
         let canonical_root = format!(
             concat!(
@@ -2062,7 +2182,8 @@ fn cli_inspection_preserves_exact_large_section_after_output_planning() {
                 r#""optional_features":[],"profile_identity":"writer","#,
                 r#""required_features":[]}}"#,
             ),
-            section.len(), digest,
+            section.len(),
+            digest,
         );
         let archive = write_stored_profile_zip(
             &[
@@ -2112,7 +2233,7 @@ fn cli_inspection_preserves_exact_large_section_after_output_planning() {
             .output()
             .expect("inspect one large verified section in a real CLI");
         assert!(executed.status.success());
-        assert!(executed.stderr.is_empty());
+        assert_eq!(executed.stderr.as_slice(), b"");
         assert_eq!(executed.stdout, expected.as_bytes());
         assert_eq!(fs::read(&owned.0).expect("source not modified"), archive);
         assert!(!readable.contains('\u{202e}'), "no raw terminal controls");
@@ -2144,9 +2265,8 @@ fn cli_inspection_distinguishes_original_json_escapes_from_terminal_escapes() {
 fn cli_inspection_escapes_bidi_controls_in_verified_json_and_names() {
     let section_path = format!("sections/rtl{}name.json", '\u{200f}');
     let bidi_controls = [
-        '\u{061c}', '\u{200e}', '\u{200f}', '\u{202a}',
-        '\u{202b}', '\u{202c}', '\u{202d}', '\u{202e}',
-        '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}',
+        '\u{061c}', '\u{200e}', '\u{200f}', '\u{202a}', '\u{202b}', '\u{202c}',
+        '\u{202d}', '\u{202e}', '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}',
     ];
     let all_bidi = bidi_controls.into_iter().collect::<String>();
     let section = format!(
@@ -2169,10 +2289,12 @@ fn cli_inspection_escapes_bidi_controls_in_verified_json_and_names() {
     let archive = write_stored_profile_zip(
         &[
             ProfileStoredZipMember {
-                name: "manifest.json", bytes: root.as_bytes(),
+                name: "manifest.json",
+                bytes: root.as_bytes(),
             },
             ProfileStoredZipMember {
-                name: &section_path, bytes: section.as_bytes(),
+                name: &section_path,
+                bytes: section.as_bytes(),
             },
         ],
         ProfileStoredZipWriteLimits {
@@ -2181,7 +2303,8 @@ fn cli_inspection_escapes_bidi_controls_in_verified_json_and_names() {
             maximum_entry_bytes: 2048,
             maximum_total_bytes: 3000,
         },
-    ).expect("valid UTF-8 names and JSON may contain bidi controls");
+    )
+    .expect("valid UTF-8 names and JSON may contain bidi controls");
     let source = OwnedProfileFile::new(&archive);
     bootstrap::verify_profile(source.0.clone())
         .expect("bidi controls are valid verified JSON content");
@@ -2192,13 +2315,15 @@ fn cli_inspection_escapes_bidi_controls_in_verified_json_and_names() {
         .output()
         .expect("inspect completely verified source");
     assert!(inspected.status.success());
-    assert!(inspected.stderr.is_empty());
+    assert_eq!(inspected.stderr.as_slice(), b"");
     let display = String::from_utf8(inspected.stdout)
         .expect("inspection output is UTF-8");
     assert!(display.contains(r#""profile_identity":"writer\u2066verified""#));
-    assert!(display.contains(
-        r"sections/rtl\u200fname.json (syntax-checked; untyped):",
-    ));
+    assert!(
+        display.contains(
+            r"sections/rtl\u200fname.json (syntax-checked; untyped):",
+        )
+    );
     assert!(display.contains(r#""spoof":"left\u202eright\u2069end""#));
     assert!(display.contains("\"normal\":\"caf\u{e9}\""));
     let complete_bidi_set = concat!(
@@ -2215,9 +2340,8 @@ fn cli_inspection_escapes_bidi_controls_in_verified_json_and_names() {
 #[cfg(target_os = "linux")]
 #[test]
 fn cli_inspection_escapes_c1_and_unicode_line_separators() {
-    let section_path = format!(
-        "sections/split{}{}page.json", '\u{2028}', '\u{2029}',
-    );
+    let section_path =
+        format!("sections/split{}{}page.json", '\u{2028}', '\u{2029}');
     let section = format!(
         r#"{{"value":"left{}{}{}right"}}"#,
         '\u{007f}', '\u{0085}', '\u{2029}',
@@ -2238,10 +2362,12 @@ fn cli_inspection_escapes_c1_and_unicode_line_separators() {
     let bytes = write_stored_profile_zip(
         &[
             ProfileStoredZipMember {
-                name: "manifest.json", bytes: root.as_bytes(),
+                name: "manifest.json",
+                bytes: root.as_bytes(),
             },
             ProfileStoredZipMember {
-                name: &section_path, bytes: section.as_bytes(),
+                name: &section_path,
+                bytes: section.as_bytes(),
             },
         ],
         ProfileStoredZipWriteLimits {
@@ -2250,7 +2376,8 @@ fn cli_inspection_escapes_c1_and_unicode_line_separators() {
             maximum_entry_bytes: 2048,
             maximum_total_bytes: 3000,
         },
-    ).expect("source may contain valid raw JSON C1 and Unicode separators");
+    )
+    .expect("source may contain valid raw JSON C1 and Unicode separators");
     let source = OwnedProfileFile::new(&bytes);
     bootstrap::verify_profile(source.0.clone())
         .expect("raw C1 and Unicode line separators remain valid source");
@@ -2260,19 +2387,15 @@ fn cli_inspection_escapes_c1_and_unicode_line_separators() {
         .output()
         .expect("print verified source with escaped terminal controls");
     assert!(process.status.success());
-    assert!(process.stderr.is_empty());
+    assert_eq!(process.stderr.as_slice(), b"");
     let display = String::from_utf8(process.stdout)
         .expect("inspection output is valid UTF-8");
     assert!(display.contains(r#""profile_identity":"record\u0085owner""#));
     assert!(display.contains(
         r"sections/split\u2028\u2029page.json (syntax-checked; untyped):",
     ));
-    assert!(display.contains(
-        r#""value":"left\u007f\u0085\u2029right""#,
-    ));
-    for separator in [
-        '\u{007f}', '\u{0085}', '\u{2028}', '\u{2029}',
-    ] {
+    assert!(display.contains(r#""value":"left\u007f\u0085\u2029right""#));
+    for separator in ['\u{007f}', '\u{0085}', '\u{2028}', '\u{2029}'] {
         assert!(!display.contains(separator), "raw terminal separator");
     }
     assert_eq!(fs::read(&source.0).expect("read-only display"), bytes);
@@ -2285,8 +2408,8 @@ fn cli_inspection_escapes_opaque_asset_metadata_without_revealing_bytes() {
     // makes them look the same unless the inspection display escapes it.
     let asset_path = format!("assets/{}opaque.bin", '\u{2029}');
     let invisible_path = format!(
-        "assets/{}opa{}{}que.bin", '\u{2029}', '\u{200b}',
-        '\u{e0100}',
+        "assets/{}opa{}{}que.bin",
+        '\u{2029}', '\u{200b}', '\u{e0100}',
     );
     let opaque_asset = b"\x1b[31mprivate-opaque-91413\xff";
     let other_asset = b"hidden-private-asset-91414";
@@ -2296,7 +2419,9 @@ fn cli_inspection_escapes_opaque_asset_metadata_without_revealing_bytes() {
                 r#"{{"path":"{}","media_type":"application/octet-stream","#,
                 r#""byte_length":{},"sha256":"{}"}}"#,
             ),
-            path, bytes.len(), digest_hex(bytes),
+            path,
+            bytes.len(),
+            digest_hex(bytes),
         )
     };
     let entries = format!(
@@ -2311,19 +2436,27 @@ fn cli_inspection_escapes_opaque_asset_metadata_without_revealing_bytes() {
             r#""optional_features":["opaque{}capability","hidden{}name","#,
             r#""mark{}name","bom{}name","tag{}hidden"],"entries":[{}]}}"#,
         ),
-        '\u{034f}', '\u{009b}', '\u{2060}', '\u{00ad}',
-        '\u{feff}', '\u{e0061}', entries,
+        '\u{034f}',
+        '\u{009b}',
+        '\u{2060}',
+        '\u{00ad}',
+        '\u{feff}',
+        '\u{e0061}',
+        entries,
     );
     let archive = write_stored_profile_zip(
         &[
             ProfileStoredZipMember {
-                name: &asset_path, bytes: opaque_asset,
+                name: &asset_path,
+                bytes: opaque_asset,
             },
             ProfileStoredZipMember {
-                name: &invisible_path, bytes: other_asset,
+                name: &invisible_path,
+                bytes: other_asset,
             },
             ProfileStoredZipMember {
-                name: "manifest.json", bytes: root.as_bytes(),
+                name: "manifest.json",
+                bytes: root.as_bytes(),
             },
         ],
         ProfileStoredZipWriteLimits {
@@ -2332,7 +2465,8 @@ fn cli_inspection_escapes_opaque_asset_metadata_without_revealing_bytes() {
             maximum_entry_bytes: 2048,
             maximum_total_bytes: 3000,
         },
-    ).expect("two distinct opaque asset names must stay distinct");
+    )
+    .expect("two distinct opaque asset names must stay distinct");
     let source = OwnedProfileFile::new(&archive);
     bootstrap::verify_profile(source.0.clone())
         .expect("full payload digest checks do not interpret opaque assets");
@@ -2342,14 +2476,20 @@ fn cli_inspection_escapes_opaque_asset_metadata_without_revealing_bytes() {
         .output()
         .expect("inspect fully verified asset-only profile");
     assert!(process.status.success());
-    assert!(process.stderr.is_empty());
-    let text = String::from_utf8(process.stdout)
-        .expect("terminal-safe UTF-8 display");
+    assert_eq!(process.stderr.as_slice(), b"");
+    let text =
+        String::from_utf8(process.stdout).expect("terminal-safe UTF-8 display");
+    assert_opaque_asset_display(&text);
+    assert_eq!(fs::read(&source.0).expect("input remains exact"), archive);
+}
+
+#[cfg(target_os = "linux")]
+fn assert_opaque_asset_display(text: &str) {
     assert!(text.starts_with("manifest.json (verified):\n"));
     assert!(text.contains(r#""path":"assets/\u2029opaque.bin""#));
-    assert!(text.contains(
-        r#""path":"assets/\u2029opa\u200b\udb40\udd00que.bin""#,
-    ));
+    assert!(
+        text.contains(r#""path":"assets/\u2029opa\u200b\udb40\udd00que.bin""#,)
+    );
     for displayed in [
         r#""asset\u034fonly""#,
         r#""opaque\u009bcapability""#,
@@ -2365,16 +2505,22 @@ fn cli_inspection_escapes_opaque_asset_metadata_without_revealing_bytes() {
         assert!(!text.contains(opaque), "opaque bytes cannot leak");
     }
     for control in [
-        '\u{2029}', '\u{009b}', '\u{001b}', '\u{034f}',
-        '\u{200b}', '\u{2060}', '\u{00ad}', '\u{feff}',
-        '\u{e0061}', '\u{e0100}',
+        '\u{2029}',
+        '\u{009b}',
+        '\u{001b}',
+        '\u{034f}',
+        '\u{200b}',
+        '\u{2060}',
+        '\u{00ad}',
+        '\u{feff}',
+        '\u{e0061}',
+        '\u{e0100}',
     ] {
         assert!(
             !text.contains(control),
             "asset metadata cannot inject invisible terminal characters",
         );
     }
-    assert_eq!(fs::read(&source.0).expect("input remains exact"), archive);
 }
 
 #[cfg(target_os = "linux")]
@@ -2393,16 +2539,21 @@ fn cli_inspection_escapes_visually_blank_unicode_metadata() {
             r#""path":"{}","media_type":"application/json","#,
             r#""byte_length":{},"sha256":"{}"}}]}}"#,
         ),
-        '\u{3164}', '\u{ffa0}', section_path, section.len(),
+        '\u{3164}',
+        '\u{ffa0}',
+        section_path,
+        section.len(),
         digest_hex(section.as_bytes()),
     );
     let archive = write_stored_profile_zip(
         &[
             ProfileStoredZipMember {
-                name: "manifest.json", bytes: root.as_bytes(),
+                name: "manifest.json",
+                bytes: root.as_bytes(),
             },
             ProfileStoredZipMember {
-                name: &section_path, bytes: section.as_bytes(),
+                name: &section_path,
+                bytes: section.as_bytes(),
             },
         ],
         ProfileStoredZipWriteLimits {
@@ -2411,7 +2562,8 @@ fn cli_inspection_escapes_visually_blank_unicode_metadata() {
             maximum_entry_bytes: 2048,
             maximum_total_bytes: 3000,
         },
-    ).expect("blank Unicode scalars remain valid profile metadata");
+    )
+    .expect("blank Unicode scalars remain valid profile metadata");
     let source = OwnedProfileFile::new(&archive);
     bootstrap::verify_profile(source.0.clone())
         .expect("verified source is unchanged by display policy");
@@ -2421,20 +2573,18 @@ fn cli_inspection_escapes_visually_blank_unicode_metadata() {
         .output()
         .expect("inspect exact verified profile in a real CLI");
     assert!(process.status.success());
-    assert!(process.stderr.is_empty());
+    assert_eq!(process.stderr.as_slice(), b"");
     let display = String::from_utf8(process.stdout)
         .expect("terminal display stays valid UTF-8");
     assert!(display.contains(r#""profile_identity":"pre\u3164post""#));
     assert!(display.contains(r#""optional_features":["cap\uffa0ability"]"#));
-    assert!(display.contains(
-        r"sections/left\u115fright.json (syntax-checked; untyped):",
-    ));
-    assert!(display.contains(
-        r#""value":"front\u1160middle\u2800back""#,
-    ));
-    for blank in [
-        '\u{115f}', '\u{1160}', '\u{2800}', '\u{3164}', '\u{ffa0}',
-    ] {
+    assert!(
+        display.contains(
+            r"sections/left\u115fright.json (syntax-checked; untyped):",
+        )
+    );
+    assert!(display.contains(r#""value":"front\u1160middle\u2800back""#,));
+    for blank in ['\u{115f}', '\u{1160}', '\u{2800}', '\u{3164}', '\u{ffa0}'] {
         assert!(!display.contains(blank), "raw visually blank metadata");
     }
     assert_eq!(fs::read(&source.0).expect("source unchanged"), archive);
@@ -2446,16 +2596,14 @@ fn cli_inspection_escapes_non_ascii_unicode_spaces() {
     // Unicode White_Space includes printable-looking separators that are not
     // controls or Default_Ignorable_Code_Point. Ordinary ASCII spaces stay.
     let spaces = [
-        '\u{00a0}', '\u{1680}', '\u{2000}', '\u{2001}',
-        '\u{2002}', '\u{2003}', '\u{2004}', '\u{2005}',
-        '\u{2006}', '\u{2007}', '\u{2008}', '\u{2009}',
+        '\u{00a0}', '\u{1680}', '\u{2000}', '\u{2001}', '\u{2002}', '\u{2003}',
+        '\u{2004}', '\u{2005}', '\u{2006}', '\u{2007}', '\u{2008}', '\u{2009}',
         '\u{200a}', '\u{202f}', '\u{205f}', '\u{3000}',
     ];
     let joined: String = spaces.into_iter().collect();
     let section = format!(r#"{{"spaces":"{joined}","plain":"a b"}}"#);
-    let archive = profile_zip(
-        section.as_bytes(), b"opaque", section.as_bytes(),
-    );
+    let archive =
+        profile_zip(section.as_bytes(), b"opaque", section.as_bytes());
     let source = OwnedProfileFile::new(&archive);
     bootstrap::verify_profile(source.0.clone())
         .expect("non-ASCII whitespace is valid section JSON");
@@ -2465,7 +2613,7 @@ fn cli_inspection_escapes_non_ascii_unicode_spaces() {
         .output()
         .expect("inspect exact verified Unicode whitespace profile");
     assert!(process.status.success());
-    assert!(process.stderr.is_empty());
+    assert_eq!(process.stderr.as_slice(), b"");
     let display = String::from_utf8(process.stdout)
         .expect("terminal display remains UTF-8");
     let mut escaped = String::new();
@@ -2496,15 +2644,21 @@ fn cli_inspection_escapes_unicode_spaces_in_manifest_and_section_names() {
             r#""path":"{}","media_type":"application/json","#,
             r#""byte_length":{},"sha256":"{}"}}]}}"#,
         ),
-        joined, joined, path, section.len(), digest_hex(section),
+        joined,
+        joined,
+        path,
+        section.len(),
+        digest_hex(section),
     );
     let archive = write_stored_profile_zip(
         &[
             ProfileStoredZipMember {
-                name: "manifest.json", bytes: root.as_bytes(),
+                name: "manifest.json",
+                bytes: root.as_bytes(),
             },
             ProfileStoredZipMember {
-                name: &path, bytes: section,
+                name: &path,
+                bytes: section,
             },
         ],
         ProfileStoredZipWriteLimits {
@@ -2513,7 +2667,8 @@ fn cli_inspection_escapes_unicode_spaces_in_manifest_and_section_names() {
             maximum_entry_bytes: 2048,
             maximum_total_bytes: 3000,
         },
-    ).expect("verified manifest and section paths may contain Unicode spaces");
+    )
+    .expect("verified manifest and section paths may contain Unicode spaces");
     let source = OwnedProfileFile::new(&archive);
     bootstrap::verify_profile(source.0.clone())
         .expect("exact source passes ZIP, manifest, SHA and section syntax");
@@ -2523,7 +2678,7 @@ fn cli_inspection_escapes_unicode_spaces_in_manifest_and_section_names() {
         .output()
         .expect("inspect admitted source through the real CLI");
     assert!(process.status.success());
-    assert!(process.stderr.is_empty());
+    assert_eq!(process.stderr.as_slice(), b"");
     let display = String::from_utf8(process.stdout)
         .expect("inspection display is valid UTF-8");
     let mut escaped = String::new();
@@ -2534,9 +2689,9 @@ fn cli_inspection_escapes_unicode_spaces_in_manifest_and_section_names() {
     }
     assert!(display.contains(&format!(r#""writer{escaped}one""#)));
     assert!(display.contains(&format!(r#""label{escaped}two""#)));
-    assert!(display.contains(&format!(
-        r#""sections/left{escaped}right.json""#,
-    )));
+    assert!(
+        display.contains(&format!(r#""sections/left{escaped}right.json""#))
+    );
     assert!(display.contains(&format!(
         "sections/left{escaped}right.json (syntax-checked; untyped):",
     )));
@@ -2550,15 +2705,26 @@ fn cli_inspection_escapes_default_ignorable_unicode_ranges() {
     // Enumerate the full current Default_Ignorable_Code_Point range table,
     // including reserved supplementary scalars, not just range endpoints.
     let ranges: [(u32, u32); 17] = [
-        (0x00ad, 0x00ad), (0x034f, 0x034f), (0x061c, 0x061c),
-        (0x115f, 0x1160), (0x17b4, 0x17b5), (0x180b, 0x180f),
-        (0x200b, 0x200f), (0x202a, 0x202e), (0x2060, 0x206f),
-        (0x3164, 0x3164), (0xfe00, 0xfe0f), (0xfeff, 0xfeff),
-        (0xffa0, 0xffa0), (0xfff0, 0xfff8),
-        (0x1bca0, 0x1bca3), (0x1d173, 0x1d17a),
+        (0x00ad, 0x00ad),
+        (0x034f, 0x034f),
+        (0x061c, 0x061c),
+        (0x115f, 0x1160),
+        (0x17b4, 0x17b5),
+        (0x180b, 0x180f),
+        (0x200b, 0x200f),
+        (0x202a, 0x202e),
+        (0x2060, 0x206f),
+        (0x3164, 0x3164),
+        (0xfe00, 0xfe0f),
+        (0xfeff, 0xfeff),
+        (0xffa0, 0xffa0),
+        (0xfff0, 0xfff8),
+        (0x1bca0, 0x1bca3),
+        (0x1d173, 0x1d17a),
         (0xe0000, 0xe0fff),
     ];
-    let invisible: String = ranges.into_iter()
+    let invisible: String = ranges
+        .into_iter()
         .flat_map(|(start, end)| (start..=end).filter_map(char::from_u32))
         .collect();
     assert_eq!(invisible.chars().count(), 4_174);
@@ -2571,15 +2737,18 @@ fn cli_inspection_escapes_default_ignorable_unicode_ranges() {
             r#""path":"sections/format.json","media_type":"application/json","#,
             r#""byte_length":{},"sha256":"{}"}}]}}"#,
         ),
-        section.len(), digest_hex(section.as_bytes()),
+        section.len(),
+        digest_hex(section.as_bytes()),
     );
     let archive = write_stored_profile_zip(
         &[
             ProfileStoredZipMember {
-                name: "manifest.json", bytes: root.as_bytes(),
+                name: "manifest.json",
+                bytes: root.as_bytes(),
             },
             ProfileStoredZipMember {
-                name: "sections/format.json", bytes: section.as_bytes(),
+                name: "sections/format.json",
+                bytes: section.as_bytes(),
             },
         ],
         ProfileStoredZipWriteLimits {
@@ -2588,7 +2757,8 @@ fn cli_inspection_escapes_default_ignorable_unicode_ranges() {
             maximum_entry_bytes: 32 * 1024,
             maximum_total_bytes: 64 * 1024,
         },
-    ).expect("valid JSON may contain ignorable Unicode scalars");
+    )
+    .expect("valid JSON may contain ignorable Unicode scalars");
     let source = OwnedProfileFile::new(&archive);
     bootstrap::verify_profile(source.0.clone())
         .expect("verified bytes can contain default-ignorable scalars");
@@ -2598,7 +2768,7 @@ fn cli_inspection_escapes_default_ignorable_unicode_ranges() {
         .output()
         .expect("inspect default-ignorable profile in a real CLI");
     assert!(process.status.success());
-    assert!(process.stderr.is_empty());
+    assert_eq!(process.stderr.as_slice(), b"");
     let display = String::from_utf8(process.stdout)
         .expect("terminal display remains UTF-8");
     // Independently encode exact UTF-16 code units to printable JSON text.
@@ -2630,7 +2800,9 @@ fn cli_section_order_is_stable_across_manifest_declaration_orders() {
                 r#""media_type":"application/json","byte_length":{},"#,
                 r#""sha256":"{}"}}"#,
             ),
-            name, bytes.len(), digest_hex(bytes),
+            name,
+            bytes.len(),
+            digest_hex(bytes),
         )
     };
     let first_entry = entry("a", first);
@@ -2699,9 +2871,8 @@ fn cli_preserves_exact_non_utf8_selected_profile_path() {
     use std::os::unix::ffi::OsStringExt as _;
 
     let section = br#"{"strokes":[1,2]}"#;
-    let mut owned = OwnedProfileFile::new(&profile_zip(
-        section, b"\0\xffbinary", section,
-    ));
+    let mut owned =
+        OwnedProfileFile::new(&profile_zip(section, b"\0\xffbinary", section));
     let mut selected_bytes = owned.0.as_os_str().as_encoded_bytes().to_vec();
     selected_bytes.push(0xff);
     let selected = PathBuf::from(OsString::from_vec(selected_bytes));
@@ -2720,7 +2891,7 @@ fn cli_preserves_exact_non_utf8_selected_profile_path() {
         .expect("OS argv accepts caller-selected opaque path bytes");
     assert!(executed.status.success());
     assert_eq!(executed.stdout, inspected.as_bytes());
-    assert!(executed.stderr.is_empty());
+    assert_eq!(executed.stderr.as_slice(), b"");
     let verified = Command::new(env!("CARGO_BIN_EXE_atrament"))
         .args(["profile", "verify"])
         .arg(&owned.0)
@@ -2728,7 +2899,7 @@ fn cli_preserves_exact_non_utf8_selected_profile_path() {
         .expect("verify exact non-UTF8 selected path");
     assert!(verified.status.success());
     assert_eq!(verified.stdout, b"profile verified (no session import)\n");
-    assert!(verified.stderr.is_empty());
+    assert_eq!(verified.stderr.as_slice(), b"");
 }
 
 #[cfg(target_os = "linux")]
@@ -2750,9 +2921,12 @@ fn cli_refuses_later_invalid_section_without_partial_stdout() {
             r#""media_type":"application/octet-stream","#,
             r#""byte_length":{},"sha256":"{}"}}]}}"#,
         ),
-        first.len(), digest_hex(first),
-        later.len(), digest_hex(later),
-        opaque.len(), digest_hex(opaque),
+        first.len(),
+        digest_hex(first),
+        later.len(),
+        digest_hex(later),
+        opaque.len(),
+        digest_hex(opaque),
     );
     let archive = write_stored_profile_zip(
         &[
@@ -2796,7 +2970,7 @@ fn cli_refuses_later_invalid_section_without_partial_stdout() {
         .output()
         .expect("run actually malformed second-section profile CLI");
     assert!(!executed.status.success());
-    assert!(executed.stdout.is_empty());
+    assert_eq!(executed.stdout.as_slice(), b"");
     let stderr = String::from_utf8_lossy(&executed.stderr);
     assert!(stderr.contains("SectionJson { index: 1"));
     let verification = Command::new(env!("CARGO_BIN_EXE_atrament"))
@@ -2805,7 +2979,7 @@ fn cli_refuses_later_invalid_section_without_partial_stdout() {
         .output()
         .expect("verify must reject invalid later section too");
     assert!(!verification.status.success());
-    assert!(verification.stdout.is_empty());
+    assert_eq!(verification.stdout.as_slice(), b"");
     let verification_stderr = String::from_utf8_lossy(&verification.stderr);
     assert!(verification_stderr.contains("SectionJson { index: 1"));
     for private in [
@@ -2826,16 +3000,18 @@ fn cli_refuses_duplicate_optional_feature_without_partial_stdout() {
     let section = br#"{"private":"section-payload-8621"}"#;
     let asset = b"asset-payload-9345";
     let secret_feature = "feature-private-7103";
-    let optional_features = format!(
-        r#"["{secret_feature}","{secret_feature}"]"#,
-    );
+    let optional_features =
+        format!(r#"["{secret_feature}","{secret_feature}"]"#);
     let archive = profile_zip_with_optional_features(
-        section, asset, section, "application/json", &optional_features,
+        section,
+        asset,
+        section,
+        "application/json",
+        &optional_features,
     );
     let mut owned = OwnedProfileFile::new(&archive);
-    let private_path = owned
-        .0
-        .with_extension("private-selection-5218.atrament");
+    let private_path =
+        owned.0.with_extension("private-selection-5218.atrament");
     fs::rename(&owned.0, &private_path)
         .expect("rename only owned profile to private selected path");
     owned.0 = private_path;
@@ -2850,7 +3026,7 @@ fn cli_refuses_duplicate_optional_feature_without_partial_stdout() {
         .output()
         .expect("run duplicate-feature profile CLI");
     assert!(!executed.status.success());
-    assert!(executed.stdout.is_empty());
+    assert_eq!(executed.stdout.as_slice(), b"");
     let stderr = String::from_utf8_lossy(&executed.stderr);
     assert!(stderr.contains("DuplicateFeatureIdentifier"));
     for private in [
@@ -2870,9 +3046,8 @@ fn cli_refuses_crc_valid_sha_forgery_without_printing_manifest() {
     let authentic = br#"{"genuine":true}"#;
     let forgery = br#"{"genuine":null}"#;
     assert_eq!(authentic.len(), forgery.len());
-    let owned = OwnedProfileFile::new(&profile_zip(
-        forgery, b"binary", authentic,
-    ));
+    let owned =
+        OwnedProfileFile::new(&profile_zip(forgery, b"binary", authentic));
     let error = bootstrap::inspect_profile(owned.0.clone())
         .expect_err("CRC-correct forged data cannot inspect");
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
@@ -2882,8 +3057,8 @@ fn cli_refuses_crc_valid_sha_forgery_without_printing_manifest() {
         .output()
         .expect("run forged profile CLI");
     assert!(!executed.status.success());
-    assert!(executed.stdout.is_empty());
-    assert!(!executed.stderr.is_empty());
+    assert_eq!(executed.stdout.as_slice(), b"");
+    assert_ne!(executed.stderr.as_slice(), b"");
 }
 
 #[cfg(target_os = "linux")]
@@ -2892,7 +3067,10 @@ fn cli_refuses_sha_valid_json_with_non_json_type_without_stdout() {
     let json = br#"{"strokes":[]}"#;
     for media_type in ["image/png", "text/plain"] {
         let archive = profile_zip_with_media_type(
-            json, b"\xff\x00opaque", json, media_type,
+            json,
+            b"\xff\x00opaque",
+            json,
+            media_type,
         );
         let owned = OwnedProfileFile::new(&archive);
         let error = bootstrap::inspect_profile(owned.0.clone())
@@ -2905,8 +3083,8 @@ fn cli_refuses_sha_valid_json_with_non_json_type_without_stdout() {
             .output()
             .expect("run securely selected profile inspector");
         assert!(!executed.status.success());
-        assert!(executed.stdout.is_empty());
-        assert!(!executed.stderr.is_empty());
+        assert_eq!(executed.stdout.as_slice(), b"");
+        assert_ne!(executed.stderr.as_slice(), b"");
     }
 }
 
@@ -2914,9 +3092,8 @@ fn cli_refuses_sha_valid_json_with_non_json_type_without_stdout() {
 #[test]
 fn cli_refuses_sha_valid_but_invalid_section_json_atomically() {
     let section = b"{invalid-json}";
-    let owned = OwnedProfileFile::new(&profile_zip(
-        section, b"binary", section,
-    ));
+    let owned =
+        OwnedProfileFile::new(&profile_zip(section, b"binary", section));
     let error = bootstrap::inspect_profile(owned.0.clone())
         .expect_err("section JSON syntax must be checked");
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
@@ -2926,31 +3103,42 @@ fn cli_refuses_sha_valid_but_invalid_section_json_atomically() {
         .output()
         .expect("run malformed section CLI");
     assert!(!executed.status.success());
-    assert!(executed.stdout.is_empty());
+    assert_eq!(executed.stdout.as_slice(), b"");
 }
-
 
 #[test]
 fn native_handwriting_preview_replays_seeded_glyph_and_refuses_bad_input() {
-    use atrament_session_runtime::HandwritingProfileGateway;
     use atrament_handwriting_statistics::{
         Dimension, DimensionStatistics, HandwritingStatisticsProfile,
         ScalarStatistics,
     };
     use atrament_handwriting_statistics_json::encode_statistics_json;
+    use atrament_session_runtime::HandwritingProfileGateway as _;
     use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
     let baseline = HandwritingStatisticsProfile::baseline(73);
     let override_stats = ScalarStatistics {
-        minimum: 2_000, maximum: 4_000, mean: 3_200,
-        median: 3_200, standard_deviation: 250,
+        minimum: 2_000,
+        maximum: 4_000,
+        mean: 3_200,
+        median: 3_200,
+        standard_deviation: 250,
     };
-    let profile = baseline.with_glyph("ñ", DimensionStatistics {
-        dimension: Dimension::Height, statistics: override_stats,
-    }, &UnicodeGraphemeSegmentation).expect("admitted exact glyph");
-    let json = String::from_utf8(encode_statistics_json(
-        &profile, &UnicodeGraphemeSegmentation,
-    ).expect("canonical handwriting")).expect("UTF8");
+    let profile = baseline
+        .with_glyph(
+            "\u{f1}",
+            DimensionStatistics {
+                dimension: Dimension::Height,
+                statistics: override_stats,
+            },
+            &UnicodeGraphemeSegmentation,
+        )
+        .expect("admitted exact glyph");
+    let json = String::from_utf8(
+        encode_statistics_json(&profile, &UnicodeGraphemeSegmentation)
+            .expect("canonical handwriting"),
+    )
+    .expect("UTF8");
     let request = |glyph: &str, dimension: &str, occurrence: &str| {
         format!(
             "{{\"profile\":{json},\"grapheme\":\"{glyph}\",\
@@ -2958,107 +3146,266 @@ fn native_handwriting_preview_replays_seeded_glyph_and_refuses_bad_input() {
         )
     };
     let gateway = bootstrap::HandwritingGateway;
-    let first = gateway.numeric_preview_json(
-        request("ñ", "height", "9").as_bytes(),
-    ).expect("seeded native preview");
-    assert_eq!(first, gateway.numeric_preview_json(
-        request("ñ", "height", "9").as_bytes(),
-    ).expect("same seed and occurrence"));
+    let first = gateway
+        .numeric_preview_json(request("\u{f1}", "height", "9").as_bytes())
+        .expect("seeded native preview");
+    assert_eq!(
+        first,
+        gateway
+            .numeric_preview_json(request("\u{f1}", "height", "9").as_bytes(),)
+            .expect("same seed and occurrence")
+    );
     assert!(String::from_utf8_lossy(&first).starts_with("{\"value\":"));
-    let inherited = gateway.numeric_preview_json(
-        request("n", "height", "9").as_bytes(),
-    ).expect("non-overridden grapheme inherits mean");
+    let inherited = gateway
+        .numeric_preview_json(request("n", "height", "9").as_bytes())
+        .expect("non-overridden grapheme inherits mean");
     assert_eq!(inherited, br#"{"value":3000}"#);
     for (glyph, dimension, occurrence) in [
         ("ab", "height", "9"),
-        ("ñ", "invalid", "9"),
-        ("ñ", "height", "-1"),
-        ("ñ", "height", "18446744073709551616"),
+        ("\u{f1}", "invalid", "9"),
+        ("\u{f1}", "height", "-1"),
+        ("\u{f1}", "height", "18446744073709551616"),
     ] {
-        assert!(gateway.numeric_preview_json(
-            request(glyph, dimension, occurrence).as_bytes(),
-        ).is_err());
+        assert!(
+            gateway
+                .numeric_preview_json(
+                    request(glyph, dimension, occurrence).as_bytes(),
+                )
+                .is_err()
+        );
     }
-    let duplicate = request("ñ", "height", "9").replace(
-        "\"occurrence\":9}", "\"occurrence\":9,\"occurrence\":7}",
-    );
+    let duplicate = request("\u{f1}", "height", "9")
+        .replace("\"occurrence\":9}", "\"occurrence\":9,\"occurrence\":7}");
     assert!(gateway.numeric_preview_json(duplicate.as_bytes()).is_err());
-    let unknown = request("ñ", "height", "9").replace(
-        "\"occurrence\":9}", "\"occurrence\":9,\"extra\":true}",
-    );
+    let unknown = request("\u{f1}", "height", "9")
+        .replace("\"occurrence\":9}", "\"occurrence\":9,\"extra\":true}");
     assert!(gateway.numeric_preview_json(unknown.as_bytes()).is_err());
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn localhost_file_store_roundtrips_two_native_profiles_and_refuses_stale() {
-    use atrament_notebook_profile::NotebookProfile;
-    use atrament_session_runtime::{
-        ProfileFileError, ProfileFileGateway, ProfileFileKind,
-    };
+    use std::os::unix::fs::symlink;
+
     use atrament_handwriting_statistics::HandwritingStatisticsProfile;
     use atrament_handwriting_statistics_json::encode_statistics_json;
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_session_runtime::{
+        ProfileFileError, ProfileFileGateway as _, ProfileFileKind,
+    };
     use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
     let parent = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.temp");
     fs::create_dir_all(&parent).expect("project scratch directory");
     let directory = OwnedProfileDirectory::new(parent.join(format!(
-        "local-profile-store-{}-{}", process::id(),
+        "local-profile-store-{}-{}",
+        process::id(),
         TEST_FILE_ID.fetch_add(1, Ordering::Relaxed),
     )));
     let store = bootstrap::ProfileFileStore::from_directory(&directory.0)
         .expect("real user-selected directory");
-    let notebook = NotebookProfile::default().canonical_json()
+    let notebook = NotebookProfile::default()
+        .canonical_json()
         .expect("native default notebook JSON");
     let handwriting = encode_statistics_json(
         &HandwritingStatisticsProfile::baseline(19),
         &UnicodeGraphemeSegmentation,
-    ).expect("native handwriting JSON");
+    )
+    .expect("native handwriting JSON");
+    let (revision, edited) = assert_notebook_store_revisions(&store, &notebook);
+    let next_revision = assert_revision_update(
+        &store, &directory, &notebook, &revision, &edited,
+    );
+    let ink_revision = assert_handwriting_store_revisions(&store, &handwriting);
+
+    assert_http_profile_routes(
+        &store,
+        &directory,
+        &notebook,
+        &revision,
+        &next_revision,
+        &ink_revision,
+    );
+
+    let outside = OwnedProfileFile::new(notebook.as_bytes());
+    symlink(&outside.0, directory.0.join("notebook-link.json"))
+        .expect("test-owned symlink");
+    assert_eq!(
+        store
+            .load(ProfileFileKind::Notebook, "link.json")
+            .expect_err("symlink cannot leak outside file"),
+        ProfileFileError::InvalidInput,
+    );
+    assert_eq!(
+        store.save(
+            ProfileFileKind::Notebook,
+            "link.json",
+            edited.as_bytes(),
+            "new"
+        ),
+        Err(ProfileFileError::InvalidInput)
+    );
+    fs::remove_file(directory.0.join("notebook-link.json"))
+        .expect("remove test-owned symlink");
+    fs::remove_file(directory.0.join("notebook-paper.json"))
+        .expect("remove test-owned notebook");
+    fs::remove_file(directory.0.join("handwriting-paper.json"))
+        .expect("remove test-owned handwriting");
+}
+
+#[cfg(target_os = "linux")]
+fn assert_notebook_store_revisions(
+    store: &bootstrap::ProfileFileStore,
+    notebook: &str,
+) -> (String, String) {
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_session_runtime::{
+        ProfileFileError, ProfileFileGateway as _, ProfileFileKind,
+    };
     let invalid_name = store.save(
-        ProfileFileKind::Notebook, "../escape.json", notebook.as_bytes(), "new",
+        ProfileFileKind::Notebook,
+        "../escape.json",
+        notebook.as_bytes(),
+        "new",
     );
     assert_eq!(invalid_name, Err(ProfileFileError::InvalidInput));
-    let revision = store.save(
-        ProfileFileKind::Notebook, "paper.json", notebook.as_bytes(), "new",
-    ).expect("create selected notebook profile");
+    let revision = store
+        .save(
+            ProfileFileKind::Notebook,
+            "paper.json",
+            notebook.as_bytes(),
+            "new",
+        )
+        .expect("create selected notebook profile");
     assert!(revision.starts_with("sha256:"));
     assert_eq!(revision.len(), 71);
-    let loaded = store.load(ProfileFileKind::Notebook, "paper.json")
+    let loaded = store
+        .load(ProfileFileKind::Notebook, "paper.json")
         .expect("reopen selected notebook profile");
     assert_eq!(loaded.json, notebook.as_bytes());
     assert_eq!(loaded.revision, revision);
-    assert_eq!(store.save(ProfileFileKind::Notebook, "paper.json",
-        notebook.as_bytes(), "new"), Err(ProfileFileError::Conflict));
-    assert_eq!(store.save(ProfileFileKind::Notebook, "paper.json",
-        br#"{"bad":true}"#, &revision), Err(ProfileFileError::InvalidInput));
-    assert_eq!(store.save(ProfileFileKind::Notebook, "paper.json",
-        notebook.as_bytes(), concat!(
-            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        )),
-        Err(ProfileFileError::Conflict));
-    let mut updated = NotebookProfile::default();
-    updated.page_numbers = true;
+    assert_eq!(
+        store.save(
+            ProfileFileKind::Notebook,
+            "paper.json",
+            notebook.as_bytes(),
+            "new"
+        ),
+        Err(ProfileFileError::Conflict)
+    );
+    assert_eq!(
+        store.save(
+            ProfileFileKind::Notebook,
+            "paper.json",
+            br#"{"bad":true}"#,
+            &revision
+        ),
+        Err(ProfileFileError::InvalidInput)
+    );
+    assert_eq!(
+        store.save(
+            ProfileFileKind::Notebook,
+            "paper.json",
+            notebook.as_bytes(),
+            concat!(
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            )
+        ),
+        Err(ProfileFileError::Conflict)
+    );
+    let updated = NotebookProfile {
+        page_numbers: true,
+        ..NotebookProfile::default()
+    };
     let edited = updated.canonical_json().expect("edited native notebook");
-    let next_revision = store.save(ProfileFileKind::Notebook, "paper.json",
-        edited.as_bytes(), &revision).expect("replace observed notebook");
-    assert_ne!(revision, next_revision);
-    assert_eq!(store.load(ProfileFileKind::Notebook, "paper.json")
-        .expect("reopen modified notebook").json, edited.as_bytes());
-    assert_eq!(store.save(ProfileFileKind::Notebook, "paper.json",
-        notebook.as_bytes(), &revision), Err(ProfileFileError::Conflict));
-    assert_eq!(fs::read(directory.0.join("notebook-paper.json"))
-        .expect("changed disk file"), edited.as_bytes());
+    (revision, edited)
+}
 
-    let ink_revision = store.save(ProfileFileKind::Handwriting, "paper.json",
-        &handwriting, "new").expect("separate native handwriting profile");
-    let ink = store.load(ProfileFileKind::Handwriting, "paper.json")
+#[cfg(target_os = "linux")]
+fn assert_revision_update(
+    store: &bootstrap::ProfileFileStore,
+    directory: &OwnedProfileDirectory,
+    notebook: &str,
+    revision: &str,
+    edited: &str,
+) -> String {
+    use atrament_session_runtime::{
+        ProfileFileError, ProfileFileGateway as _, ProfileFileKind,
+    };
+    let next_revision = store
+        .save(
+            ProfileFileKind::Notebook,
+            "paper.json",
+            edited.as_bytes(),
+            revision,
+        )
+        .expect("replace observed notebook");
+    assert_ne!(revision, next_revision);
+    assert_eq!(
+        store
+            .load(ProfileFileKind::Notebook, "paper.json")
+            .expect("reopen modified notebook")
+            .json,
+        edited.as_bytes()
+    );
+    assert_eq!(
+        store.save(
+            ProfileFileKind::Notebook,
+            "paper.json",
+            notebook.as_bytes(),
+            revision
+        ),
+        Err(ProfileFileError::Conflict)
+    );
+    assert_eq!(
+        fs::read(directory.0.join("notebook-paper.json"))
+            .expect("changed disk file"),
+        edited.as_bytes()
+    );
+
+    next_revision
+}
+
+#[cfg(target_os = "linux")]
+fn assert_handwriting_store_revisions(
+    store: &bootstrap::ProfileFileStore,
+    handwriting: &[u8],
+) -> String {
+    use atrament_session_runtime::{
+        ProfileFileError, ProfileFileGateway as _, ProfileFileKind,
+    };
+    let ink_revision = store
+        .save(
+            ProfileFileKind::Handwriting,
+            "paper.json",
+            handwriting,
+            "new",
+        )
+        .expect("separate native handwriting profile");
+    let ink = store
+        .load(ProfileFileKind::Handwriting, "paper.json")
         .expect("reopen handwriting statistics");
     assert_eq!(ink.revision, ink_revision);
     assert_eq!(ink.json, handwriting);
-    assert_eq!(store.load(ProfileFileKind::Notebook, "missing.json")
-        .expect_err("missing must refuse"), ProfileFileError::NotFound);
+    assert_eq!(
+        store
+            .load(ProfileFileKind::Notebook, "missing.json")
+            .expect_err("missing must refuse"),
+        ProfileFileError::NotFound
+    );
 
+    ink_revision
+}
+
+fn assert_http_profile_routes(
+    store: &bootstrap::ProfileFileStore,
+    directory: &OwnedProfileDirectory,
+    notebook: &str,
+    revision: &str,
+    next_revision: &str,
+    ink_revision: &str,
+) {
     // The production HTTP router and production file gateway are bound
     // together here: unauthorized/stale POSTs cannot change the actual disk.
     use atrament_session_runtime::{RouteRequestContext, route_request};
@@ -3067,69 +3414,94 @@ fn localhost_file_store_roundtrips_two_native_profiles_and_refuses_stale() {
     let origin = format!("http://{host}");
     let handshake = atrament_session_handshake::HandshakeService;
     let context = RouteRequestContext::new(
-        host, &origin, &secret, &handshake,
-        &bootstrap::HandwritingGateway, &bootstrap::NotebookGateway,
-    ).with_profile_file_gateway(&store);
+        host,
+        &origin,
+        &secret,
+        &handshake,
+        &bootstrap::HandwritingGateway,
+        &bootstrap::NotebookGateway,
+    )
+    .with_profile_file_gateway(store);
     let mut application =
         atrament_session_application::SessionApplication::default();
-    let request = |method: &str, endpoint: &str, revision: &str,
-        authenticated: bool, body: &str| -> Vec<u8> {
+    let request = |method: &str,
+                   endpoint: &str,
+                   header_revision: &str,
+                   authenticated: bool,
+                   body: &str|
+     -> Vec<u8> {
         let authorization = if authenticated {
             format!("Authorization: Bearer {secret}\r\n")
-        } else { String::new() };
+        } else {
+            String::new()
+        };
         let mutation = if method == "POST" {
-            format!("Origin: {origin}\r\nContent-Type: application/json\r\n\
-                X-Atrament-Profile-Revision: {revision}\r\n\
+            format!(
+                "Origin: {origin}\r\nContent-Type: application/json\r\n\
+                X-Atrament-Profile-Revision: {header_revision}\r\n\
                 Content-Length: {}\r\n",
-                body.len())
-        } else { String::new() };
-        format!("{method} {endpoint} HTTP/1.1\r\nHost: {host}\r\n\
+                body.len()
+            )
+        } else {
+            String::new()
+        };
+        format!(
+            "{method} {endpoint} HTTP/1.1\r\nHost: {host}\r\n\
             {authorization}{mutation}\
-            X-Atrament-Profile-Name: paper.json\r\n\r\n{body}")
-            .into_bytes()
+            X-Atrament-Profile-Name: paper.json\r\n\r\n{body}"
+        )
+        .into_bytes()
     };
     let snapshot = fs::read(directory.0.join("notebook-paper.json"))
         .expect("save baseline exists");
-    let bad = route_request(&request("POST", "/api/notebook/file",
-        &next_revision, false, &notebook), &context, &mut application);
-    assert!(bad.starts_with(b"HTTP/1.1 401 Unauthorized"));
-    assert_eq!(fs::read(directory.0.join("notebook-paper.json"))
-        .expect("unauthorized leaves disk unchanged"), snapshot);
-    let stale = route_request(&request("POST", "/api/notebook/file",
-        &revision, true, &notebook), &context, &mut application);
-    assert!(stale.starts_with(b"HTTP/1.1 409 Conflict"));
-    assert_eq!(fs::read(directory.0.join("notebook-paper.json"))
-        .expect("stale leaves disk unchanged"), snapshot);
-    let read = route_request(&request("GET", "/api/notebook/file",
-        "", true, ""), &context, &mut application);
-    assert!(read.starts_with(b"HTTP/1.1 200 OK"));
-    assert!(String::from_utf8_lossy(&read).contains(&next_revision));
-    let save = route_request(&request("POST", "/api/notebook/file",
-        &next_revision, true, &notebook), &context, &mut application);
-    assert!(save.starts_with(b"HTTP/1.1 200 OK"),
-        "current revision allows a canonical notebook edit");
-    assert_eq!(fs::read(directory.0.join("notebook-paper.json"))
-        .expect("HTTP file commit exists"), notebook.as_bytes());
-    let ink_read = route_request(&request("GET", "/api/handwriting/file",
-        "", true, ""), &context, &mut application);
-    assert!(ink_read.starts_with(b"HTTP/1.1 200 OK"));
-    assert!(String::from_utf8_lossy(&ink_read).contains(&ink_revision));
-
-    let outside = OwnedProfileFile::new(notebook.as_bytes());
-    std::os::unix::fs::symlink(
-        &outside.0, directory.0.join("notebook-link.json"),
-    )
-        .expect("test-owned symlink");
-    assert_eq!(store.load(ProfileFileKind::Notebook, "link.json")
-        .expect_err("symlink cannot leak outside file"),
-        ProfileFileError::InvalidInput,
+    let bad = route_request(
+        &request("POST", "/api/notebook/file", next_revision, false, notebook),
+        &context,
+        &mut application,
     );
-    assert_eq!(store.save(ProfileFileKind::Notebook, "link.json",
-        edited.as_bytes(), "new"), Err(ProfileFileError::InvalidInput));
-    fs::remove_file(directory.0.join("notebook-link.json"))
-        .expect("remove test-owned symlink");
-    fs::remove_file(directory.0.join("notebook-paper.json"))
-        .expect("remove test-owned notebook");
-    fs::remove_file(directory.0.join("handwriting-paper.json"))
-        .expect("remove test-owned handwriting");
+    assert!(bad.starts_with(b"HTTP/1.1 401 Unauthorized"));
+    assert_eq!(
+        fs::read(directory.0.join("notebook-paper.json"))
+            .expect("unauthorized leaves disk unchanged"),
+        snapshot
+    );
+    let stale = route_request(
+        &request("POST", "/api/notebook/file", revision, true, notebook),
+        &context,
+        &mut application,
+    );
+    assert!(stale.starts_with(b"HTTP/1.1 409 Conflict"));
+    assert_eq!(
+        fs::read(directory.0.join("notebook-paper.json"))
+            .expect("stale leaves disk unchanged"),
+        snapshot
+    );
+    let read = route_request(
+        &request("GET", "/api/notebook/file", "", true, ""),
+        &context,
+        &mut application,
+    );
+    assert!(read.starts_with(b"HTTP/1.1 200 OK"));
+    assert!(String::from_utf8_lossy(&read).contains(next_revision));
+    let save = route_request(
+        &request("POST", "/api/notebook/file", next_revision, true, notebook),
+        &context,
+        &mut application,
+    );
+    assert!(
+        save.starts_with(b"HTTP/1.1 200 OK"),
+        "current revision allows a canonical notebook edit"
+    );
+    assert_eq!(
+        fs::read(directory.0.join("notebook-paper.json"))
+            .expect("HTTP file commit exists"),
+        notebook.as_bytes()
+    );
+    let ink_read = route_request(
+        &request("GET", "/api/handwriting/file", "", true, ""),
+        &context,
+        &mut application,
+    );
+    assert!(ink_read.starts_with(b"HTTP/1.1 200 OK"));
+    assert!(String::from_utf8_lossy(&ink_read).contains(ink_revision));
 }
