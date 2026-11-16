@@ -44,7 +44,7 @@ const FIVE_MM: Length = Length::from_micrometres(5_000);
 const TEN_MM: Length = Length::from_micrometres(10_000);
 const TWENTY_MM: Length = Length::from_micrometres(20_000);
 
-fn base_profile(binding_edge: BindingEdge) -> PageProfile {
+const fn base_profile(binding_edge: BindingEdge) -> PageProfile {
     PageProfile {
         binding_edge,
         border_shape: BorderShape::RoundedRectangle,
@@ -74,21 +74,21 @@ fn base_profile(binding_edge: BindingEdge) -> PageProfile {
     }
 }
 
-fn next_profile_value(seed: &mut u64) -> u64 {
+const fn next_profile_value(seed: &mut u64) -> u64 {
     *seed = seed
         .wrapping_mul(6_364_136_223_846_793_005)
         .wrapping_add(1_442_695_040_888_963_407);
     *seed >> 32
 }
 
-fn next_validation_value(seed: &mut u64) -> u64 {
+const fn next_validation_value(seed: &mut u64) -> u64 {
     *seed = seed
         .wrapping_mul(2_862_933_555_777_941_757)
         .wrapping_add(3_037_000_493);
     *seed
 }
 
-fn next_validation_selector(seed: &mut u64) -> u64 {
+const fn next_validation_selector(seed: &mut u64) -> u64 {
     next_validation_value(seed) >> 32
 }
 
@@ -116,8 +116,12 @@ fn reference_writable_region(
     if width == 0 || height == 0 {
         return Err(PageProfileError::PrintableRegionIsEmpty);
     }
-    let right = u128::from(printable.x.micrometres()) + u128::from(width);
-    let bottom = u128::from(printable.y.micrometres()) + u128::from(height);
+    let right = u128::from(printable.x.micrometres())
+        .checked_add(u128::from(width))
+        .ok_or(PageProfileError::PrintableRegionOutsideSheet)?;
+    let bottom = u128::from(printable.y.micrometres())
+        .checked_add(u128::from(height))
+        .ok_or(PageProfileError::PrintableRegionOutsideSheet)?;
     if right > u128::from(u64::MAX)
         || bottom > u128::from(u64::MAX)
         || right > u128::from(sheet_width)
@@ -210,11 +214,7 @@ fn reference_profile_validation(
     ) {
         return Err(PageProfileError::PatternSpacingIsZero);
     }
-    if profile.border_shape != BorderShape::RoundedRectangle {
-        if profile.corner_roundness != Length::ZERO {
-            return Err(PageProfileError::CornerRoundnessRequiresRoundedBorder);
-        }
-    } else {
+    if profile.border_shape == BorderShape::RoundedRectangle {
         let doubled = u128::from(profile.corner_roundness.micrometres()) * 2;
         if doubled > u128::from(profile.printable_region.width.micrometres())
             || doubled
@@ -222,6 +222,8 @@ fn reference_profile_validation(
         {
             return Err(PageProfileError::CornerRoundnessExceedsPrintableRegion);
         }
+    } else if profile.corner_roundness != Length::ZERO {
+        return Err(PageProfileError::CornerRoundnessRequiresRoundedBorder);
     }
     reference_writable_region(profile).map(|_writable| ())
 }
@@ -249,9 +251,11 @@ fn reference_printable_region(
         return Err(PageProfileError::PrintableRegionIsEmpty);
     }
     let right = u128::from(printable.x.micrometres())
-        + u128::from(printable.width.micrometres());
+        .checked_add(u128::from(printable.width.micrometres()))
+        .ok_or(PageProfileError::PrintableRegionOutsideSheet)?;
     let bottom = u128::from(printable.y.micrometres())
-        + u128::from(printable.height.micrometres());
+        .checked_add(u128::from(printable.height.micrometres()))
+        .ok_or(PageProfileError::PrintableRegionOutsideSheet)?;
     if right > u128::from(u64::MAX)
         || bottom > u128::from(u64::MAX)
         || right > u128::from(sheet_width)
@@ -263,7 +267,7 @@ fn reference_printable_region(
 }
 
 fn generated_validation_profile(seed: &mut u64, case: usize) -> PageProfile {
-    let mut profile = base_profile(match next_validation_selector(seed) % 4 {
+    let mut profile = base_profile(match next_validation_selector(seed) & 3 {
         0 => BindingEdge::Bottom,
         1 => BindingEdge::Left,
         2 => BindingEdge::Right,
@@ -282,7 +286,7 @@ fn generated_validation_profile(seed: &mut u64, case: usize) -> PageProfile {
             y: TEN_MM,
         };
     }
-    match case % 12 {
+    match case.checked_rem(12).unwrap_or_default() {
         0 => profile.sheet.width = Length::ZERO,
         1 => profile.printable_region.height = Length::ZERO,
         2 => profile.printable_region.x = Length::from_micrometres(u64::MAX),
@@ -322,10 +326,15 @@ fn generated_validation_profile(seed: &mut u64, case: usize) -> PageProfile {
             profile.writing_inset = Length::ZERO;
         },
         10 => {
-            let jitter = next_validation_selector(seed) % 5_000;
+            let jitter = next_validation_selector(seed)
+                .checked_rem(5_000).unwrap_or_default();
             profile.top_clearance = Length::from_micrometres(jitter);
-            profile.outer_margin = Length::from_micrometres(jitter / 2);
-            profile.writing_inset = Length::from_micrometres(jitter / 3);
+            profile.outer_margin = Length::from_micrometres(
+                jitter.checked_div(2).unwrap_or_default(),
+            );
+            profile.writing_inset = Length::from_micrometres(
+                jitter.checked_div(3).unwrap_or_default(),
+            );
         },
         _ => {
             profile.paper_mark_appearance.maximum_ruler_error =
@@ -338,24 +347,27 @@ fn generated_validation_profile(seed: &mut u64, case: usize) -> PageProfile {
 #[test]
 fn mixed_profile_failures_match_independent_precedence_oracle() {
     const CASES: usize = 120_000;
-    let mut seed = 0xd1b5_4a32_d192_ed03_u64;
+    let mut seed = 0xd1b5_4a32_d192_ed03u64;
     let mut valid = 0usize;
     let mut invalid = 0usize;
     let mut seen_errors = [false; 9];
     let mut seen_binding_orientation = [false; 8];
     for case in 0..CASES {
         let profile = generated_validation_profile(&mut seed, case);
-        let binding_index = match profile.binding_edge {
+        let binding_index: usize = match profile.binding_edge {
             BindingEdge::Bottom => 0,
             BindingEdge::Left => 1,
             BindingEdge::Right => 2,
             BindingEdge::Top => 3,
         };
-        let orientation_index = match profile.orientation {
+        let orientation_index: usize = match profile.orientation {
             Orientation::Portrait => 0,
             Orientation::Landscape => 1,
         };
-        seen_binding_orientation[binding_index * 2 + orientation_index] = true;
+        let index = binding_index.checked_mul(2)
+            .and_then(|value| value.checked_add(orientation_index));
+        assert!(index.and_then(|value| seen_binding_orientation.get_mut(value))
+            .is_some_and(|seen| { *seen = true; true }));
         let expected = reference_profile_validation(profile);
         if let Err(reason) = expected {
             invalid = invalid.saturating_add(1);
@@ -370,7 +382,8 @@ fn mixed_profile_failures_match_independent_precedence_oracle() {
                 PageProfileError::SheetDimensionIsZero => 7,
                 PageProfileError::TopClearanceExhaustsPrintableRegion => 8,
             };
-            seen_errors[error_index] = true;
+            assert!(seen_errors.get_mut(error_index)
+                .is_some_and(|seen| { *seen = true; true }));
         } else {
             valid = valid.saturating_add(1);
         }
@@ -381,19 +394,19 @@ fn mixed_profile_failures_match_independent_precedence_oracle() {
         );
         let sealed = profile.validated();
         assert_eq!(
-            sealed.map(|validated| validated.profile()).map(|_profile| ()),
+            sealed.map(
+                atrament_physical_page_profile::ValidatedPageProfile::profile,
+            ).map(|_profile| ()),
             expected,
             "sealed profile precedence mismatch in generated case {case}",
         );
         if let Ok(validated) = sealed {
             assert_eq!(
-                validated.oriented_sheet(),
-                profile.oriented_sheet().expect("validated oriented sheet"),
+                Ok(validated.oriented_sheet()), profile.oriented_sheet(),
             );
             assert_eq!(
-                validated.writable_region(),
-                reference_writable_region(profile)
-                    .expect("validated writable region"),
+                Ok(validated.writable_region()),
+                reference_writable_region(profile),
             );
         }
         if reference_printable_region(profile).is_ok() {
@@ -410,23 +423,81 @@ fn mixed_profile_failures_match_independent_precedence_oracle() {
     assert!(seen_binding_orientation.into_iter().all(|seen| seen));
 }
 
+// Independent reference sampling refuses zero spans and overflow instead of
+// hiding invalid generated dimensions through wrapping or saturation.
+const fn sample_offset(seed: &mut u64, exclusive_max: u64) -> Option<u64> {
+    next_profile_value(seed).checked_rem(exclusive_max)
+}
+
+const fn sample_positive_extent(
+    seed: &mut u64, full_span: u64, origin: u64,
+) -> Option<u64> {
+    let Some(room) = full_span.checked_sub(origin) else {
+        return None;
+    };
+    let Some(offset) = sample_offset(seed, room) else {
+        return None;
+    };
+    offset.checked_add(1)
+}
+
+// Compute the expected geometry without invoking production layout or
+// the separate validation-precedence reference oracle.
+fn expected_valid_region(
+    binding_edge: BindingEdge, origin_x: u64, origin_y: u64,
+    input_width: u64, input_height: u64, top_clearance: u64,
+    binding_inset: u64,
+) -> Option<Rect> {
+    let top = origin_y.checked_add(top_clearance)?;
+    let remaining_height = input_height.checked_sub(top_clearance)?;
+    let (output_x, output_y, output_width, output_height) = match binding_edge {
+        BindingEdge::Bottom => (
+            origin_x, top, input_width,
+            remaining_height.checked_sub(binding_inset)?,
+        ),
+        BindingEdge::Left => (
+            origin_x.checked_add(binding_inset)?, top,
+            input_width.checked_sub(binding_inset)?, remaining_height,
+        ),
+        BindingEdge::Right => (
+            origin_x, top, input_width.checked_sub(binding_inset)?,
+            remaining_height,
+        ),
+        BindingEdge::Top => (
+            origin_x, top.checked_add(binding_inset)?, input_width,
+            remaining_height.checked_sub(binding_inset)?,
+        ),
+    };
+    Some(Rect {
+        height: Length::from_micrometres(output_height),
+        width: Length::from_micrometres(output_width),
+        x: Length::from_micrometres(output_x),
+        y: Length::from_micrometres(output_y),
+    })
+}
+
 #[test]
-fn valid_profiles_match_writable_region_reference_oracle() {
+fn valid_profiles_match_writable_region_reference_oracle()
+-> Result<(), String> {
     const CASES: usize = 20_000;
-    let mut seed = 0x5eed_9a6e_2026_u64;
+    let mut seed = 0x5eed_9a6e_2026u64;
     let mut seen_binding_edges = [false; 4];
     let mut seen_orientations = [false; 2];
     for case in 0..CASES {
-        let binding_index = (next_profile_value(&mut seed) % 4) as usize;
-        seen_binding_edges[binding_index] = true;
+        let binding_index = usize::try_from(next_profile_value(&mut seed) & 3)
+            .map_err(|error| format!("invalid binding index: {error}"))?;
+        *seen_binding_edges.get_mut(binding_index)
+            .ok_or("binding index out of range")? = true;
         let binding_edge = match binding_index {
             0 => BindingEdge::Bottom,
             1 => BindingEdge::Left,
             2 => BindingEdge::Right,
             _ => BindingEdge::Top,
         };
-        let orientation_index = (next_profile_value(&mut seed) & 1) as usize;
-        seen_orientations[orientation_index] = true;
+        let orientation_index =
+            usize::from(next_profile_value(&mut seed) & 1 != 0);
+        *seen_orientations.get_mut(orientation_index)
+            .ok_or("orientation index out of range")? = true;
         let orientation = if orientation_index == 0 {
             Orientation::Portrait
         } else {
@@ -440,20 +511,28 @@ fn valid_profiles_match_writable_region_reference_oracle() {
             Orientation::Landscape => (800u64, 1_000u64),
             Orientation::Portrait => (1_000u64, 800u64),
         };
-        let x = next_profile_value(&mut seed) % sheet_width;
-        let y = next_profile_value(&mut seed) % sheet_height;
-        let width = next_profile_value(&mut seed) % (sheet_width - x) + 1;
-        let height = next_profile_value(&mut seed) % (sheet_height - y) + 1;
-        let top_clearance = next_profile_value(&mut seed) % height;
-        let remaining_height = height - top_clearance;
+        let x = sample_offset(&mut seed, sheet_width)
+            .ok_or("generated horizontal span is empty")?;
+        let y = sample_offset(&mut seed, sheet_height)
+            .ok_or("generated vertical span is empty")?;
+        let width = sample_positive_extent(&mut seed, sheet_width, x)
+            .ok_or("generated printable width is invalid")?;
+        let height = sample_positive_extent(&mut seed, sheet_height, y)
+            .ok_or("generated printable height is invalid")?;
+        let top_clearance = sample_offset(&mut seed, height)
+            .ok_or("generated top clearance is invalid")?;
+        let remaining_height = height.checked_sub(top_clearance)
+            .ok_or("generated top clearance exhausts page")?;
         let binding_capacity = match binding_edge {
             BindingEdge::Bottom | BindingEdge::Top => remaining_height,
             BindingEdge::Left | BindingEdge::Right => width,
         };
-        let binding_inset =
-            next_profile_value(&mut seed) % binding_capacity;
-        let outer_margin = binding_inset / 2;
-        let writing_inset = binding_inset - outer_margin;
+        let binding_inset = sample_offset(&mut seed, binding_capacity)
+            .ok_or("generated binding capacity is empty")?;
+        let outer_margin = binding_inset.checked_div(2)
+            .ok_or("generated outer margin divisor invalid")?;
+        let writing_inset = binding_inset.checked_sub(outer_margin)
+            .ok_or("generated writing inset underflows")?;
         let profile = PageProfile {
             binding_edge,
             border_shape: BorderShape::Rectangle,
@@ -476,58 +555,29 @@ fn valid_profiles_match_writable_region_reference_oracle() {
             top_clearance: Length::from_micrometres(top_clearance),
             writing_inset: Length::from_micrometres(writing_inset),
         };
-        let top = y + top_clearance;
-        let expected = match binding_edge {
-            BindingEdge::Bottom => Rect {
-                height: Length::from_micrometres(
-                    remaining_height - binding_inset,
-                ),
-                width: Length::from_micrometres(width),
-                x: Length::from_micrometres(x),
-                y: Length::from_micrometres(top),
-            },
-            BindingEdge::Left => Rect {
-                height: Length::from_micrometres(remaining_height),
-                width: Length::from_micrometres(width - binding_inset),
-                x: Length::from_micrometres(x + binding_inset),
-                y: Length::from_micrometres(top),
-            },
-            BindingEdge::Right => Rect {
-                height: Length::from_micrometres(remaining_height),
-                width: Length::from_micrometres(width - binding_inset),
-                x: Length::from_micrometres(x),
-                y: Length::from_micrometres(top),
-            },
-            BindingEdge::Top => Rect {
-                height: Length::from_micrometres(
-                    remaining_height - binding_inset,
-                ),
-                width: Length::from_micrometres(width),
-                x: Length::from_micrometres(x),
-                y: Length::from_micrometres(top + binding_inset),
-            },
-        };
-        assert_eq!(profile.validate(), Ok(profile), "generated case {case}");
-        let validated = profile.validated().expect("generated valid profile");
-        assert_eq!(validated.profile(), profile, "generated case {case}");
-        assert_eq!(
-            validated.oriented_sheet(),
-            profile.oriented_sheet().expect("oriented sheet"),
-            "generated case {case}",
-        );
-        assert_eq!(
-            validated.writable_region(),
-            expected,
-            "sealed writable region in generated case {case}",
-        );
-        assert_eq!(
-            profile.writable_region(),
-            Ok(expected),
-            "generated case {case}",
-        );
+        let expected = expected_valid_region(
+            binding_edge, x, y, width, height, top_clearance, binding_inset,
+        )
+        .ok_or("generated writable rectangle is invalid")?;
+        if profile.validate() != Ok(profile) {
+            return Err(format!(
+                "valid generated profile refused in case {case}",
+            ));
+        }
+        let validated = profile.validated()
+            .map_err(|error| format!("case {case}: {error:?}"))?;
+        if validated.profile() != profile
+            || profile.oriented_sheet() != Ok(validated.oriented_sheet())
+            || validated.writable_region() != expected
+            || profile.writable_region() != Ok(expected) {
+            return Err(format!("reference geometry mismatch in case {case}"));
+        }
     }
-    assert!(seen_binding_edges.into_iter().all(|seen| seen));
-    assert!(seen_orientations.into_iter().all(|seen| seen));
+    if !seen_binding_edges.into_iter().all(|seen| seen)
+        || !seen_orientations.into_iter().all(|seen| seen) {
+        return Err("generated geometry missed a binding/orientation".into());
+    }
+    Ok(())
 }
 
 #[test]
