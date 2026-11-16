@@ -37,6 +37,9 @@ const MAX_JSON_BYTES = 1_048_576;
 const MAX_GLYPHS = 512;
 const MAX_CATALOG_BYTES = 4096;
 const U64_MAXIMUM = "18446744073709551615";
+// The editor may revalidate 512 exact glyph overrides per profile revision.
+// Share one ICU segmenter without treating unavailable segmentation as valid.
+let graphemeSegmenter;
 // Mirror native handwriting-statistics admission before changing a draft
 // or querying a numeric sample. Structural line/paragraph separators are
 // layout breaks, not ink. UTF-8 encoding of an unpaired UTF-16 surrogate
@@ -47,9 +50,10 @@ function exactNativeGrapheme(value) {
         || new TextEncoder().encode(value).length > 64
         || typeof Intl.Segmenter !== "function")
         return false;
-    return [...new Intl.Segmenter(undefined, {
-            granularity: "grapheme",
-        }).segment(value)].length === 1;
+    graphemeSegmenter ??= new Intl.Segmenter(undefined, {
+        granularity: "grapheme",
+    });
+    return [...graphemeSegmenter.segment(value)].length === 1;
 }
 // Never round Rust's u64 through a JavaScript Number. Canonicalize its
 // decimal spelling before injecting a numeric token into a JSON envelope.

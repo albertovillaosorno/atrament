@@ -118,7 +118,8 @@ function mountBackend(implementation = {}) {
         assert.equal(init.headers["Content-Type"], "application/json");
         return Response.json(JSON.parse(init.body));
     };
-    const editor = createHandwritingProfileEditor({
+    const editor = (implementation.createEditor
+        ?? createHandwritingProfileEditor)({
         currentSecret: () => secret,
         sessionSignal: controller.signal,
         unauthorized() { implementation.unauthorized?.(); },
@@ -258,6 +259,49 @@ test("native numeric preview refuses malformed response without retaining output
         b.restore();
     }
 });
+
+test("statistics glyph checks reuse segmentation and refuse its loss",
+    async () => {
+        const original = Intl.Segmenter;
+        let constructors = 0;
+        try {
+            Intl.Segmenter = class extends original {
+                constructor(...args) {
+                    super(...args);
+                    constructors += 1;
+                }
+            };
+            const path = "../../../../src/browser/workspace/adapter-inbound/"
+                + "generated/handwriting-profile.js?segmenter-regression";
+            const { createHandwritingProfileEditor: createEditor } =
+                await import(new URL(path, import.meta.url).href);
+            const b = mountBackend({ createEditor });
+            try {
+                await b.editor.start("private-session-credential");
+                edit(b.elements, "handwriting-scope", "glyph", "change");
+                for (let index = 0; index < 64; index += 1) {
+                    const key = String.fromCodePoint(0x4E00 + index);
+                    edit(b.elements, "handwriting-new-glyph", key);
+                    b.elements.get("handwriting-add-glyph").dispatch("click");
+                }
+                assert.equal(b.elements.get("handwriting-glyph").children
+                    .length, 64);
+                assert.equal(constructors, 1,
+                    "64 distinct Unicode keys use one segmentation authority");
+                Intl.Segmenter = undefined;
+                edit(b.elements, "handwriting-new-glyph", "ñ");
+                b.elements.get("handwriting-add-glyph").dispatch("click");
+                assert.equal(b.elements.get("handwriting-glyph").children
+                    .length, 64,
+                    "unavailable segmentation refuses without changing draft");
+                assert.equal(b.links.length, 0);
+            } finally {
+                b.restore();
+            }
+        } finally {
+            Intl.Segmenter = original;
+        }
+    });
 
 test("handwriting refuses non-native glyph identity before draft and sample",
     async () => {
