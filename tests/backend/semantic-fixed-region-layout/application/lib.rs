@@ -40,9 +40,7 @@ use atrament_diagnostic::{
     LocationRole, Operation, OperationContextKind, PhysicalBoundaryEdge,
     PhysicalLengthQuantity, Remediation, Severity,
 };
-use atrament_fixed_region_bounds::{
-    BoundaryEdge, BoundsError, check_bounds,
-};
+use atrament_fixed_region_bounds::{BoundaryEdge, BoundsError, check_bounds};
 use atrament_physical_page_profile::{
     BindingEdge, BorderShape, Length, Orientation,
     PageProfile as PhysicalPageProfile, PageProfileError, PaperMarkAppearance,
@@ -58,9 +56,77 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, PageProfileEditOutcome,
-    SemanticNotebookSession,
+    SemanticNotebookSession as _,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
+
+// Assertion-backed extraction keeps these unit-returning test cases strict:
+// a failed premise fails the test before any later oracle is evaluated.
+macro_rules! required_some {
+    ($value:expr) => {{
+        let candidate = $value;
+        assert!(
+            candidate.is_some(),
+            "missing expected fixture: {}",
+            stringify!($value)
+        );
+        let Some(value) = candidate else {
+            return;
+        };
+        value
+    }};
+}
+
+macro_rules! required_ok {
+    ($value:expr) => {{
+        let candidate = $value;
+        assert!(
+            candidate.is_ok(),
+            "failed expected operation: {}: {candidate:?}",
+            stringify!($value)
+        );
+        let Ok(value) = candidate else {
+            return;
+        };
+        value
+    }};
+}
+
+macro_rules! verify_eq {
+    ($actual:expr, $expected:expr $(,)?) => {{
+        let actual = $actual;
+        let expected = $expected;
+        if actual != expected {
+            return Err(format!(
+                "{} != {}: {actual:?} != {expected:?}",
+                stringify!($actual),
+                stringify!($expected)
+            ));
+        }
+    }};
+}
+
+macro_rules! verify {
+    ($condition:expr $(,)?) => {
+        if !$condition {
+            return Err(format!(
+                "condition failed: {}",
+                stringify!($condition)
+            ));
+        }
+    };
+}
+
+macro_rules! diagnostic_eq {
+    ($actual:expr, $expected:expr $(,)?) => {
+        assert_eq!(
+            $actual,
+            $expected,
+            "fixed-region diagnostic mismatch at {}",
+            stringify!($actual)
+        );
+    };
+}
 
 struct CandidateFixture {
     block: CandidateIdentity,
@@ -71,18 +137,37 @@ struct CandidateFixture {
     profile_one: CandidateIdentity,
 }
 
+trait CorruptAcceptedRevisionForTest {
+    fn forget_profiles(&mut self);
+    fn invalidate_first_profile(&mut self);
+}
+
+impl CorruptAcceptedRevisionForTest
+    for atrament_semantic_notebook::AcceptedRevision
+{
+    fn forget_profiles(&mut self) {
+        self.notebook.page_profiles.clear();
+    }
+
+    fn invalidate_first_profile(&mut self) {
+        required_some!(self.notebook.page_profiles.first_mut())
+            .geometry
+            .sheet
+            .width = Length::ZERO;
+    }
+}
+
 fn accepted_for(
     mapping: &[atrament_semantic_notebook_port::IdentityMapping],
     candidate: CandidateIdentity,
-) -> AcceptedIdentity {
+) -> Option<AcceptedIdentity> {
     mapping
         .iter()
         .find(|entry| entry.candidate == candidate)
-        .expect("candidate identity is mapped")
-        .accepted
+        .map(|entry| entry.accepted)
 }
 
-fn geometry(outer_margin: u64) -> PhysicalPageProfile {
+const fn geometry(outer_margin: u64) -> PhysicalPageProfile {
     PhysicalPageProfile {
         binding_edge: BindingEdge::Left,
         border_shape: BorderShape::Rectangle,
@@ -110,18 +195,18 @@ fn geometry(outer_margin: u64) -> PhysicalPageProfile {
     }
 }
 
-fn candidate_fixture(ids: &IdentityAllocator) -> CandidateFixture {
-    let notebook_id = ids.allocate_candidate().expect("notebook");
-    let profile_one = ids.allocate_candidate().expect("profile one");
-    let profile_two = ids.allocate_candidate().expect("profile two");
-    let page_one = ids.allocate_candidate().expect("page one");
-    let page_two = ids.allocate_candidate().expect("page two");
-    let flow_one = ids.allocate_candidate().expect("flow one");
-    let flow_two = ids.allocate_candidate().expect("flow two");
-    let block = ids.allocate_candidate().expect("block");
-    let nested = ids.allocate_candidate().expect("nested block");
-    let other = ids.allocate_candidate().expect("other block");
-    CandidateFixture {
+fn candidate_fixture(ids: &IdentityAllocator) -> Option<CandidateFixture> {
+    let notebook_id = ids.allocate_candidate().ok()?;
+    let profile_one = ids.allocate_candidate().ok()?;
+    let profile_two = ids.allocate_candidate().ok()?;
+    let page_one = ids.allocate_candidate().ok()?;
+    let page_two = ids.allocate_candidate().ok()?;
+    let flow_one = ids.allocate_candidate().ok()?;
+    let flow_two = ids.allocate_candidate().ok()?;
+    let block = ids.allocate_candidate().ok()?;
+    let nested = ids.allocate_candidate().ok()?;
+    let other = ids.allocate_candidate().ok()?;
+    Some(CandidateFixture {
         block,
         nested,
         notebook: Notebook {
@@ -160,7 +245,7 @@ fn candidate_fixture(ids: &IdentityAllocator) -> CandidateFixture {
                                     style: None,
                                 }]),
                                 extensions: vec![],
-                                id: ids.allocate_candidate().expect("callout"),
+                                id: ids.allocate_candidate().ok()?,
                                 provenance: None,
                                 style: None,
                             },
@@ -191,10 +276,10 @@ fn candidate_fixture(ids: &IdentityAllocator) -> CandidateFixture {
         page_one,
         page_two,
         profile_one,
-    }
+    })
 }
 
-fn placement(
+const fn placement(
     revision: atrament_semantic_notebook::RevisionIdentity,
     page: AcceptedIdentity,
     object: AcceptedIdentity,
@@ -221,7 +306,7 @@ fn matches_within(
     })
 }
 
-fn rect(x: u64, y: u64, width: u64, height: u64) -> Rect {
+const fn rect(x: u64, y: u64, width: u64, height: u64) -> Rect {
     Rect {
         height: Length::from_micrometres(height),
         width: Length::from_micrometres(width),
@@ -230,7 +315,7 @@ fn rect(x: u64, y: u64, width: u64, height: u64) -> Rect {
     }
 }
 
-fn next_fixed_layout_value(seed: &mut u64) -> u64 {
+const fn next_fixed_layout_value(seed: &mut u64) -> u64 {
     *seed = seed
         .wrapping_mul(6_364_136_223_846_793_005)
         .wrapping_add(1_442_695_040_888_963_407);
@@ -246,7 +331,6 @@ const fn diagnostic_boundary(edge: BoundaryEdge) -> PhysicalBoundaryEdge {
     }
 }
 
-
 fn boundary_mask(
     violations: &[atrament_fixed_region_bounds::BoundaryViolation],
 ) -> usize {
@@ -260,41 +344,92 @@ fn boundary_mask(
     })
 }
 
+fn assert_overflow_diagnostic(
+    diagnostic: &atrament_diagnostic::Diagnostic,
+    violation: &atrament_fixed_region_bounds::BoundaryViolation,
+) {
+    diagnostic_eq!(diagnostic.code, DiagnosticCode::LayoutFixedRegionOverflow,);
+    diagnostic_eq!(diagnostic.disposition, BlockingDisposition::Blocking,);
+    diagnostic_eq!(diagnostic.severity, Severity::Error);
+    diagnostic_eq!(diagnostic.operation.operation, Operation::Layout);
+    diagnostic_eq!(diagnostic.operation.contexts.len(), 1);
+    diagnostic_eq!(
+        required_some!(diagnostic.operation.contexts.first()).kind,
+        OperationContextKind::AcceptedRevision,
+    );
+    diagnostic_eq!(diagnostic.locations.len(), 2);
+    diagnostic_eq!(
+        required_some!(diagnostic.locations.first()).kind,
+        LocationKind::Object
+    );
+    diagnostic_eq!(
+        required_some!(diagnostic.locations.first()).role,
+        LocationRole::Primary
+    );
+    diagnostic_eq!(
+        required_some!(diagnostic.locations.get(1)).kind,
+        LocationKind::Structure,
+    );
+    diagnostic_eq!(
+        required_some!(diagnostic.locations.get(1)).role,
+        LocationRole::Related
+    );
+    diagnostic_eq!(diagnostic.remediations, [Remediation::ChangeConstraint],);
+    diagnostic_eq!(diagnostic.evidence, [
+        Evidence::PhysicalBoundary {
+            edge: diagnostic_boundary(violation.edge),
+        },
+        Evidence::PhysicalLength {
+            micrometres: i128::from(violation.amount.micrometres(),),
+            quantity: PhysicalLengthQuantity::Overflow,
+        },
+    ]);
+}
+
 #[test]
 fn accepted_fixed_layout_diagnostics_match_bounds_oracle() {
     const CASES: usize = 20_000;
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let fixture = required_some!(candidate_fixture(&ids));
     let mut session = SemanticNotebookSessionService::default();
-    let AcceptanceOutcome::Accepted { mapping, revision } =
-        session.accept(fixture.notebook)
-    else {
-        panic!("candidate must be accepted");
+    let admission = session.accept(fixture.notebook);
+    assert!(
+        matches!(admission, AcceptanceOutcome::Accepted { .. }),
+        "candidate must be accepted: {admission:?}"
+    );
+    let AcceptanceOutcome::Accepted { mapping, revision } = admission else {
+        return;
     };
-    let page = accepted_for(&mapping, fixture.page_one);
-    let object = accepted_for(&mapping, fixture.block);
-    let writable = geometry(20_000)
-        .writable_region()
-        .expect("fixture writable region");
-    let accepted = session.current().expect("accepted revision");
-    let mut seed = 0x5eed_f1ed_2026_u64;
+    let page = required_some!(accepted_for(&mapping, fixture.page_one));
+    let object = required_some!(accepted_for(&mapping, fixture.block));
+    let writable = required_ok!(geometry(20_000).writable_region());
+    let accepted = required_some!(session.current());
+    let mut seed = 0x5eed_f1ed_2026u64;
     let mut seen_boundary_masks = [false; 16];
 
     for case in 0..CASES {
         let rectangle = rect(
-            next_fixed_layout_value(&mut seed) % 230_000,
-            next_fixed_layout_value(&mut seed) % 310_000,
-            next_fixed_layout_value(&mut seed) % 210_000,
-            next_fixed_layout_value(&mut seed) % 290_000,
+            next_fixed_layout_value(&mut seed)
+                .checked_rem(230_000)
+                .unwrap_or_default(),
+            next_fixed_layout_value(&mut seed)
+                .checked_rem(310_000)
+                .unwrap_or_default(),
+            next_fixed_layout_value(&mut seed)
+                .checked_rem(210_000)
+                .unwrap_or_default(),
+            next_fixed_layout_value(&mut seed)
+                .checked_rem(290_000)
+                .unwrap_or_default(),
         );
-        let expected =
-            check_bounds(writable, rectangle).expect("small generated bounds");
-        seen_boundary_masks[boundary_mask(&expected.violations)] = true;
-        let actual = validate_fixed_placement(
+        let expected = required_ok!(check_bounds(writable, rectangle));
+        *required_some!(
+            seen_boundary_masks.get_mut(boundary_mask(&expected.violations))
+        ) = true;
+        let actual = required_ok!(validate_fixed_placement(
             accepted,
             placement(revision, page, object, rectangle),
-        )
-        .expect("generated placement keeps accepted authority");
+        ));
         assert_eq!(actual.revision(), revision, "generated case {case}");
         assert_eq!(actual.rectangle(), rectangle, "generated case {case}");
         assert_eq!(actual.writable(), writable, "generated case {case}");
@@ -310,108 +445,76 @@ fn accepted_fixed_layout_diagnostics_match_bounds_oracle() {
             assert!(actual.diagnostics().is_none());
             continue;
         }
-        let diagnostics = actual.diagnostics()
-            .expect("overflow case must return diagnostics");
+        let diagnostics = required_some!(actual.diagnostics());
         let report = actual.report();
         assert_eq!(diagnostics.completeness, Completeness::Complete);
         assert_eq!(diagnostics.diagnostics.len(), report.violations.len());
         for (diagnostic, violation) in
             diagnostics.diagnostics.iter().zip(&report.violations)
         {
-            assert_eq!(
-                diagnostic.code,
-                DiagnosticCode::LayoutFixedRegionOverflow,
-            );
-            assert_eq!(
-                diagnostic.disposition,
-                BlockingDisposition::Blocking,
-            );
-            assert_eq!(diagnostic.severity, Severity::Error);
-            assert_eq!(diagnostic.operation.operation, Operation::Layout);
-            assert_eq!(diagnostic.operation.contexts.len(), 1);
-            assert_eq!(
-                diagnostic.operation.contexts[0].kind,
-                OperationContextKind::AcceptedRevision,
-            );
-            assert_eq!(diagnostic.locations.len(), 2);
-            assert_eq!(diagnostic.locations[0].kind, LocationKind::Object);
-            assert_eq!(diagnostic.locations[0].role, LocationRole::Primary);
-            assert_eq!(
-                diagnostic.locations[1].kind,
-                LocationKind::Structure,
-            );
-            assert_eq!(diagnostic.locations[1].role, LocationRole::Related);
-            assert_eq!(
-                diagnostic.remediations,
-                [Remediation::ChangeConstraint],
-            );
-            assert_eq!(diagnostic.evidence, [
-                Evidence::PhysicalBoundary {
-                    edge: diagnostic_boundary(violation.edge),
-                },
-                Evidence::PhysicalLength {
-                    micrometres: i128::from(
-                        violation.amount.micrometres(),
-                    ),
-                    quantity: PhysicalLengthQuantity::Overflow,
-                },
-            ]);
+            assert_overflow_diagnostic(diagnostic, violation);
         }
     }
     assert!(seen_boundary_masks.into_iter().all(|seen| seen));
 }
 
-#[test]
-fn first_journey_bottom_overflow_produces_exact_blocking_six_mm_diagnostic() {
-    let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
-    let mut session = SemanticNotebookSessionService::default();
-    let AcceptanceOutcome::Accepted { mapping, revision } =
-        session.accept(fixture.notebook)
-    else {
-        panic!("candidate must be accepted");
-    };
-    let page = accepted_for(&mapping, fixture.page_one);
-    let object = accepted_for(&mapping, fixture.block);
-    let result = validate_fixed_placement(
-        session.current().expect("accepted revision"),
-        placement(
-            revision,
-            page,
-            object,
-            rect(35_000, 270_000, 50_000, 23_000),
-        ),
-    )
-    .expect("valid derived placement");
-    assert!(!result.is_within_bounds(), "placement must overflow");
-    let diagnostics = result.diagnostics().expect("overflow diagnostics");
+fn assert_six_mm_bottom_diagnostic(result: &FixedRegionLayoutResult) {
+    let diagnostics = required_some!(result.diagnostics());
     let report = result.report();
-    assert_eq!(report.violations.len(), 1);
-    assert_eq!(report.violations[0].edge, BoundaryEdge::Bottom);
-    assert_eq!(report.violations[0].amount.micrometres(), 6_000);
-    assert_eq!(diagnostics.completeness, Completeness::Complete);
-    assert_eq!(diagnostics.diagnostics.len(), 1);
-    let diagnostic = &diagnostics.diagnostics[0];
-    assert_eq!(diagnostic.code, DiagnosticCode::LayoutFixedRegionOverflow);
-    assert_eq!(diagnostic.disposition, BlockingDisposition::Blocking);
-    assert_eq!(diagnostic.severity, Severity::Error);
-    assert_eq!(diagnostic.operation.operation, Operation::Layout);
-    assert_eq!(diagnostic.operation.contexts.len(), 1);
-    assert_eq!(
-        diagnostic.operation.contexts[0].kind,
+    diagnostic_eq!(report.violations.len(), 1);
+    diagnostic_eq!(
+        required_some!(report.violations.first()).edge,
+        BoundaryEdge::Bottom
+    );
+    diagnostic_eq!(
+        required_some!(report.violations.first())
+            .amount
+            .micrometres(),
+        6_000
+    );
+    diagnostic_eq!(diagnostics.completeness, Completeness::Complete);
+    diagnostic_eq!(diagnostics.diagnostics.len(), 1);
+    let diagnostic = &required_some!(diagnostics.diagnostics.first());
+    diagnostic_eq!(
+        (diagnostic.code, diagnostic.disposition, diagnostic.severity),
+        (
+            DiagnosticCode::LayoutFixedRegionOverflow,
+            BlockingDisposition::Blocking,
+            Severity::Error
+        ),
+    );
+    diagnostic_eq!(diagnostic.operation.operation, Operation::Layout);
+    diagnostic_eq!(diagnostic.operation.contexts.len(), 1);
+    diagnostic_eq!(
+        required_some!(diagnostic.operation.contexts.first()).kind,
         OperationContextKind::AcceptedRevision,
     );
-    assert_eq!(diagnostic.locations.len(), 2);
-    assert_eq!(diagnostic.locations[0].kind, LocationKind::Object);
-    assert_eq!(diagnostic.locations[0].role, LocationRole::Primary);
-    assert_eq!(diagnostic.locations[1].kind, LocationKind::Structure);
-    assert_eq!(diagnostic.locations[1].role, LocationRole::Related);
-    assert_ne!(
-        diagnostic.locations[0].identity,
-        diagnostic.locations[1].identity
+    diagnostic_eq!(diagnostic.locations.len(), 2);
+    diagnostic_eq!(
+        required_some!(diagnostic.locations.first()).kind,
+        LocationKind::Object
     );
-    assert_eq!(diagnostic.remediations, vec![Remediation::ChangeConstraint]);
-    assert_eq!(diagnostic.evidence, vec![
+    diagnostic_eq!(
+        required_some!(diagnostic.locations.first()).role,
+        LocationRole::Primary
+    );
+    diagnostic_eq!(
+        required_some!(diagnostic.locations.get(1)).kind,
+        LocationKind::Structure
+    );
+    diagnostic_eq!(
+        required_some!(diagnostic.locations.get(1)).role,
+        LocationRole::Related
+    );
+    assert_ne!(
+        required_some!(diagnostic.locations.first()).identity,
+        required_some!(diagnostic.locations.get(1)).identity,
+        "overflow object must differ from owning page"
+    );
+    diagnostic_eq!(diagnostic.remediations, vec![
+        Remediation::ChangeConstraint
+    ]);
+    diagnostic_eq!(diagnostic.evidence, vec![
         Evidence::PhysicalBoundary {
             edge: PhysicalBoundaryEdge::Bottom,
         },
@@ -423,20 +526,54 @@ fn first_journey_bottom_overflow_produces_exact_blocking_six_mm_diagnostic() {
 }
 
 #[test]
+fn first_journey_bottom_overflow_produces_exact_blocking_six_mm_diagnostic() {
+    let ids = IdentityAllocator::new();
+    let fixture = required_some!(candidate_fixture(&ids));
+    let mut session = SemanticNotebookSessionService::default();
+    let admission = session.accept(fixture.notebook);
+    assert!(
+        matches!(admission, AcceptanceOutcome::Accepted { .. }),
+        "candidate must be accepted: {admission:?}"
+    );
+    let AcceptanceOutcome::Accepted { mapping, revision } = admission else {
+        return;
+    };
+    let page = required_some!(accepted_for(&mapping, fixture.page_one));
+    let object = required_some!(accepted_for(&mapping, fixture.block));
+    let result = required_ok!(validate_fixed_placement(
+        required_some!(session.current()),
+        placement(
+            revision,
+            page,
+            object,
+            rect(35_000, 270_000, 50_000, 23_000),
+        ),
+    ));
+    assert!(!result.is_within_bounds(), "placement must overflow");
+    assert_six_mm_bottom_diagnostic(&result);
+}
+
+#[test]
 fn exact_fit_is_read_only_and_produces_no_diagnostic_result() {
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let fixture = required_some!(candidate_fixture(&ids));
     let mut session = SemanticNotebookSessionService::default();
-    let AcceptanceOutcome::Accepted { mapping, revision } =
-        session.accept(fixture.notebook)
-    else {
-        panic!("candidate must be accepted");
+    let admission = session.accept(fixture.notebook);
+    assert!(
+        matches!(admission, AcceptanceOutcome::Accepted { .. }),
+        "candidate must be accepted: {admission:?}"
+    );
+    let AcceptanceOutcome::Accepted { mapping, revision } = admission else {
+        return;
     };
-    let page = accepted_for(&mapping, fixture.page_one);
-    let object = accepted_for(&mapping, fixture.block);
-    let before = session.current().expect("accepted revision").clone();
+    let page = required_some!(accepted_for(&mapping, fixture.page_one));
+    let object = required_some!(accepted_for(&mapping, fixture.block));
+    let before = required_some!(session.current()).clone();
     let checked = placement(
-        revision, page, object, rect(35_000, 20_000, 165_000, 267_000),
+        revision,
+        page,
+        object,
+        rect(35_000, 20_000, 165_000, 267_000),
     );
     assert!(matches_within(
         validate_fixed_placement(&before, checked),
@@ -445,32 +582,35 @@ fn exact_fit_is_read_only_and_produces_no_diagnostic_result() {
     assert_eq!(session.current(), Some(&before));
 }
 
-#[test]
-fn zero_size_fixed_rectangles_retain_exact_position_and_bounds()
--> Result<(), &'static str> {
+fn verify_zero_size_fixed_rectangles_retain_exact_position_and_bounds()
+-> Result<(), String> {
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let fixture = candidate_fixture(&ids).ok_or("candidate fixture missing")?;
     let mut session = SemanticNotebookSessionService::default();
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept(fixture.notebook)
     else {
-        return Err("valid zero-size fixture was refused");
+        return Err("valid zero-size fixture was refused".into());
     };
-    let page = accepted_for(&mapping, fixture.page_one);
-    let object = accepted_for(&mapping, fixture.block);
+    let page =
+        accepted_for(&mapping, fixture.page_one).ok_or("page not mapped")?;
+    let object =
+        accepted_for(&mapping, fixture.block).ok_or("block not mapped")?;
     let accepted = session.current().ok_or("accepted revision missing")?;
     let inside = rect(35_000, 20_000, 0, 0);
     let within = validate_fixed_placement(
         accepted,
         placement(revision, page, object, inside),
     )
-    .map_err(|_| "zero-size rectangle was rejected")?;
-    assert_eq!(within.rectangle(), inside);
-    assert_eq!(
+    .map_err(|error| format!("zero-size rectangle rejected: {error:?}"))?;
+    verify_eq!(within.rectangle(), inside);
+    verify_eq!(
         within.writable(),
-        geometry(20_000).writable_region().expect("fixture writable region"),
+        geometry(20_000)
+            .writable_region()
+            .map_err(|error| format!("invalid region: {error:?}"))?,
     );
-    assert!(matches_within(
+    verify!(matches_within(
         Ok(within),
         placement(revision, page, object, inside),
     ));
@@ -480,46 +620,64 @@ fn zero_size_fixed_rectangles_retain_exact_position_and_bounds()
         accepted,
         placement(revision, page, object, outside),
     )
-    .map_err(|_| "zero-size overflow placement was rejected")?;
-    assert_eq!(overflow.rectangle(), outside);
-    assert_eq!(
+    .map_err(|error| format!("zero-size overflow rejected: {error:?}"))?;
+    verify_eq!(overflow.rectangle(), outside);
+    verify_eq!(
         overflow.writable(),
-        geometry(20_000).writable_region().expect("fixture writable region"),
+        geometry(20_000)
+            .writable_region()
+            .map_err(|error| format!("invalid region: {error:?}"))?,
     );
     if overflow.is_within_bounds() {
-        return Err("out-of-bounds zero-size rectangle did not overflow");
+        return Err("out-of-bounds zero-size rectangle did not overflow".into());
     }
     let report = overflow.report();
-    assert_eq!(report.violations.len(), 2);
-    assert_eq!(report.violations[0].edge, BoundaryEdge::Left);
-    assert_eq!(report.violations[1].edge, BoundaryEdge::Top);
+    verify_eq!(report.violations.len(), 2);
+    verify_eq!(
+        report.violations.first().map(|violation| violation.edge),
+        Some(BoundaryEdge::Left)
+    );
+    verify_eq!(
+        report.violations.get(1).map(|violation| violation.edge),
+        Some(BoundaryEdge::Top)
+    );
     Ok(())
+}
+
+#[test]
+fn zero_size_fixed_rectangles_retain_exact_position_and_bounds() {
+    assert_eq!(
+        verify_zero_size_fixed_rectangles_retain_exact_position_and_bounds(),
+        Ok(())
+    );
 }
 
 #[test]
 fn multi_edge_overflow_produces_one_complete_diagnostic_per_edge() {
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let fixture = required_some!(candidate_fixture(&ids));
     let mut session = SemanticNotebookSessionService::default();
-    let AcceptanceOutcome::Accepted { mapping, revision } =
-        session.accept(fixture.notebook)
-    else {
-        panic!("candidate must be accepted");
+    let admission = session.accept(fixture.notebook);
+    assert!(
+        matches!(admission, AcceptanceOutcome::Accepted { .. }),
+        "candidate must be accepted: {admission:?}"
+    );
+    let AcceptanceOutcome::Accepted { mapping, revision } = admission else {
+        return;
     };
-    let page = accepted_for(&mapping, fixture.page_one);
-    let object = accepted_for(&mapping, fixture.block);
-    let result = validate_fixed_placement(
-        session.current().expect("accepted revision"),
+    let page = required_some!(accepted_for(&mapping, fixture.page_one));
+    let object = required_some!(accepted_for(&mapping, fixture.block));
+    let result = required_ok!(validate_fixed_placement(
+        required_some!(session.current()),
         placement(
             revision,
             page,
             object,
             rect(30_000, 15_000, 175_000, 277_000),
         ),
-    )
-    .expect("valid bounds comparison");
+    ));
     assert!(!result.is_within_bounds(), "placement must overflow");
-    let diagnostics = result.diagnostics().expect("overflow diagnostics");
+    let diagnostics = required_some!(result.diagnostics());
     let report = result.report();
     let edges = report
         .violations
@@ -545,28 +703,32 @@ fn multi_edge_overflow_produces_one_complete_diagnostic_per_edge() {
 #[test]
 fn stale_placement_is_rejected_before_new_page_geometry_is_used() {
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let fixture = required_some!(candidate_fixture(&ids));
     let mut session = SemanticNotebookSessionService::default();
-    let AcceptanceOutcome::Accepted { mapping, revision } =
-        session.accept(fixture.notebook)
-    else {
-        panic!("candidate must be accepted");
+    let admission = session.accept(fixture.notebook);
+    assert!(
+        matches!(admission, AcceptanceOutcome::Accepted { .. }),
+        "candidate must be accepted: {admission:?}"
+    );
+    let AcceptanceOutcome::Accepted { mapping, revision } = admission else {
+        return;
     };
-    let page = accepted_for(&mapping, fixture.page_one);
-    let object = accepted_for(&mapping, fixture.block);
-    let profile = accepted_for(&mapping, fixture.profile_one);
+    let page = required_some!(accepted_for(&mapping, fixture.page_one));
+    let object = required_some!(accepted_for(&mapping, fixture.block));
+    let profile = required_some!(accepted_for(&mapping, fixture.profile_one));
     let stale =
         placement(revision, page, object, rect(35_000, 20_000, 10_000, 10_000));
-    let PageProfileEditOutcome::Applied { revision: current, .. } =
-        session.replace_page_profile(revision, profile, geometry(40_000))
-    else {
-        panic!("profile edit must apply");
+    let edit =
+        session.replace_page_profile(revision, profile, geometry(40_000));
+    assert!(
+        matches!(edit, PageProfileEditOutcome::Applied { .. }),
+        "profile edit must apply: {edit:?}"
+    );
+    let PageProfileEditOutcome::Applied { revision: current, .. } = edit else {
+        return;
     };
     assert_eq!(
-        validate_fixed_placement(
-            session.current().expect("edited revision"),
-            stale
-        ),
+        validate_fixed_placement(required_some!(session.current()), stale),
         Err(FixedRegionLayoutError::RevisionMismatch {
             accepted: current,
             placement: revision,
@@ -576,33 +738,43 @@ fn stale_placement_is_rejected_before_new_page_geometry_is_used() {
         revision: current,
         ..stale
     };
-    let result = validate_fixed_placement(
-        session.current().expect("edited revision"),
+    let result = required_ok!(validate_fixed_placement(
+        required_some!(session.current()),
         fresh,
-    )
-    .expect("fresh placement checks new geometry");
+    ));
     assert!(!result.is_within_bounds(), "new margin must overflow left");
     let report = result.report();
-    assert_eq!(report.violations[0].edge, BoundaryEdge::Left);
-    assert_eq!(report.violations[0].amount.micrometres(), 20_000);
+    assert_eq!(
+        required_some!(report.violations.first()).edge,
+        BoundaryEdge::Left
+    );
+    assert_eq!(
+        required_some!(report.violations.first())
+            .amount
+            .micrometres(),
+        20_000
+    );
 }
 
 #[test]
 fn object_must_belong_to_the_named_accepted_page() {
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let fixture = required_some!(candidate_fixture(&ids));
     let mut session = SemanticNotebookSessionService::default();
-    let AcceptanceOutcome::Accepted { mapping, revision } =
-        session.accept(fixture.notebook)
-    else {
-        panic!("candidate must be accepted");
+    let admission = session.accept(fixture.notebook);
+    assert!(
+        matches!(admission, AcceptanceOutcome::Accepted { .. }),
+        "candidate must be accepted: {admission:?}"
+    );
+    let AcceptanceOutcome::Accepted { mapping, revision } = admission else {
+        return;
     };
-    let page_one = accepted_for(&mapping, fixture.page_one);
-    let page_two = accepted_for(&mapping, fixture.page_two);
-    let object = accepted_for(&mapping, fixture.block);
+    let page_one = required_some!(accepted_for(&mapping, fixture.page_one));
+    let page_two = required_some!(accepted_for(&mapping, fixture.page_two));
+    let object = required_some!(accepted_for(&mapping, fixture.block));
     assert_eq!(
         validate_fixed_placement(
-            session.current().expect("accepted revision"),
+            required_some!(session.current()),
             placement(revision, page_two, object, rect(35_000, 20_000, 1, 1)),
         ),
         Err(FixedRegionLayoutError::ObjectNotOnPage { object, page: page_two }),
@@ -610,20 +782,17 @@ fn object_must_belong_to_the_named_accepted_page() {
     let fake_page = object;
     assert_eq!(
         validate_fixed_placement(
-            session.current().expect("accepted revision"),
+            required_some!(session.current()),
             placement(revision, fake_page, object, rect(35_000, 20_000, 1, 1)),
         ),
         Err(FixedRegionLayoutError::PageNotFound { page: fake_page }),
     );
+    let invalid_object =
+        placement(revision, page_one, page_one, rect(35_000, 20_000, 1, 1));
     assert_eq!(
         validate_fixed_placement(
-            session.current().expect("accepted revision"),
-            placement(
-                revision,
-                page_one,
-                page_one,
-                rect(35_000, 20_000, 1, 1),
-            ),
+            required_some!(session.current()),
+            invalid_object
         ),
         Err(FixedRegionLayoutError::ObjectNotOnPage {
             object: page_one,
@@ -636,22 +805,21 @@ fn object_must_belong_to_the_named_accepted_page() {
 #[test]
 fn nested_block_is_still_owned_by_its_accepted_page() {
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let fixture = required_some!(candidate_fixture(&ids));
     let mut session = SemanticNotebookSessionService::default();
-    let AcceptanceOutcome::Accepted { mapping, revision } =
-        session.accept(fixture.notebook)
-    else {
-        panic!("candidate must be accepted");
-    };
-    let page = accepted_for(&mapping, fixture.page_one);
-    let nested = accepted_for(&mapping, fixture.nested);
-    let checked = placement(
-        revision, page, nested, rect(35_000, 20_000, 1, 1),
+    let admission = session.accept(fixture.notebook);
+    assert!(
+        matches!(admission, AcceptanceOutcome::Accepted { .. }),
+        "candidate must be accepted: {admission:?}"
     );
+    let AcceptanceOutcome::Accepted { mapping, revision } = admission else {
+        return;
+    };
+    let page = required_some!(accepted_for(&mapping, fixture.page_one));
+    let nested = required_some!(accepted_for(&mapping, fixture.nested));
+    let checked = placement(revision, page, nested, rect(35_000, 20_000, 1, 1));
     assert!(matches_within(
-        validate_fixed_placement(
-            session.current().expect("accepted revision"), checked,
-        ),
+        validate_fixed_placement(required_some!(session.current()), checked,),
         checked,
     ));
 }
@@ -659,8 +827,8 @@ fn nested_block_is_still_owned_by_its_accepted_page() {
 #[test]
 fn maximum_depth_block_ownership_is_iterative() {
     let ids = IdentityAllocator::new();
-    let mut fixture = candidate_fixture(&ids);
-    let target = ids.allocate_candidate().expect("deep target");
+    let mut fixture = required_some!(candidate_fixture(&ids));
+    let target = required_ok!(ids.allocate_candidate());
     let mut block = Block {
         content: BlockContent::Rule,
         extensions: vec![],
@@ -672,27 +840,31 @@ fn maximum_depth_block_ownership_is_iterative() {
         block = Block {
             content: BlockContent::Callout(vec![block]),
             extensions: vec![],
-            id: ids.allocate_candidate().expect("deep wrapper"),
+            id: required_ok!(ids.allocate_candidate()),
             provenance: None,
             style: None,
         };
     }
-    fixture.notebook.pages[0].flows[0].blocks = vec![block];
+    required_some!(
+        required_some!(fixture.notebook.pages.first_mut())
+            .flows
+            .first_mut()
+    )
+    .blocks = vec![block];
     let mut session = SemanticNotebookSessionService::default();
-    let AcceptanceOutcome::Accepted { mapping, revision } =
-        session.accept(fixture.notebook)
-    else {
-        panic!("maximum-depth candidate must be accepted");
-    };
-    let page = accepted_for(&mapping, fixture.page_one);
-    let object = accepted_for(&mapping, target);
-    let checked = placement(
-        revision, page, object, rect(35_000, 20_000, 1, 1),
+    let admission = session.accept(fixture.notebook);
+    assert!(
+        matches!(admission, AcceptanceOutcome::Accepted { .. }),
+        "maximum-depth candidate must be accepted: {admission:?}"
     );
+    let AcceptanceOutcome::Accepted { mapping, revision } = admission else {
+        return;
+    };
+    let page = required_some!(accepted_for(&mapping, fixture.page_one));
+    let object = required_some!(accepted_for(&mapping, target));
+    let checked = placement(revision, page, object, rect(35_000, 20_000, 1, 1));
     assert!(matches_within(
-        validate_fixed_placement(
-            session.current().expect("accepted revision"), checked,
-        ),
+        validate_fixed_placement(required_some!(session.current()), checked,),
         checked,
     ));
 }
@@ -700,29 +872,40 @@ fn maximum_depth_block_ownership_is_iterative() {
 #[test]
 fn very_large_overflow_amount_is_lossless_in_diagnostic_evidence() {
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let fixture = required_some!(candidate_fixture(&ids));
     let mut session = SemanticNotebookSessionService::default();
-    let AcceptanceOutcome::Accepted { mapping, revision } =
-        session.accept(fixture.notebook)
-    else {
-        panic!("candidate must be accepted");
+    let admission = session.accept(fixture.notebook);
+    assert!(
+        matches!(admission, AcceptanceOutcome::Accepted { .. }),
+        "candidate must be accepted: {admission:?}"
+    );
+    let AcceptanceOutcome::Accepted { mapping, revision } = admission else {
+        return;
     };
-    let page = accepted_for(&mapping, fixture.page_one);
-    let object = accepted_for(&mapping, fixture.block);
+    let page = required_some!(accepted_for(&mapping, fixture.page_one));
+    let object = required_some!(accepted_for(&mapping, fixture.block));
     let x = u64::MAX - 1;
-    let result = validate_fixed_placement(
-        session.current().expect("accepted revision"),
+    let result = required_ok!(validate_fixed_placement(
+        required_some!(session.current()),
         placement(revision, page, object, rect(x, 20_000, 1, 1)),
-    )
-    .expect("maximum right coordinate is representable");
-    assert!(!result.is_within_bounds(), "far-right placement must overflow");
-    let diagnostics = result.diagnostics().expect("overflow diagnostics");
+    ));
+    assert!(
+        !result.is_within_bounds(),
+        "far-right placement must overflow"
+    );
+    let diagnostics = required_some!(result.diagnostics());
     let report = result.report();
-    let amount = report.violations[0].amount.micrometres();
-    assert!(amount > i64::MAX as u64);
+    let amount = required_some!(report.violations.first())
+        .amount
+        .micrometres();
+    assert!(amount > i64::MAX.unsigned_abs());
     assert_eq!(
-        diagnostics.diagnostics[0].evidence[1],
-        Evidence::PhysicalLength {
+        required_some!(
+            required_some!(diagnostics.diagnostics.first())
+                .evidence
+                .get(1)
+        ),
+        &Evidence::PhysicalLength {
             micrometres: i128::from(amount),
             quantity: PhysicalLengthQuantity::Overflow,
         },
@@ -732,18 +915,21 @@ fn very_large_overflow_amount_is_lossless_in_diagnostic_evidence() {
 #[test]
 fn placement_coordinate_overflow_is_typed_before_diagnostics() {
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let fixture = required_some!(candidate_fixture(&ids));
     let mut session = SemanticNotebookSessionService::default();
-    let AcceptanceOutcome::Accepted { mapping, revision } =
-        session.accept(fixture.notebook)
-    else {
-        panic!("candidate must be accepted");
+    let admission = session.accept(fixture.notebook);
+    assert!(
+        matches!(admission, AcceptanceOutcome::Accepted { .. }),
+        "candidate must be accepted: {admission:?}"
+    );
+    let AcceptanceOutcome::Accepted { mapping, revision } = admission else {
+        return;
     };
-    let page = accepted_for(&mapping, fixture.page_one);
-    let object = accepted_for(&mapping, fixture.block);
+    let page = required_some!(accepted_for(&mapping, fixture.page_one));
+    let object = required_some!(accepted_for(&mapping, fixture.block));
     assert_eq!(
         validate_fixed_placement(
-            session.current().expect("accepted revision"),
+            required_some!(session.current()),
             placement(revision, page, object, rect(u64::MAX, 20_000, 1, 1)),
         ),
         Err(FixedRegionLayoutError::Bounds(
@@ -752,44 +938,30 @@ fn placement_coordinate_overflow_is_typed_before_diagnostics() {
     );
 }
 
-trait CorruptAcceptedRevisionForTest {
-    fn forget_profiles(&mut self);
-    fn invalidate_first_profile(&mut self);
-}
-
-impl CorruptAcceptedRevisionForTest
-    for atrament_semantic_notebook::AcceptedRevision
-{
-    fn forget_profiles(&mut self) {
-        self.notebook.page_profiles.clear();
-    }
-
-    fn invalidate_first_profile(&mut self) {
-        self.notebook.page_profiles[0].geometry.sheet.width = Length::ZERO;
-    }
-}
-
 #[test]
 fn missing_or_invalid_profile_never_falls_back_to_arbitrary_bounds() {
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let fixture = required_some!(candidate_fixture(&ids));
     let mut session = SemanticNotebookSessionService::default();
-    let AcceptanceOutcome::Accepted { mapping, revision } =
-        session.accept(fixture.notebook)
-    else {
-        panic!("candidate must be accepted");
+    let admission = session.accept(fixture.notebook);
+    assert!(
+        matches!(admission, AcceptanceOutcome::Accepted { .. }),
+        "candidate must be accepted: {admission:?}"
+    );
+    let AcceptanceOutcome::Accepted { mapping, revision } = admission else {
+        return;
     };
-    let page = accepted_for(&mapping, fixture.page_one);
-    let object = accepted_for(&mapping, fixture.block);
-    let profile = accepted_for(&mapping, fixture.profile_one);
+    let page = required_some!(accepted_for(&mapping, fixture.page_one));
+    let object = required_some!(accepted_for(&mapping, fixture.block));
+    let profile = required_some!(accepted_for(&mapping, fixture.profile_one));
     let checked = placement(revision, page, object, rect(35_000, 20_000, 1, 1));
-    let mut missing = session.current().expect("accepted revision").clone();
+    let mut missing = required_some!(session.current()).clone();
     missing.forget_profiles();
     assert_eq!(
         validate_fixed_placement(&missing, checked),
         Err(FixedRegionLayoutError::MissingPageProfile { page, profile }),
     );
-    let mut invalid = session.current().expect("accepted revision").clone();
+    let mut invalid = required_some!(session.current()).clone();
     invalid.invalidate_first_profile();
     assert_eq!(
         validate_fixed_placement(&invalid, checked),
@@ -802,23 +974,25 @@ fn missing_or_invalid_profile_never_falls_back_to_arbitrary_bounds() {
 
 fn verify_duplicate_fixed_region_authority_refusal() -> Result<(), String> {
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let fixture = candidate_fixture(&ids).ok_or("candidate fixture missing")?;
     let mut session = SemanticNotebookSessionService::default();
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept(fixture.notebook)
     else {
         return Err("valid fixed-region fixture was refused".into());
     };
-    let page = accepted_for(&mapping, fixture.page_one);
-    let object = accepted_for(&mapping, fixture.block);
-    let profile = accepted_for(&mapping, fixture.profile_one);
+    let page = accepted_for(&mapping, fixture.page_one)
+        .ok_or("accepted identity unmapped")?;
+    let object = accepted_for(&mapping, fixture.block)
+        .ok_or("accepted identity unmapped")?;
+    let profile = accepted_for(&mapping, fixture.profile_one)
+        .ok_or("accepted identity unmapped")?;
     let checked = placement(revision, page, object, rect(35_000, 20_000, 1, 1));
     let accepted = session
         .current()
         .ok_or("accepted revision missing")?
         .clone();
-    if !matches_within(validate_fixed_placement(&accepted, checked), checked)
-    {
+    if !matches_within(validate_fixed_placement(&accepted, checked), checked) {
         return Err("valid fixed region was refused".into());
     }
 
@@ -868,23 +1042,25 @@ fn fixed_regions_refuse_ambiguous_accepted_page_and_profile_owners() {
 
 fn verify_cross_kind_fixed_authority_refusal() -> Result<(), String> {
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let fixture = candidate_fixture(&ids).ok_or("candidate fixture missing")?;
     let mut session = SemanticNotebookSessionService::default();
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept(fixture.notebook)
     else {
         return Err("valid candidate was refused".into());
     };
-    let page = accepted_for(&mapping, fixture.page_one);
-    let profile = accepted_for(&mapping, fixture.profile_one);
-    let object = accepted_for(&mapping, fixture.block);
+    let page = accepted_for(&mapping, fixture.page_one)
+        .ok_or("accepted identity unmapped")?;
+    let profile = accepted_for(&mapping, fixture.profile_one)
+        .ok_or("accepted identity unmapped")?;
+    let object = accepted_for(&mapping, fixture.block)
+        .ok_or("accepted identity unmapped")?;
     let checked = placement(revision, page, object, rect(35_000, 20_000, 1, 1));
     let accepted = session
         .current()
         .ok_or("accepted revision missing")?
         .clone();
-    if !matches_within(validate_fixed_placement(&accepted, checked), checked)
-    {
+    if !matches_within(validate_fixed_placement(&accepted, checked), checked) {
         return Err("valid fixed placement was refused".into());
     }
     for case in 0u8..4 {
@@ -939,42 +1115,53 @@ fn fixed_placement_rejects_cross_kind_page_and_profile_aliases() {
 
 fn verify_duplicate_fixed_object_refusal() -> Result<(), String> {
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let fixture = candidate_fixture(&ids).ok_or("candidate fixture missing")?;
     let mut session = SemanticNotebookSessionService::default();
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept(fixture.notebook)
     else {
         return Err("valid fixed-region fixture was refused".into());
     };
-    let page = accepted_for(&mapping, fixture.page_one);
-    let object = accepted_for(&mapping, fixture.block);
+    let page = accepted_for(&mapping, fixture.page_one)
+        .ok_or("accepted identity unmapped")?;
+    let object = accepted_for(&mapping, fixture.block)
+        .ok_or("accepted identity unmapped")?;
     let checked = placement(revision, page, object, rect(35_000, 20_000, 1, 1));
     let accepted = session
         .current()
         .ok_or("accepted revision missing")?
         .clone();
-    if !matches_within(validate_fixed_placement(&accepted, checked), checked)
-    {
+    if !matches_within(validate_fixed_placement(&accepted, checked), checked) {
         return Err("valid fixed block was refused".into());
     }
     for case in 0u8..3 {
         let mut malformed = accepted.clone();
         match case {
-            0 => malformed.notebook.pages
-                .get_mut(1)
-                .and_then(|owning_page| owning_page.flows.first_mut())
-                .and_then(|flow| flow.blocks.first_mut())
-                .ok_or("second-page block missing")?
-                .id = object,
-            1 => malformed.notebook.pages
-                .get_mut(0)
-                .and_then(|owning_page| owning_page.flows.first_mut())
-                .and_then(|flow| flow.blocks.get_mut(1))
-                .ok_or("second block missing")?
-                .id = object,
+            0 => {
+                malformed
+                    .notebook
+                    .pages
+                    .get_mut(1)
+                    .and_then(|owning_page| owning_page.flows.first_mut())
+                    .and_then(|flow| flow.blocks.first_mut())
+                    .ok_or("second-page block missing")?
+                    .id = object;
+            },
+            1 => {
+                malformed
+                    .notebook
+                    .pages
+                    .first_mut()
+                    .and_then(|owning_page| owning_page.flows.first_mut())
+                    .and_then(|flow| flow.blocks.get_mut(1))
+                    .ok_or("second block missing")?
+                    .id = object;
+            },
             2 => {
-                let container = malformed.notebook.pages
-                    .get_mut(0)
+                let container = malformed
+                    .notebook
+                    .pages
+                    .first_mut()
                     .and_then(|owning_page| owning_page.flows.first_mut())
                     .and_then(|flow| flow.blocks.get_mut(1))
                     .ok_or("callout missing")?;
@@ -982,8 +1169,7 @@ fn verify_duplicate_fixed_object_refusal() -> Result<(), String> {
                 else {
                     return Err("callout content missing".into());
                 };
-                children.first_mut().ok_or("nested block missing")?.id =
-                    object;
+                children.first_mut().ok_or("nested block missing")?.id = object;
             },
             _ => return Err("unexpected duplicate case".into()),
         }
@@ -993,7 +1179,8 @@ fn verify_duplicate_fixed_object_refusal() -> Result<(), String> {
             return Err(format!("duplicate fixed object case {case} accepted"));
         }
         if case == 0 {
-            let later_page = accepted_for(&mapping, fixture.page_two);
+            let later_page = accepted_for(&mapping, fixture.page_two)
+                .ok_or("accepted identity unmapped")?;
             let later = placement(
                 revision,
                 later_page,
@@ -1022,15 +1209,17 @@ fn fixed_region_refuses_ambiguous_nested_or_cross_page_block_owner() {
 
 fn verify_fixed_object_structural_alias_refusal() -> Result<(), String> {
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let fixture = candidate_fixture(&ids).ok_or("candidate fixture missing")?;
     let mut session = SemanticNotebookSessionService::default();
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept(fixture.notebook)
     else {
         return Err("valid fixed-region fixture was refused".into());
     };
-    let page = accepted_for(&mapping, fixture.page_one);
-    let object = accepted_for(&mapping, fixture.block);
+    let page = accepted_for(&mapping, fixture.page_one)
+        .ok_or("accepted identity unmapped")?;
+    let object = accepted_for(&mapping, fixture.block)
+        .ok_or("accepted identity unmapped")?;
     let checked = placement(revision, page, object, rect(35_000, 20_000, 1, 1));
     let accepted = session.current().ok_or("revision missing")?.clone();
     for case in 0u8..4 {
@@ -1075,7 +1264,7 @@ fn verify_fixed_object_structural_alias_refusal() -> Result<(), String> {
                     .page_profiles
                     .get_mut(1)
                     .ok_or("second profile missing")?
-                    .id = object
+                    .id = object;
             },
             _ => return Err("unexpected alias case".into()),
         }

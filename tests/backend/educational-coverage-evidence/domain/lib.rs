@@ -75,25 +75,36 @@ fn validated_projection_groups_exact_observations_in_required_subject_order() {
         readable_organization: EducationalEvidenceStatus::Established,
         subject: EducationalSubject::History,
     });
-    assert!(project_educational_coverage_by_subject(&observations)
-        .is_ok_and(|review| {
-            assert_eq!(review.len(), SUBJECTS.len());
-            for (group, subject) in review.iter().zip(SUBJECTS) {
-                assert_eq!(group.subject(), subject);
+    assert!(
+        project_educational_coverage_by_subject(&observations).is_ok_and(
+            |review| {
+                assert_eq!(review.len(), SUBJECTS.len());
+                for (group, subject) in review.iter().zip(SUBJECTS) {
+                    assert_eq!(group.subject(), subject);
+                }
+                let Some(history) = review.get(2) else {
+                    return false;
+                };
+                assert_eq!(history.subject(), EducationalSubject::History);
+                assert_eq!(history.observations().len(), 2);
+                let first_matches = history
+                    .observations()
+                    .first()
+                    .zip(observations.get(2))
+                    .is_some_and(|(actual, expected)| {
+                        ptr::eq(*actual, expected)
+                    });
+                let second_matches = history
+                    .observations()
+                    .get(1)
+                    .zip(observations.get(6))
+                    .is_some_and(|(actual, expected)| {
+                        ptr::eq(*actual, expected)
+                    });
+                first_matches && second_matches
             }
-            let Some(history) = review.get(2) else {
-                return false;
-            };
-            assert_eq!(history.subject(), EducationalSubject::History);
-            assert_eq!(history.observations().len(), 2);
-            let first_matches = history.observations().first()
-                .zip(observations.get(2))
-                .is_some_and(|(actual, expected)| ptr::eq(*actual, expected));
-            let second_matches = history.observations().get(1)
-                .zip(observations.get(6))
-                .is_some_and(|(actual, expected)| ptr::eq(*actual, expected));
-            first_matches && second_matches
-        }));
+        )
+    );
 }
 
 #[test]
@@ -138,9 +149,11 @@ fn property_evidence_fails_in_bilingual_dense_readable_order() {
     observations[2].dense_organization = EducationalEvidenceStatus::Established;
     assert_eq!(
         validate_educational_coverage(&observations),
-        Err(EducationalCoverageError::ReadableOrganizationEvidenceMissing {
-            observation_index: 2,
-        }),
+        Err(
+            EducationalCoverageError::ReadableOrganizationEvidenceMissing {
+                observation_index: 2,
+            }
+        ),
     );
 }
 
@@ -156,7 +169,9 @@ fn extra_observations_and_exact_artifact_identity_remain_caller_owned() {
     });
     assert_eq!(validate_educational_coverage(&observations), Ok(()));
     assert_eq!(
-        observations.get(6).map(|value| value.artifact_identity.as_str()),
+        observations
+            .get(6)
+            .map(|value| value.artifact_identity.as_str()),
         Some(HISTORY_IDENTITY),
     );
 }
@@ -214,16 +229,16 @@ fn every_property_mask_at_every_position_matches_evidence_precedence() {
                     };
                     current.dense_organization =
                         if established_mask & 0b010 != 0 {
-                        EducationalEvidenceStatus::Established
-                    } else {
-                        EducationalEvidenceStatus::NotEstablished
-                    };
+                            EducationalEvidenceStatus::Established
+                        } else {
+                            EducationalEvidenceStatus::NotEstablished
+                        };
                     current.readable_organization =
                         if established_mask & 0b100 != 0 {
-                        EducationalEvidenceStatus::Established
-                    } else {
-                        EducationalEvidenceStatus::NotEstablished
-                    };
+                            EducationalEvidenceStatus::Established
+                        } else {
+                            EducationalEvidenceStatus::NotEstablished
+                        };
                     true
                 }
             ));
@@ -267,7 +282,6 @@ fn every_property_mask_at_every_position_matches_evidence_precedence() {
     assert_eq!(cases, 48);
 }
 
-
 #[test]
 fn every_six_observation_property_state_preserves_global_precedence() {
     const STATES_PER_OBSERVATION: u32 = 8;
@@ -281,10 +295,13 @@ fn every_six_observation_property_state_preserves_global_precedence() {
         let mut expected = Ok(());
 
         for observation_index in 0..SUBJECTS.len() {
-            let state = value.checked_rem(STATES_PER_OBSERVATION)
+            let state = value
+                .checked_rem(STATES_PER_OBSERVATION)
                 .and_then(|remainder| u8::try_from(remainder).ok())
                 .unwrap_or_default();
-            value /= STATES_PER_OBSERVATION;
+            value = value
+                .checked_div(STATES_PER_OBSERVATION)
+                .unwrap_or_default();
             assert!(observations.get_mut(observation_index).is_some_and(
                 |current| {
                     current.bilingual = if state & 0b001 != 0 {
