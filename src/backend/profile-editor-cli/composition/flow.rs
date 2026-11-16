@@ -2286,14 +2286,15 @@ fn is_authored_superscript_digit(value: &str) -> bool {
         | "\u{2075}" | "\u{2076}" | "\u{2077}" | "\u{2078}" | "\u{2079}")
 }
 
-// A multiplication-sign scientific number has an explicitly written power
-// of ten, not just an arbitrary product. Return the end of ×10^n or ×10ⁿ
-// (including complete signed/parenthesized scripts) only when every required
-// glyph exists. Other multiplication is ordinary authored ink.
+// An authored ×, middle dot or dot operator before a power of ten is
+// scientific notation, not an arbitrary product. Return the end of the
+// complete ^n or Unicode superscript power (including signs/parentheses).
+// Incomplete notation remains ordinary authored ink.
 fn scientific_multiplier_end(
     glyphs: &[MeasuredGrapheme<'_>], from: usize,
 ) -> Option<usize> {
-    if glyphs.get(from)?.0 != "\u{d7}"
+    if !matches!(glyphs.get(from)?.0,
+        "\u{d7}" | "\u{b7}" | "\u{22c5}")
         || glyphs.get(from.checked_add(1)?)?.0 != "1"
         || glyphs.get(from.checked_add(2)?)?.0 != "0" {
         return None;

@@ -5302,6 +5302,21 @@ previous valid output. The grouping is advisory and synthesizes no glyph.
 This only improves CLI nominal line breaking. It does not implement parsed
 mathematics, saved notebook semantic content or complete notebook Export.
 
+### Authored scientific middle-dot multipliers — 2026-11-15
+
+The existing measured power-of-ten grouping also accepts the authored middle
+dot `·` (U+00B7) and dot operator `⋅` (U+22C5), beside `×`. Only a complete
+`10` plus signed/parenthesized ASCII or Unicode superscript exponent qualifies;
+regular multiplication and incomplete exponents remain independent ink.
+All three operators keep their exact authored glyph identity, with no inferred
+font or substitution, and too-narrow sheets retain grapheme fallback.
+
+The previously failing Rust case now checks exact grouping, malformed powers,
+plain/Markdown wrapping and narrow-sheet preservation. Native PDF/PNG cases
+compare independently placed strokes and verify missing operator ink refuses
+without replacing a successful export. This is CLI-only advisory flow, not a
+semantic mathematics parser or the saved-notebook Export handoff.
+
 ## Complete bare-integer row grouping (partial) — 2026-11-15
 
 The export-only Rust flow compiler now joins adjacent ASCII digits in an
