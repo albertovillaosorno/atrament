@@ -2286,15 +2286,15 @@ fn is_authored_superscript_digit(value: &str) -> bool {
         | "\u{2075}" | "\u{2076}" | "\u{2077}" | "\u{2078}" | "\u{2079}")
 }
 
-// An authored ×, middle dot or dot operator before a power of ten is
-// scientific notation, not an arbitrary product. Return the end of the
-// complete ^n or Unicode superscript power (including signs/parentheses).
+// An authored multiplication operator before a power of ten is scientific
+// notation, not an arbitrary product. Return the end of the complete ^n or
+// Unicode superscript power (including signs/parentheses).
 // Incomplete notation remains ordinary authored ink.
 fn scientific_multiplier_end(
     glyphs: &[MeasuredGrapheme<'_>], from: usize,
 ) -> Option<usize> {
     if !matches!(glyphs.get(from)?.0,
-        "\u{d7}" | "\u{b7}" | "\u{22c5}")
+        "\u{d7}" | "\u{b7}" | "\u{22c5}" | "\u{2217}" | "*")
         || glyphs.get(from.checked_add(1)?)?.0 != "1"
         || glyphs.get(from.checked_add(2)?)?.0 != "0" {
         return None;
@@ -2397,12 +2397,11 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
         // An omitted leading zero is still an authored decimal. Recognize
         // .5 and ,5 only at a numeric boundary, never after sentence
         // punctuation in ordinary prose (a.5, 1..5).
-        // Comparisons and explicit algebraic operators stay with their
-        // following complete numeric operand, never the left-hand word.
+        // Comparisons and authored arithmetic operators bind only a
+        // complete following numeric operand, never the left-hand word.
         // Keep ASCII hyphens ambiguous and exclude C++17-style doubled
-        // plus and x**2-style doubled stars. Authored multiplication marks
-        // bind numeric operands, not arbitrary following words.
-        // Include both ASCII characters of <=, >=, != and ==.
+        // plus and x**2-style doubled stars. Include both ASCII characters
+        // of <=, >=, != and ==.
         let numeric_prefix_start = cursor.checked_sub(1)
             .filter(|&index| glyphs.get(index).is_some_and(|item| {
                 matches!(item.0,

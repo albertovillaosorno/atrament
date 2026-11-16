@@ -5420,3 +5420,20 @@ native PDF and transparent PNG process tests compare four new operator cases
 with independently placed authored ink, plus missing-shape refusal without
 replacing a valid output. This does not interpret multiplication, invent glyph
 shapes, save semantic content or complete notebook Export.
+
+### Authored asterisk scientific multipliers — 2026-11-15
+
+The measured power-of-ten grouping also accepts ASCII asterisk `*` and
+Unicode asterisk operator `∗` alongside `×`, middle dot `·` and dot
+operator `⋅`. A complete authored `10` plus ASCII caret or Unicode
+superscript power stays with its preceding numeric mantissa when the exact
+ink fits. Incomplete powers and nonnumeric prefixes do not bind the
+preceding text; ordinary `x*12` multiplication retains its existing
+operator-to-operand behavior.
+
+A failing-before-fix native Rust regression covers complete and incomplete
+powers, plain/Markdown placement, and narrow-row grapheme fallback. The
+native-process PDF/transparent PNG acceptance compares both new operators
+with independently authored physical ink and verifies missing-shape refusal
+without replacing a previously valid export. No glyph is inferred and no
+mathematical expression or saved semantic block is created.

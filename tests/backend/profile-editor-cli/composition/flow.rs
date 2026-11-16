@@ -9398,7 +9398,8 @@ fn scientific_multiplication_powers_bind_complete_authored_notation()
         "-0.5\u{d7}10\u{207b}\u{b3}", "1e3\u{d7}10^(2)",
         "1\u{d7}10\u{207d}\u{b2}\u{207e}",
         "1\u{b7}10^3", "6.02\u{22c5}10\u{207b}\u{b3}",
-        "1\u{22c5}10^(2)",
+        "1\u{22c5}10^(2)", "1*10^3", "6.02*10^-3",
+        "1\u{2217}10\u{207b}\u{b3}",
     ] {
         let glyphs = super::measured_word(source, None)?.0;
         if super::numeric_separator_joins(&glyphs)
@@ -9410,7 +9411,9 @@ fn scientific_multiplication_powers_bind_complete_authored_notation()
         "1\u{d7}10^", "1\u{d7}10^-", "1\u{d7}10^a", "1\u{d7}11^2", "3\u{d7}4",
         "1\u{d7}10\u{207b}", "1\u{d7}10\u{207d}\u{b2}", "a\u{d7}10^2",
         "1\u{b7}10^", "1\u{22c5}10^-", "1\u{b7}11^2",
-        "a\u{22c5}10^2", "1\u{b7}3",
+        "a\u{22c5}10^2", "1\u{b7}3", "1*10^",
+        "1\u{2217}11^2", "a*10^2", "a\u{2217}10^2",
+        "1**10^3",
     ] {
         let glyphs = super::measured_word(source, None)?.0;
         let joins = super::numeric_separator_joins(&glyphs);
@@ -9435,7 +9438,8 @@ fn scientific_multiplication_powers_bind_complete_authored_notation()
     for format in [FlowFormat::Plain, FlowFormat::Markdown] {
         for source in [
             "abcde1\u{d7}10\u{b3}g", "abcde1\u{b7}10\u{b3}g",
-            "abcde1\u{22c5}10\u{b3}g",
+            "abcde1\u{22c5}10\u{b3}g", "abcde1*10\u{b3}g",
+            "abcde1\u{2217}10\u{b3}g",
         ] {
             let (rows, marks, pages) = super::layout_flow_with_region(
                 &FlowSource::new(format, source)?,
@@ -9454,6 +9458,7 @@ fn scientific_multiplication_powers_bind_complete_authored_notation()
         };
         for source in [
             "1\u{d7}10^3", "1\u{b7}10^3", "1\u{22c5}10^3",
+            "1*10^3", "1\u{2217}10^3",
         ] {
             let (fallback, _, _) = super::layout_flow_with_region(
                 &FlowSource::new(format, source)?,
@@ -9716,6 +9721,7 @@ fn algebraic_operator_numeric_operands_keep_measured_ink()
     for (source, boundary) in [
         ("x+abc", 1), ("x×word", 1), ("x÷.", 1),
         ("x−.a", 1), ("x-12", 1), ("C++17", 2),
+        ("x**17", 2),
     ] {
         let glyphs = super::measured_word(source, None)?.0;
         let ties = super::numeric_separator_joins(&glyphs);
