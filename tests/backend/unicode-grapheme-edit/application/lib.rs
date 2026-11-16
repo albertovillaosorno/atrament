@@ -43,56 +43,6 @@ use atrament_unicode_grapheme_edit::{
 };
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
-#[test]
-fn combining_mark_and_emoji_sequences_are_edited_as_single_graphemes() {
-    let provider = UnicodeGraphemeSegmentation;
-    let source = "A e\u{301} 👩‍🔬 Z";
-    assert_eq!(
-        replace_grapheme_range(
-            &provider,
-            source,
-            GraphemeRange { count: 3, start: 2 },
-            "ñ",
-        ),
-        Ok(String::from("A ñ Z")),
-    );
-}
-
-#[test]
-fn empty_source_accepts_zero_grapheme_insertion() {
-    let provider = UnicodeGraphemeSegmentation;
-    assert_eq!(
-        replace_grapheme_range(
-            &provider,
-            "",
-            GraphemeRange { count: 0, start: 0 },
-            "ñ",
-        ),
-        Ok(String::from("ñ")),
-    );
-}
-
-#[test]
-fn zero_length_ranges_insert_at_start_middle_and_end() {
-    let provider = UnicodeGraphemeSegmentation;
-    let source = "aé";
-    for (start, replacement, expected) in [
-        (0, "¡", "¡aé"),
-        (1, "—", "a—é"),
-        (2, "!", "aé!"),
-    ] {
-        assert_eq!(
-            replace_grapheme_range(
-                &provider,
-                source,
-                GraphemeRange { count: 0, start },
-                replacement,
-            ),
-            Ok(String::from(expected)),
-        );
-    }
-}
-
 struct ChangingZeroCountAnchorProvider {
     boundary_calls: Cell<usize>,
 }
@@ -103,7 +53,7 @@ impl GraphemeBoundaryProvider for ChangingZeroCountAnchorProvider {
         source: &str,
         grapheme_index: usize,
     ) -> Option<usize> {
-        assert_eq!(grapheme_index, 0);
+        assert_eq!(grapheme_index, 0, "zero-count provider needs source anchor");
         let calls = self.boundary_calls.get();
         self.boundary_calls.set(calls.saturating_add(1));
         if calls == 0 {
@@ -115,6 +65,270 @@ impl GraphemeBoundaryProvider for ChangingZeroCountAnchorProvider {
 
     fn grapheme_count(&self, _source: &str) -> usize {
         0
+    }
+}
+
+struct ImpossibleGraphemeCountProvider {
+    boundary_calls: Cell<usize>,
+}
+
+impl GraphemeBoundaryProvider for ImpossibleGraphemeCountProvider {
+    fn byte_offset(
+        &self,
+        _source: &str,
+        _grapheme_index: usize,
+    ) -> Option<usize> {
+        self.boundary_calls.set(self.boundary_calls.get().saturating_add(1));
+        None
+    }
+
+    fn grapheme_count(&self, source: &str) -> usize {
+        source.len().saturating_add(1)
+    }
+}
+
+struct ChangingInsertionBoundaryProvider {
+    internal_calls: Cell<usize>,
+}
+
+impl GraphemeBoundaryProvider for ChangingInsertionBoundaryProvider {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            1 => {
+                let calls = self.internal_calls.get();
+                self.internal_calls.set(calls.saturating_add(1));
+                if calls == 0 {
+                    Some("\u{e9}".len())
+                } else {
+                    Some(source.len())
+                }
+            },
+            2 => Some(source.len()),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        2
+    }
+}
+
+struct ImpossibleInternalCapacityProvider {
+    internal_byte: usize,
+    internal_index: usize,
+}
+
+impl GraphemeBoundaryProvider for ImpossibleInternalCapacityProvider {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            4 => Some(source.len()),
+            index if index == self.internal_index => Some(self.internal_byte),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        4
+    }
+}
+
+struct CompressedRangeBoundaryProvider;
+
+impl GraphemeBoundaryProvider for CompressedRangeBoundaryProvider {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            1 => Some(3),
+            3 => Some(4),
+            4 => Some(source.len()),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        4
+    }
+}
+
+#[derive(Clone, Copy)]
+enum BrokenBoundaryMode {
+    InternalAtEnd,
+    InternalAtStart,
+    InvalidUtf8,
+    Missing,
+    NonAdvancing,
+    ShiftedFirst,
+    TruncatedFinal,
+    UnderreportedCount,
+}
+
+struct BrokenBoundaryProvider {
+    mode: BrokenBoundaryMode,
+}
+
+impl GraphemeBoundaryProvider for BrokenBoundaryProvider {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match self.mode {
+            BrokenBoundaryMode::InternalAtEnd => match grapheme_index {
+                0 => Some(0),
+                _ => Some(source.len()),
+            },
+            BrokenBoundaryMode::InternalAtStart => match grapheme_index {
+                0 | 1 => Some(0),
+                _ => Some(source.len()),
+            },
+            BrokenBoundaryMode::InvalidUtf8 => match grapheme_index {
+                0 => Some(0),
+                1 => Some(1),
+                _ => Some(source.len()),
+            },
+            BrokenBoundaryMode::Missing => match grapheme_index {
+                0 => Some(0),
+                1 => None,
+                _ => Some(source.len()),
+            },
+            BrokenBoundaryMode::NonAdvancing => match grapheme_index {
+                0 => Some(0),
+                1 | 2 => Some("\u{e9}".len()),
+                _ => Some(source.len()),
+            },
+            BrokenBoundaryMode::ShiftedFirst => match grapheme_index {
+                0 | 1 => Some("\u{e9}".len()),
+                _ => Some(source.len()),
+            },
+            BrokenBoundaryMode::TruncatedFinal => match grapheme_index {
+                0 => Some(0),
+                _ => Some("\u{e9}".len()),
+            },
+            BrokenBoundaryMode::UnderreportedCount => Some(0),
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        match self.mode {
+            BrokenBoundaryMode::NonAdvancing => 3,
+            BrokenBoundaryMode::UnderreportedCount => 0,
+            BrokenBoundaryMode::InternalAtEnd
+            | BrokenBoundaryMode::InternalAtStart
+            | BrokenBoundaryMode::InvalidUtf8
+            | BrokenBoundaryMode::Missing
+            | BrokenBoundaryMode::ShiftedFirst
+            | BrokenBoundaryMode::TruncatedFinal => 2,
+        }
+    }
+}
+
+struct ReversedInteriorBoundaryProvider;
+
+impl GraphemeBoundaryProvider for ReversedInteriorBoundaryProvider {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            1 => Some(4),
+            2 => Some(2),
+            3 => Some(source.len()),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        3
+    }
+}
+
+struct CompactAnchoredRangeBoundaryMap {
+    internal: [usize; 3],
+}
+
+impl GraphemeBoundaryProvider for CompactAnchoredRangeBoundaryMap {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            1..=3 => self.internal
+                .get(grapheme_index.saturating_sub(1)).copied(),
+            4 => Some(source.len()),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        4
+    }
+}
+
+#[test]
+fn combining_mark_and_emoji_sequences_are_edited_as_single_graphemes() {
+    let provider = UnicodeGraphemeSegmentation;
+    let source = "A e\u{301} \u{1f469}\u{200d}\u{1f52c} Z";
+    assert_eq!(
+        replace_grapheme_range(
+            &provider,
+            source,
+            GraphemeRange { count: 3, start: 2 },
+            "\u{f1}",
+        ),
+        Ok(String::from("A \u{f1} Z")),
+    );
+}
+
+#[test]
+fn empty_source_accepts_zero_grapheme_insertion() {
+    let provider = UnicodeGraphemeSegmentation;
+    assert_eq!(
+        replace_grapheme_range(
+            &provider,
+            "",
+            GraphemeRange { count: 0, start: 0 },
+            "\u{f1}",
+        ),
+        Ok(String::from("\u{f1}")),
+    );
+}
+
+#[test]
+fn zero_length_ranges_insert_at_start_middle_and_end() {
+    let provider = UnicodeGraphemeSegmentation;
+    let source = "a\u{e9}";
+    for (start, replacement, expected) in [
+        (0, "\u{a1}", "\u{a1}a\u{e9}"),
+        (1, "\u{2014}", "a\u{2014}\u{e9}"),
+        (2, "!", "a\u{e9}!"),
+    ] {
+        assert_eq!(
+            replace_grapheme_range(
+                &provider,
+                source,
+                GraphemeRange { count: 0, start },
+                replacement,
+            ),
+            Ok(String::from(expected)),
+        );
     }
 }
 
@@ -140,28 +354,15 @@ fn zero_grapheme_count_reuses_the_single_source_anchor() {
     assert_eq!(provider.boundary_calls.get(), 1);
 }
 
-struct ImpossibleGraphemeCountProvider;
-
-impl GraphemeBoundaryProvider for ImpossibleGraphemeCountProvider {
-    fn byte_offset(
-        &self,
-        _source: &str,
-        _grapheme_index: usize,
-    ) -> Option<usize> {
-        panic!("impossible count must reject before boundary access");
-    }
-
-    fn grapheme_count(&self, source: &str) -> usize {
-        source.len().saturating_add(1)
-    }
-}
-
 #[test]
 fn impossible_grapheme_count_rejects_before_boundary_access() {
-    let source = "éx";
+    let source = "\u{e9}x";
+    let provider = ImpossibleGraphemeCountProvider {
+        boundary_calls: Cell::new(0),
+    };
     assert_eq!(
         replace_grapheme_range(
-            &ImpossibleGraphemeCountProvider,
+            &provider,
             source,
             GraphemeRange { count: 0, start: 0 },
             "z",
@@ -171,37 +372,8 @@ fn impossible_grapheme_count_rejects_before_boundary_access() {
             source_bytes: source.len(),
         }),
     );
-}
-
-struct ChangingInsertionBoundaryProvider {
-    internal_calls: Cell<usize>,
-}
-
-impl GraphemeBoundaryProvider for ChangingInsertionBoundaryProvider {
-    fn byte_offset(
-        &self,
-        source: &str,
-        grapheme_index: usize,
-    ) -> Option<usize> {
-        match grapheme_index {
-            0 => Some(0),
-            1 => {
-                let calls = self.internal_calls.get();
-                self.internal_calls.set(calls.saturating_add(1));
-                if calls == 0 {
-                    Some("é".len())
-                } else {
-                    Some(source.len())
-                }
-            },
-            2 => Some(source.len()),
-            _ => None,
-        }
-    }
-
-    fn grapheme_count(&self, _source: &str) -> usize {
-        2
-    }
+    assert_eq!(provider.boundary_calls.get(), 0,
+        "invalid count must avoid provider boundaries");
 }
 
 #[test]
@@ -212,37 +384,13 @@ fn zero_length_range_resolves_one_internal_boundary_once() {
     assert_eq!(
         replace_grapheme_range(
             &provider,
-            "éx",
+            "\u{e9}x",
             GraphemeRange { count: 0, start: 1 },
             "!",
         ),
-        Ok(String::from("é!x")),
+        Ok(String::from("\u{e9}!x")),
     );
     assert_eq!(provider.internal_calls.get(), 1);
-}
-
-struct ImpossibleInternalCapacityProvider {
-    internal_byte: usize,
-    internal_index: usize,
-}
-
-impl GraphemeBoundaryProvider for ImpossibleInternalCapacityProvider {
-    fn byte_offset(
-        &self,
-        source: &str,
-        grapheme_index: usize,
-    ) -> Option<usize> {
-        match grapheme_index {
-            0 => Some(0),
-            4 => Some(source.len()),
-            index if index == self.internal_index => Some(self.internal_byte),
-            _ => None,
-        }
-    }
-
-    fn grapheme_count(&self, _source: &str) -> usize {
-        4
-    }
 }
 
 #[test]
@@ -280,32 +428,9 @@ fn replacement_preserves_normalization_spelling_exactly() {
         nfd,
         GraphemeRange { count: 1, start: 3 },
         replacement,
-    )
-    .expect("valid exact grapheme replacement");
-    assert_eq!(edited, "cafsen\u{303}or");
-    assert_ne!(edited, "cafseñor");
-}
-
-struct CompressedRangeBoundaryProvider;
-
-impl GraphemeBoundaryProvider for CompressedRangeBoundaryProvider {
-    fn byte_offset(
-        &self,
-        source: &str,
-        grapheme_index: usize,
-    ) -> Option<usize> {
-        match grapheme_index {
-            0 => Some(0),
-            1 => Some(3),
-            3 => Some(4),
-            4 => Some(source.len()),
-            _ => None,
-        }
-    }
-
-    fn grapheme_count(&self, _source: &str) -> usize {
-        4
-    }
+    );
+    assert_eq!(edited, Ok(String::from("cafsen\u{303}or")));
+    assert_ne!(edited, Ok(String::from("cafse\u{f1}or")));
 }
 
 #[test]
@@ -369,79 +494,9 @@ fn invalid_ranges_return_typed_errors() {
     );
 }
 
-#[derive(Clone, Copy)]
-enum BrokenBoundaryMode {
-    InternalAtEnd,
-    InternalAtStart,
-    InvalidUtf8,
-    Missing,
-    NonAdvancing,
-    ShiftedFirst,
-    TruncatedFinal,
-    UnderreportedCount,
-}
-
-struct BrokenBoundaryProvider {
-    mode: BrokenBoundaryMode,
-}
-
-impl GraphemeBoundaryProvider for BrokenBoundaryProvider {
-    fn byte_offset(
-        &self,
-        source: &str,
-        grapheme_index: usize,
-    ) -> Option<usize> {
-        match self.mode {
-            BrokenBoundaryMode::InternalAtEnd => match grapheme_index {
-                0 => Some(0),
-                1 => Some(source.len()),
-                _ => Some(source.len()),
-            },
-            BrokenBoundaryMode::InternalAtStart => match grapheme_index {
-                0 | 1 => Some(0),
-                _ => Some(source.len()),
-            },
-            BrokenBoundaryMode::InvalidUtf8 => match grapheme_index {
-                0 => Some(0),
-                1 => Some(1),
-                _ => Some(source.len()),
-            },
-            BrokenBoundaryMode::Missing => match grapheme_index {
-                0 => Some(0),
-                1 => None,
-                _ => Some(source.len()),
-            },
-            BrokenBoundaryMode::NonAdvancing => match grapheme_index {
-                0 => Some(0),
-                1 | 2 => Some("é".len()),
-                _ => Some(source.len()),
-            },
-            BrokenBoundaryMode::ShiftedFirst => match grapheme_index {
-                0 => Some("é".len()),
-                1 => Some("é".len()),
-                _ => Some(source.len()),
-            },
-            BrokenBoundaryMode::TruncatedFinal => match grapheme_index {
-                0 => Some(0),
-                1 => Some("é".len()),
-                _ => Some("é".len()),
-            },
-            BrokenBoundaryMode::UnderreportedCount => Some(0),
-        }
-    }
-
-    fn grapheme_count(&self, _source: &str) -> usize {
-        match self.mode {
-            BrokenBoundaryMode::NonAdvancing => 3,
-            BrokenBoundaryMode::UnderreportedCount => 0,
-            _ => 2,
-        }
-    }
-}
-
 #[test]
 fn provider_boundary_failures_are_not_reported_as_user_range_errors() {
-    let source = "éx";
+    let source = "\u{e9}x";
     assert_eq!(
         replace_grapheme_range(
             &BrokenBoundaryProvider {
@@ -469,7 +524,7 @@ fn provider_boundary_failures_are_not_reported_as_user_range_errors() {
         Err(GraphemeRangeError::BoundaryAnchorMismatch {
             expected: 0,
             grapheme_index: 0,
-            observed: "é".len(),
+            observed: "\u{e9}".len(),
         }),
     );
     assert_eq!(
@@ -484,7 +539,7 @@ fn provider_boundary_failures_are_not_reported_as_user_range_errors() {
         Err(GraphemeRangeError::BoundaryAnchorMismatch {
             expected: source.len(),
             grapheme_index: 2,
-            observed: "é".len(),
+            observed: "\u{e9}".len(),
         }),
     );
     assert_eq!(
@@ -512,6 +567,11 @@ fn provider_boundary_failures_are_not_reported_as_user_range_errors() {
             grapheme_index: 1,
         }),
     );
+}
+
+#[test]
+fn provider_nonadvancing_and_invalid_edges_remain_distinct() {
+    let source = "\u{e9}x";
     assert_eq!(
         replace_grapheme_range(
             &BrokenBoundaryProvider {
@@ -522,8 +582,8 @@ fn provider_boundary_failures_are_not_reported_as_user_range_errors() {
             "z",
         ),
         Err(GraphemeRangeError::NonAdvancingBoundaries {
-            end_byte: "é".len(),
-            start_byte: "é".len(),
+            end_byte: "\u{e9}".len(),
+            start_byte: "\u{e9}".len(),
         }),
     );
     for (mode, byte_offset) in [
@@ -542,28 +602,6 @@ fn provider_boundary_failures_are_not_reported_as_user_range_errors() {
                 grapheme_index: 1,
             }),
         );
-    }
-}
-
-struct ReversedInteriorBoundaryProvider;
-
-impl GraphemeBoundaryProvider for ReversedInteriorBoundaryProvider {
-    fn byte_offset(
-        &self,
-        source: &str,
-        grapheme_index: usize,
-    ) -> Option<usize> {
-        match grapheme_index {
-            0 => Some(0),
-            1 => Some(4),
-            2 => Some(2),
-            3 => Some(source.len()),
-            _ => None,
-        }
-    }
-
-    fn grapheme_count(&self, _source: &str) -> usize {
-        3
     }
 }
 
@@ -586,7 +624,7 @@ fn reversed_interior_boundaries_keep_their_distinct_error() {
 #[test]
 fn every_required_bilingual_grapheme_replaces_as_one_exact_edit_unit() {
     let provider = UnicodeGraphemeSegmentation;
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for required in REQUIRED_TEXT_GRAPHEMES {
         let source = format!("x{}y", required.grapheme);
         let edited = replace_grapheme_range(
@@ -609,18 +647,17 @@ fn every_required_bilingual_grapheme_replaces_as_one_exact_edit_unit() {
 #[test]
 fn every_required_bilingual_grapheme_inserts_with_exact_authored_bytes() {
     let provider = UnicodeGraphemeSegmentation;
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for required in REQUIRED_TEXT_GRAPHEMES {
         let edited = replace_grapheme_range(
             &provider,
             "xy",
             GraphemeRange { count: 0, start: 1 },
             required.grapheme,
-        )
-        .expect("required bilingual grapheme must insert");
+        );
         assert_eq!(
             edited,
-            format!("x{}y", required.grapheme),
+            Ok(format!("x{}y", required.grapheme)),
             "insertion for {:?}",
             required.grapheme,
         );
@@ -628,38 +665,23 @@ fn every_required_bilingual_grapheme_inserts_with_exact_authored_bytes() {
     }
     assert_eq!(cases, 114);
 }
-struct CompactAnchoredRangeBoundaryMap {
-    internal: [usize; 3],
-}
-
-impl GraphemeBoundaryProvider for CompactAnchoredRangeBoundaryMap {
-    fn byte_offset(
-        &self,
-        source: &str,
-        grapheme_index: usize,
-    ) -> Option<usize> {
-        match grapheme_index {
-            0 => Some(0),
-            1..=3 => Some(self.internal[grapheme_index - 1]),
-            4 => Some(source.len()),
-            _ => None,
-        }
-    }
-
-    fn grapheme_count(&self, _source: &str) -> usize {
-        4
-    }
-}
-
 fn compact_expected_range_boundary(
     internal: [usize; 3],
     grapheme_index: usize,
 ) -> Result<usize, GraphemeRangeError> {
     let byte_offset = match grapheme_index {
         0 => return Ok(0),
-        1..=3 => internal[grapheme_index - 1],
+        1..=3 => match internal.get(grapheme_index.saturating_sub(1)) {
+            Some(value) => *value,
+            None => return Err(GraphemeRangeError::BoundaryUnavailable {
+                grapheme_index,
+            }),
+        },
         4 => return Ok(4),
-        _ => unreachable!("range oracle only resolves admitted indexes"),
+        _ => return Err(GraphemeRangeError::StartOutOfBounds {
+            grapheme_count: 4,
+            start: grapheme_index,
+        }),
     };
     if matches!(byte_offset, 0 | 4) {
         return Err(GraphemeRangeError::InternalBoundaryAtSourceEdge {
@@ -667,8 +689,8 @@ fn compact_expected_range_boundary(
             grapheme_index,
         });
     }
-    let suffix_graphemes = 4 - grapheme_index;
-    let suffix_bytes = 4 - byte_offset;
+    let suffix_graphemes = 4usize.saturating_sub(grapheme_index);
+    let suffix_bytes = 4usize.saturating_sub(byte_offset);
     if byte_offset < grapheme_index || suffix_bytes < suffix_graphemes {
         return Err(GraphemeRangeError::InternalBoundaryCapacityMismatch {
             byte_offset,
@@ -718,21 +740,31 @@ fn compact_expected_range(
             start_byte,
         });
     }
-    let byte_distance = end_byte - start_byte;
+    let byte_distance = end_byte.saturating_sub(start_byte);
     if byte_distance < count {
         return Err(GraphemeRangeError::BoundaryDistanceTooSmall {
             byte_distance,
             grapheme_distance: count,
         });
     }
-    Ok(format!("{}X{}", &"abcd"[..start_byte], &"abcd"[end_byte..]))
+    let prefix = "abcd".get(..start_byte)
+        .ok_or(GraphemeRangeError::InvalidBoundary {
+            byte_offset: start_byte,
+            grapheme_index: start,
+        })?;
+    let suffix = "abcd".get(end_byte..)
+        .ok_or(GraphemeRangeError::InvalidBoundary {
+            byte_offset: end_byte,
+            grapheme_index: end,
+        })?;
+    Ok(format!("{prefix}X{suffix}"))
 }
 
 #[test]
 fn compact_anchored_boundary_maps_match_independent_range_oracle() {
     let source = "abcd";
-    let mut maps = 0_usize;
-    let mut cases = 0_usize;
+    let mut maps = 0usize;
+    let mut cases = 0usize;
     for first in 0..=4 {
         for second in 0..=4 {
             for third in 0..=4 {
@@ -749,10 +781,7 @@ fn compact_anchored_boundary_maps_match_independent_range_oracle() {
                                 "X",
                             ),
                             compact_expected_range(internal, start, count),
-                            "range map={:?} start={} count={}",
-                            internal,
-                            start,
-                            count,
+                            "range map={internal:?} start={start} count={count}",
                         );
                         cases += 1;
                     }
