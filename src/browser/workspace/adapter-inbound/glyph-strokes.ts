@@ -4154,11 +4154,10 @@ export function geometricStarter(
                 x1: from.x, y1: from.y, x2: to.x, y2: to.y,
                 width: pen, color });
         };
-        return pieces.flatMap(({ from, control, to }) =>
-            control === undefined ? [line(orient(from), orient(to))]
-                : Array.from({ length: ARCH_SEGMENTS }, (_, step) =>
-                    line(orient(quadratic(from, control, to, step)),
-                        orient(quadratic(from, control, to, step + 1)))));
+        return pieces.flatMap(({ from, control, to }) => {
+            if (control === undefined) return [line(orient(from), orient(to))];
+            return sampleQuadraticInk(from, control, to, line, orient);
+        });
     }
     if ([".", ",", "!", "¡", "?", "¿"].includes(g)) {
         // Rotate already-rounded native samples so the inverted template
@@ -4195,16 +4194,12 @@ export function geometricStarter(
         });
     }
     if (g === "s") {
+        const line = (from: Point, to: Point): Stroke =>
+            validateStroke({ grapheme: g, x1: from.x, y1: from.y,
+                x2: to.x, y2: to.y, width: pen, color });
         const lines: Stroke[] = [];
         for (const [from, control, to] of smoothS(cx, cy, radius)) {
-            for (let step = 0; step < ARCH_SEGMENTS; step += 1) {
-                const first = quadratic(from, control, to, step);
-                const last = quadratic(from, control, to, step + 1);
-                lines.push(validateStroke({
-                    grapheme: g, x1: first.x, y1: first.y,
-                    x2: last.x, y2: last.y, width: pen, color,
-                }));
-            }
+            lines.push(...sampleQuadraticInk(from, control, to, line));
         }
         return lines;
     }
