@@ -69,10 +69,19 @@ function isNonmarkingScalar(value) {
         || /^[\u{1D173}-\u{1D17A}\u{E0000}-\u{E0FFF}]$/u
             .test(value);
 }
+// A bounded library often repeats the same few exact Unicode keys hundreds
+// of times. Cache admitted identities, not approximate Unicode equivalences.
+// Keep the segmenter availability check outside the cache (fail closed).
+const MAX_CACHED_GRAPHEMES = 256;
+const admittedGraphemes = new Set();
 // Repeated 4096-stroke previews must not create one ICU segmenter per row.
 // Keep a single locale-neutral grapheme boundary authority for this module.
 let graphemeSegmenter;
 function exactGrapheme(value) {
+    if (typeof Intl.Segmenter !== "function")
+        return false;
+    if (admittedGraphemes.has(value))
+        return true;
     // In Unicode mode an astral scalar is one character; lone UTF-16
     // surrogates still match. TextEncoder would silently replace them with
     // U+FFFD on TSV download, changing the caller's authored glyph identity.
@@ -87,12 +96,18 @@ function exactGrapheme(value) {
         || [...value].every(isNonmarkingScalar)) {
         return false;
     }
-    if (typeof Intl.Segmenter !== "function")
-        return false;
     graphemeSegmenter ??= new Intl.Segmenter(undefined, {
         granularity: "grapheme",
     });
-    return [...graphemeSegmenter.segment(value)].length === 1;
+    // Only successful admissions may be reused; invalid keys still refuse
+    // on every attempt. Clear rather than retain an unbounded key history.
+    if ([...graphemeSegmenter.segment(value)].length !== 1)
+        return false;
+    if (admittedGraphemes.size >= MAX_CACHED_GRAPHEMES) {
+        admittedGraphemes.clear();
+    }
+    admittedGraphemes.add(value);
+    return true;
 }
 function boundedInteger(raw, maximum, label) {
     if (!/^[0-9]+$/.test(raw)) {

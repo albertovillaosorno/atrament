@@ -74,6 +74,46 @@ test("glyph segmentation reuses its authority and still fails closed",
         }
     });
 
+test("repeated Unicode glyph admission is exact, bounded and reusable",
+    async () => {
+        const original = Intl.Segmenter;
+        let segmentCalls = 0;
+        try {
+            Intl.Segmenter = class extends original {
+                segment(value) {
+                    segmentCalls += 1;
+                    return super.segment(value);
+                }
+            };
+            const path = "../../../../src/browser/workspace/adapter-inbound/"
+                + "generated/glyph-strokes.js?bounded-grapheme-admission";
+            const { encodeGlyphLibrary: encode, parseGlyphLibrary: parse } =
+                await import(new URL(path, import.meta.url).href);
+            const exactKeys = ["ñ", "n\u0303", "👩\u200D💻", "∞"];
+            const rows = Array.from({ length: 4096 }, (_, index) =>
+                stroke(exactKeys[index % exactKeys.length]));
+            const saved = encode(rows);
+            assert.deepEqual(parse(saved), rows);
+            assert.equal(segmentCalls, exactKeys.length,
+                "all repeated input rows share four exact admissions");
+            // The cache cannot accumulate arbitrarily many caller-owned
+            // identities; the oldest admitted key is checked again.
+            const distinct = Array.from({ length: 257 }, (_, index) =>
+                stroke(String.fromCodePoint(0x4E00 + index)));
+            encode(distinct);
+            assert.equal(segmentCalls, exactKeys.length + distinct.length);
+            encode([stroke("ñ")]);
+            assert.equal(segmentCalls,
+                exactKeys.length + distinct.length + 1,
+                "old identities are independently rechecked after eviction");
+            assert.throws(() => encode([stroke("ña")]),
+                /visible Unicode grapheme/,
+                "previously admitted prefixes cannot authorize new keys");
+        } finally {
+            Intl.Segmenter = original;
+        }
+    });
+
 test("invalid UTF-16 glyphs cannot silently become replacement ink", () => {
     const validAstral = stroke("🖋");
     const bytes = new TextEncoder().encode(
