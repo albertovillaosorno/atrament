@@ -44,29 +44,37 @@ let graphemeSegmenter: Intl.Segmenter | undefined;
 function expandsBeyondNativeFlowLimit(
     text: string, encoder: TextEncoder,
 ): boolean {
-    if (!text.includes("\t") || typeof Intl.Segmenter !== "function") {
+    if (!text.includes("\t") || typeof Intl === "undefined"
+        || typeof Intl.Segmenter !== "function") {
         return false;
     }
     const normalized = text.replace(/\r\n/g, "\n")
         .replace(/\u2028/g, "  \n").replace(/\u2029/g, "\n\n");
     let expandedBytes = encoder.encode(normalized).byteLength;
     let column = 0;
-    graphemeSegmenter ??= new Intl.Segmenter(undefined, {
-        granularity: "grapheme",
-    });
-    for (const { segment } of graphemeSegmenter.segment(normalized)) {
-        if (segment === "\n") {
-            column = 0;
-        } else if (segment === "\t") {
-            const spaces = 4 - column % 4;
-            expandedBytes += spaces - 1;
-            column += spaces;
-        } else {
-            column += 1;
+    try {
+        graphemeSegmenter ??= new Intl.Segmenter(undefined, {
+            granularity: "grapheme",
+        });
+        for (const { segment } of graphemeSegmenter.segment(normalized)) {
+            if (segment === "\n") {
+                column = 0;
+            } else if (segment === "\t") {
+                const spaces = 4 - column % 4;
+                expandedBytes += spaces - 1;
+                column += spaces;
+            } else {
+                column += 1;
+            }
+            if (expandedBytes > 4_096) return true;
         }
-        if (expandedBytes > 4_096) return true;
+        return false;
+    } catch {
+        // Broken or unsupported browser segmentation is never admission.
+        // Preserve source bytes and leave full tab validation to native Rust.
+        graphemeSegmenter = undefined;
+        return false;
     }
-    return false;
 }
 
 // This is an early transport guard, not an admission of Markdown syntax.

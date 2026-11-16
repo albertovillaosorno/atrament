@@ -148,6 +148,50 @@ test("no segmenter defers tab overflow to native Rust validation",
     }
 });
 
+test("failed segmenter construction or traversal defers to native Rust",
+    async () => {
+    const original = Intl.Segmenter;
+    const isolated = await import(
+        `${ROOT}generated/markdown-export.js?cache-test=broken-segmenter`);
+    const source = "a\t".repeat(1025);
+    const expected = {
+        kind: "ready", text: source,
+        bytes: new TextEncoder().encode(source).byteLength,
+    };
+    try {
+        Intl.Segmenter = class {
+            constructor() { throw new Error("unsupported constructor"); }
+        };
+        assert.deepEqual(isolated.prepareMarkdownHandoff(source), expected);
+        Intl.Segmenter = class {
+            segment() { throw new Error("unsupported iterator"); }
+        };
+        assert.deepEqual(isolated.prepareMarkdownHandoff(source), expected);
+        Intl.Segmenter = original;
+        assert.equal(isolated.prepareMarkdownHandoff(source).kind,
+            "too-large", "healthy segmenter must recover after refusal");
+    } finally {
+        Intl.Segmenter = original;
+    }
+});
+
+test("missing global Intl defers tab expansion to native Rust",
+    async () => {
+    const isolated = await import(
+        `${ROOT}generated/markdown-export.js?cache-test=missing-intl`);
+    const original = globalThis.Intl;
+    const source = "a\t".repeat(1025);
+    try {
+        globalThis.Intl = undefined;
+        assert.deepEqual(isolated.prepareMarkdownHandoff(source), {
+            kind: "ready", text: source,
+            bytes: new TextEncoder().encode(source).byteLength,
+        });
+    } finally {
+        globalThis.Intl = original;
+    }
+});
+
 test("blank or lossy Unicode handoff refuses without fallback", () => {
     for (const source of ["", "\n \t", "\uFEFF",
         "\uFEFF \t\n\r\u2028\u2029"]) {
