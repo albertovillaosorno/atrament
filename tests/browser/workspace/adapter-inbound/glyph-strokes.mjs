@@ -1387,6 +1387,50 @@ test("revise any imported stroke without altering neighbors", async () => {
     }
 });
 
+// A canceled draft must not retain DOM pointer capture after a glyph switch
+// or session teardown. Late events from the old pointer must be inert.
+test("glyph switches and reset release abandoned pointer capture", async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        const preview = get("preview");
+        const pointer = (x, y, pointerId) => ({
+            clientX: x, clientY: y,
+            pointerId, isPrimary: true, button: 0,
+        });
+        editor.start();
+        get("add").dispatch("click");
+        get("save").dispatch("click");
+        const original = await downloads.at(-1).text();
+        preview.dispatch("pointerdown", pointer(50, 50, 31));
+        assert.equal(preview.hasPointerCapture(31), true);
+        get("character").value = "∞";
+        get("character").dispatch("input");
+        assert.equal(preview.hasPointerCapture(31), false);
+        preview.dispatch("pointerup", pointer(250, 300, 31));
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), original,
+            "switching exact glyphs cancels the captured draft");
+        get("character").value = "ñ";
+        get("character").dispatch("input");
+        preview.dispatch("pointerdown", pointer(50, 50, 32));
+        assert.equal(preview.hasPointerCapture(32), true);
+        editor.reset();
+        assert.equal(preview.hasPointerCapture(32), false);
+        preview.dispatch("pointerup", pointer(250, 300, 32));
+        assert.equal(preview.children.length, 0);
+        assert.equal(get("add").disabled, true);
+        editor.start();
+        preview.dispatch("pointerdown", pointer(50, 50, 33));
+        assert.equal(preview.hasPointerCapture(33), true);
+        preview.dispatch("pointercancel", { pointerId: 33 });
+        assert.equal(preview.hasPointerCapture(33), false);
+        assert.equal(preview.children.length, 0);
+    } finally {
+        ui.restore();
+    }
+});
+
 test("pointer drawing validates segments on release", async () => {
     const ui = mountEditor();
     try {

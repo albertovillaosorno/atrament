@@ -4776,6 +4776,14 @@ export function createGlyphStrokeEditor() {
     let strokes = [];
     let selectedIndex = null;
     let drawing = null;
+    const releaseTrace = () => {
+        const pointerId = drawing?.pointerId;
+        drawing = null;
+        if (pointerId !== undefined
+            && preview.hasPointerCapture(pointerId)) {
+            preview.releasePointerCapture(pointerId);
+        }
+    };
     let downloadUrl = null;
     // Keep at most eight accepted, session-only ink edits. Empty-library
     // snapshots need a distinct sentinel because the native TSV needs ink.
@@ -6083,7 +6091,7 @@ export function createGlyphStrokeEditor() {
         control.addEventListener("change", renderVariation);
     }
     character.addEventListener("input", () => {
-        drawing = null;
+        releaseTrace();
         selectedIndex = null;
         render();
     });
@@ -6180,10 +6188,7 @@ export function createGlyphStrokeEditor() {
         if (!active || drawing?.pointerId !== event.pointerId)
             return;
         const current = drawing;
-        drawing = null;
-        if (preview.hasPointerCapture(event.pointerId)) {
-            preview.releasePointerCapture(event.pointerId);
-        }
+        releaseTrace();
         try {
             if (current.overflow) {
                 throw new Error("Trace exceeds 128 sampled line segments");
@@ -6222,10 +6227,7 @@ export function createGlyphStrokeEditor() {
     preview.addEventListener("pointercancel", (event) => {
         if (drawing?.pointerId !== event.pointerId)
             return;
-        drawing = null;
-        if (preview.hasPointerCapture(event.pointerId)) {
-            preview.releasePointerCapture(event.pointerId);
-        }
+        releaseTrace();
         render();
     });
     construct.addEventListener("click", () => {
@@ -7347,7 +7349,7 @@ export function createGlyphStrokeEditor() {
         active = false;
         strokes = [];
         clearHistory();
-        drawing = null;
+        releaseTrace();
         selectedIndex = null;
         for (const control of controls)
             control.disabled = true;
