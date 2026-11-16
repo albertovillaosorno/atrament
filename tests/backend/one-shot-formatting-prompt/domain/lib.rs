@@ -33,6 +33,8 @@
 
 //! One-shot formatting prompt contract regression tests.
 
+use std::ptr;
+
 use atrament_one_shot_formatting_prompt::{
     FORMATTING_PROMPT_VERSION, FormattingPromptConstraintInputs,
     FormattingPromptProtocolInputs, FormattingPromptSourceInputs,
@@ -98,10 +100,10 @@ fn one_shot_prompt_retains_every_frozen_self_contained_input() {
 fn prompt_identity_and_version_are_data_not_browser_side_effects() {
     let prompt = OneShotFormattingPrompt {
         constraints: (),
-        identity: 41_u64,
+        identity: 41u64,
         protocol: (),
         source: (),
-        version: 7_u16,
+        version: 7u16,
     };
     let unchanged = prompt.clone();
     assert_eq!(unchanged, prompt);
@@ -120,10 +122,9 @@ fn prompt_version_validation_requires_the_frozen_contract_exactly() {
     };
     let current = prompt(FORMATTING_PROMPT_VERSION);
     assert_eq!(validate_formatting_prompt_version(&current), Ok(()));
-    let validated = current
-        .validate_version_view()
-        .expect("current prompt version seals");
-    assert!(std::ptr::eq(validated.prompt(), &current));
+    assert!(current.validate_version_view().is_ok_and(|validated| {
+        ptr::eq(validated.prompt(), &raw const current)
+    }));
     for unsupported in ["atrament.prompt/0", "atrament.prompt/2", "prompt/1"] {
         assert_eq!(
             validate_formatting_prompt_version(&prompt(unsupported)),
@@ -137,7 +138,7 @@ fn prompt_version_validation_requires_the_frozen_contract_exactly() {
 #[test]
 fn every_single_ascii_version_edit_remains_unsupported() {
     let current = FORMATTING_PROMPT_VERSION.as_bytes();
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
 
     let assert_unsupported = |version: String| {
         let prompt = OneShotFormattingPrompt {
@@ -160,18 +161,25 @@ fn every_single_ascii_version_edit_remains_unsupported() {
     for index in 0..current.len() {
         let mut deleted = current.to_vec();
         let _removed = deleted.remove(index);
-        assert_unsupported(String::from_utf8(deleted).expect("ASCII deletion"));
+        assert!(String::from_utf8(deleted).is_ok_and(|version| {
+            assert_unsupported(version);
+            true
+        }));
         cases += 1;
 
         for replacement in b' '..=b'~' {
-            if replacement == current[index] {
+            if current.get(index).is_some_and(|byte| replacement == *byte) {
                 continue;
             }
             let mut substituted = current.to_vec();
-            substituted[index] = replacement;
-            assert_unsupported(
-                String::from_utf8(substituted).expect("ASCII substitution"),
-            );
+            assert!(substituted.get_mut(index).is_some_and(|byte| {
+                *byte = replacement;
+                true
+            }));
+            assert!(String::from_utf8(substituted).is_ok_and(|version| {
+                assert_unsupported(version);
+                true
+            }));
             cases += 1;
         }
     }
@@ -180,9 +188,10 @@ fn every_single_ascii_version_edit_remains_unsupported() {
         for inserted in b' '..=b'~' {
             let mut value = current.to_vec();
             value.insert(index, inserted);
-            assert_unsupported(
-                String::from_utf8(value).expect("ASCII insertion"),
-            );
+            assert!(String::from_utf8(value).is_ok_and(|version| {
+                assert_unsupported(version);
+                true
+            }));
             cases += 1;
         }
     }
