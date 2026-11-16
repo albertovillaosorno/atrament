@@ -147,13 +147,18 @@ function validateStroke(stroke) {
     }
     return { ...stroke, color: stroke.color.toUpperCase() };
 }
+// Geometric edits must clear the entire round pen, not merely its center.
+// Native TSV admission intentionally permits authored endpoints at the edge.
+function penFitsGlyphCell(stroke) {
+    const radius = stroke.width / 2;
+    const fits = (point, limit) => point >= radius && point <= limit - radius;
+    return fits(stroke.x1, 3500) && fits(stroke.x2, 3500)
+        && fits(stroke.y1, 4500) && fits(stroke.y2, 4500);
+}
 // Native TSV permits a pen centerline at the exact cell edge, but an
 // explicitly inserted bridge must fit its *entire* round pen in the cell.
 function validateInsertedBridge(stroke) {
-    const radius = stroke.width / 2;
-    const fits = (point, limit) => point >= radius && point <= limit - radius;
-    if (![stroke.x1, stroke.x2].every((x) => fits(x, 3500))
-        || ![stroke.y1, stroke.y2].every((y) => fits(y, 4500))) {
+    if (!penFitsGlyphCell(stroke)) {
         throw new Error("Inserted pen bridge clips glyph cell");
     }
 }
@@ -345,6 +350,22 @@ export function candidatePenPaths(strokes, grapheme) {
     record(first, chosen.length);
     return paths;
 }
+// Reuse exact source-order positions across all selected-path edits.
+// The library may interleave different Unicode glyphs between pen segments.
+function glyphStrokeIndices(strokes, grapheme) {
+    const indices = [];
+    strokes.forEach((stroke, index) => {
+        if (stroke.grapheme === grapheme)
+            indices.push(index);
+    });
+    return indices;
+}
+// Paths use one-based ordinals within this exact glyph, not TSV row slots.
+function selectedCandidatePenPath(strokes, grapheme, ordinal) {
+    return candidatePenPaths(strokes, grapheme).find((path) => {
+        return ordinal >= path.first && ordinal <= path.last;
+    });
+}
 // One-time, explicit copy of exactly one candidate pen path to another
 // Unicode identity. A pre-existing target keeps all its authored lines;
 // the selected source's directed order and original interleaved rows stay.
@@ -359,10 +380,9 @@ export function copyCandidatePath(strokes, source, selectedIndex, target) {
     }
     // Also refuse invalid unused source rows before deriving a new path.
     encodeGlyphLibrary([...strokes]);
-    const positions = strokes.flatMap((stroke, index) => stroke.grapheme === source ? [index] : []);
+    const positions = glyphStrokeIndices(strokes, source);
     const selectedPosition = positions.indexOf(selectedIndex) + 1;
-    const path = candidatePenPaths(strokes, source).find((candidate) => selectedPosition >= candidate.first
-        && selectedPosition <= candidate.last);
+    const path = selectedCandidatePenPath(strokes, source, selectedPosition);
     if (!path)
         throw new Error("Selected source path no longer exists");
     const copies = positions.slice(path.first - 1, path.last)
@@ -387,9 +407,9 @@ export function copyShiftedCandidatePath(strokes, source, selectedIndex, target,
         throw new Error("Shifted copy needs nonzero bounded whole µm offsets");
     }
     encodeGlyphLibrary([...strokes]);
-    const positions = strokes.flatMap((stroke, index) => stroke.grapheme === source ? [index] : []);
+    const positions = glyphStrokeIndices(strokes, source);
     const ordinal = positions.indexOf(selectedIndex) + 1;
-    const path = candidatePenPaths(strokes, source).find((candidate) => ordinal >= candidate.first && ordinal <= candidate.last);
+    const path = selectedCandidatePenPath(strokes, source, ordinal);
     if (!path)
         throw new Error("Selected source path no longer exists");
     const copies = positions.slice(path.first - 1, path.last).map((index) => {
@@ -399,9 +419,7 @@ export function copyShiftedCandidatePath(strokes, source, selectedIndex, target,
             x1: original.x1 + dx, y1: original.y1 + dy,
             x2: original.x2 + dx, y2: original.y2 + dy,
         });
-        const radius = original.width / 2;
-        if ([moved.x1, moved.x2].some((x) => x < radius || x > 3500 - radius)
-            || [moved.y1, moved.y2].some((y) => y < radius || y > 4500 - radius)) {
+        if (!penFitsGlyphCell(moved)) {
             throw new Error("Translated pen contour clips glyph cell");
         }
         return moved;
@@ -418,9 +436,9 @@ export function rotateClosedCandidatePath(strokes, grapheme, selectedIndex) {
         || strokes[selectedIndex]?.grapheme !== grapheme) {
         throw new Error("Path start needs a selected exact glyph stroke");
     }
-    const indices = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const indices = glyphStrokeIndices(strokes, grapheme);
     const position = indices.indexOf(selectedIndex) + 1;
-    const path = candidatePenPaths(strokes, grapheme).find((candidate) => position >= candidate.first && position <= candidate.last);
+    const path = selectedCandidatePenPath(strokes, grapheme, position);
     if (!path || path.first === path.last || position === path.first) {
         throw new Error("Closed path needs a later selected start stroke");
     }
@@ -444,13 +462,9 @@ export function closeCandidatePath(strokes, grapheme, selectedIndex) {
         || strokes[selectedIndex]?.grapheme !== grapheme) {
         throw new Error("Path closure needs a selected exact glyph stroke");
     }
-    const indices = strokes.flatMap((stroke, index) => {
-        return stroke.grapheme === grapheme ? [index] : [];
-    });
+    const indices = glyphStrokeIndices(strokes, grapheme);
     const position = indices.indexOf(selectedIndex) + 1;
-    const path = candidatePenPaths(strokes, grapheme).find((candidate) => {
-        return position >= candidate.first && position <= candidate.last;
-    });
+    const path = selectedCandidatePenPath(strokes, grapheme, position);
     if (!path || path.first === path.last) {
         throw new Error("Path closure requires two continuous strokes");
     }
@@ -491,9 +505,9 @@ export function closeCandidatePathCurved(strokes, grapheme, selectedIndex, bendX
         throw new Error("Curved closure needs nonzero -600..600 µm bend");
     }
     encodeGlyphLibrary([...strokes]);
-    const positions = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const positions = glyphStrokeIndices(strokes, grapheme);
     const ordinal = positions.indexOf(selectedIndex) + 1;
-    const path = candidatePenPaths(strokes, grapheme).find((item) => ordinal >= item.first && ordinal <= item.last);
+    const path = selectedCandidatePenPath(strokes, grapheme, ordinal);
     if (!path || path.first === path.last) {
         throw new Error("Curved closure requires two continuous strokes");
     }
@@ -529,7 +543,7 @@ export function joinNextCandidatePath(strokes, grapheme, selectedIndex) {
         throw new Error("Path joining requires a selected exact glyph stroke");
     }
     encodeGlyphLibrary([...strokes]);
-    const positions = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const positions = glyphStrokeIndices(strokes, grapheme);
     const ordinal = positions.indexOf(selectedIndex) + 1;
     const paths = candidatePenPaths(strokes, grapheme);
     const index = paths.findIndex((candidate) => ordinal >= candidate.first && ordinal <= candidate.last);
@@ -616,7 +630,7 @@ export function joinNextCandidatePathCurved(strokes, grapheme, selectedIndex, be
         throw new Error("Curved join needs nonzero -600..600 µm bend");
     }
     encodeGlyphLibrary([...strokes]);
-    const positions = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const positions = glyphStrokeIndices(strokes, grapheme);
     const ordinal = positions.indexOf(selectedIndex) + 1;
     const paths = candidatePenPaths(strokes, grapheme);
     const index = paths.findIndex((path) => ordinal >= path.first && ordinal <= path.last);
@@ -661,14 +675,9 @@ export function reverseCandidatePath(strokes, grapheme, selectedIndex) {
         || strokes[selectedIndex]?.grapheme !== grapheme) {
         throw new Error("Path reversal needs a selected stroke of this glyph");
     }
-    const indices = strokes.flatMap((stroke, index) => {
-        return stroke.grapheme === grapheme ? [index] : [];
-    });
+    const indices = glyphStrokeIndices(strokes, grapheme);
     const position = indices.indexOf(selectedIndex);
-    const path = candidatePenPaths(strokes, grapheme).find((candidate) => {
-        return position + 1 >= candidate.first
-            && position + 1 <= candidate.last;
-    });
+    const path = selectedCandidatePenPath(strokes, grapheme, position + 1);
     if (!path || path.first === path.last) {
         throw new Error("Path reversal requires two continuous strokes");
     }
@@ -699,9 +708,9 @@ export function translateCandidatePath(strokes, grapheme, selectedIndex, dx, dy)
         || (dx === 0 && dy === 0)) {
         throw new Error("Path offsets need nonzero bounded whole µm values");
     }
-    const indices = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const indices = glyphStrokeIndices(strokes, grapheme);
     const position = indices.indexOf(selectedIndex) + 1;
-    const path = candidatePenPaths(strokes, grapheme).find((candidate) => position >= candidate.first && position <= candidate.last);
+    const path = selectedCandidatePenPath(strokes, grapheme, position);
     if (!path)
         throw new Error("Selected glyph has no candidate pen path");
     const slots = indices.slice(path.first - 1, path.last);
@@ -712,9 +721,7 @@ export function translateCandidatePath(strokes, grapheme, selectedIndex, dx, dy)
             x2: stroke.x2 + dx, y2: stroke.y2 + dy,
         };
         validateStroke(moved);
-        const radius = stroke.width / 2;
-        if ([moved.x1, moved.x2].some((x) => x < radius || x > 3500 - radius)
-            || [moved.y1, moved.y2].some((y) => y < radius || y > 4500 - radius)) {
+        if (!penFitsGlyphCell(moved)) {
             throw new Error("Translated pen contour clips the glyph cell");
         }
         return moved;
@@ -740,9 +747,9 @@ export function shearCandidatePath(strokes, grapheme, selectedIndex, degrees, ba
             + " and a bounded baseline");
     }
     encodeGlyphLibrary([...strokes]);
-    const indices = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const indices = glyphStrokeIndices(strokes, grapheme);
     const ordinal = indices.indexOf(selectedIndex) + 1;
-    const path = candidatePenPaths(strokes, grapheme).find((candidate) => ordinal >= candidate.first && ordinal <= candidate.last);
+    const path = selectedCandidatePenPath(strokes, grapheme, ordinal);
     if (!path)
         throw new Error("Selected glyph has no candidate pen path");
     const slope = Math.tan(degrees * Math.PI / 180);
@@ -785,9 +792,9 @@ export function reflectCandidatePath(strokes, grapheme, selectedIndex, axis, piv
         throw new Error("Reflection pivot outside glyph cell");
     }
     encodeGlyphLibrary([...strokes]);
-    const positions = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const positions = glyphStrokeIndices(strokes, grapheme);
     const ordinal = positions.indexOf(selectedIndex) + 1;
-    const path = candidatePenPaths(strokes, grapheme).find((candidate) => ordinal >= candidate.first && ordinal <= candidate.last);
+    const path = selectedCandidatePenPath(strokes, grapheme, ordinal);
     if (!path)
         throw new Error("Selected glyph has no candidate pen path");
     const slots = positions.slice(path.first - 1, path.last);
@@ -802,8 +809,7 @@ export function reflectCandidatePath(strokes, grapheme, selectedIndex, axis, piv
             y1: axis === "y" ? 2 * pivot - stroke.y1 : stroke.y1,
             y2: axis === "y" ? 2 * pivot - stroke.y2 : stroke.y2,
         };
-        if ([reflected.x1, reflected.x2].some((x) => 2 * x < stroke.width || 2 * x > 7000 - stroke.width)
-            || [reflected.y1, reflected.y2].some((y) => 2 * y < stroke.width || 2 * y > 9000 - stroke.width)) {
+        if (!penFitsGlyphCell(reflected)) {
             throw new Error("Reflected pen contour clips glyph cell");
         }
         next[slot] = validateStroke(reflected);
@@ -833,9 +839,9 @@ export function rotateCandidatePath(strokes, grapheme, selectedIndex, degrees, p
             + " and bounded pivot");
     }
     encodeGlyphLibrary([...strokes]);
-    const positions = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const positions = glyphStrokeIndices(strokes, grapheme);
     const ordinal = positions.indexOf(selectedIndex) + 1;
-    const path = candidatePenPaths(strokes, grapheme).find((candidate) => ordinal >= candidate.first && ordinal <= candidate.last);
+    const path = selectedCandidatePenPath(strokes, grapheme, ordinal);
     if (!path)
         throw new Error("Selected glyph has no candidate pen path");
     const slots = positions.slice(path.first - 1, path.last);
@@ -889,9 +895,9 @@ export function scaleCandidatePath(strokes, grapheme, selectedIndex, xPercent, y
         throw new Error("Path scaling needs changed 50–150% axes");
     }
     encodeGlyphLibrary([...strokes]);
-    const positions = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const positions = glyphStrokeIndices(strokes, grapheme);
     const ordinal = positions.indexOf(selectedIndex) + 1;
-    const path = candidatePenPaths(strokes, grapheme).find((candidate) => ordinal >= candidate.first && ordinal <= candidate.last);
+    const path = selectedCandidatePenPath(strokes, grapheme, ordinal);
     if (!path)
         throw new Error("Selected glyph has no candidate pen path");
     const slots = positions.slice(path.first - 1, path.last);
@@ -907,9 +913,7 @@ export function scaleCandidatePath(strokes, grapheme, selectedIndex, xPercent, y
             x2: Math.round(anchor.x + (old.x2 - anchor.x) * xPercent / 100),
             y2: Math.round(anchor.y + (old.y2 - anchor.y) * yPercent / 100),
         });
-        const radius = old.width / 2;
-        if ([resized.x1, resized.x2].some((x) => x < radius || x > 3500 - radius)
-            || [resized.y1, resized.y2].some((y) => y < radius || y > 4500 - radius)) {
+        if (!penFitsGlyphCell(resized)) {
             throw new Error("Scaled pen contour clips glyph cell");
         }
         changed ||= resized.x1 !== old.x1 || resized.y1 !== old.y1
@@ -929,9 +933,9 @@ export function removeCandidatePath(strokes, grapheme, selectedIndex) {
         throw new Error("Path removal needs a selected exact glyph stroke");
     }
     encodeGlyphLibrary([...strokes]);
-    const positions = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const positions = glyphStrokeIndices(strokes, grapheme);
     const ordinal = positions.indexOf(selectedIndex) + 1;
-    const path = candidatePenPaths(strokes, grapheme).find((candidate) => ordinal >= candidate.first && ordinal <= candidate.last);
+    const path = selectedCandidatePenPath(strokes, grapheme, ordinal);
     if (!path)
         throw new Error("Selected glyph has no candidate pen path");
     const removed = new Set(positions.slice(path.first - 1, path.last));
@@ -955,9 +959,9 @@ export function styleCandidatePath(strokes, grapheme, selectedIndex, width, colo
         throw new Error("Path pen style requires 80–1500 µm and #RRGGBB");
     }
     encodeGlyphLibrary([...strokes]);
-    const positions = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const positions = glyphStrokeIndices(strokes, grapheme);
     const ordinal = positions.indexOf(selectedIndex) + 1;
-    const path = candidatePenPaths(strokes, grapheme).find((candidate) => ordinal >= candidate.first && ordinal <= candidate.last);
+    const path = selectedCandidatePenPath(strokes, grapheme, ordinal);
     if (!path)
         throw new Error("Selected glyph has no candidate pen path");
     const slots = positions.slice(path.first - 1, path.last);
@@ -965,9 +969,7 @@ export function styleCandidatePath(strokes, grapheme, selectedIndex, width, colo
     let changed = false;
     for (const index of slots) {
         const old = strokes[index];
-        const radius = width / 2;
-        if ([old.x1, old.x2].some((x) => x < radius || x > 3500 - radius)
-            || [old.y1, old.y2].some((y) => y < radius || y > 4500 - radius)) {
+        if (!penFitsGlyphCell({ ...old, width })) {
             throw new Error("Restyled pen contour clips glyph cell");
         }
         changed ||= old.width !== width
@@ -987,9 +989,7 @@ export function moveCandidatePath(strokes, grapheme, selectedIndex, direction) {
         || (direction !== -1 && direction !== 1)) {
         throw new Error("Path move requires a selected exact glyph stroke");
     }
-    const indices = strokes.flatMap((stroke, index) => {
-        return stroke.grapheme === grapheme ? [index] : [];
-    });
+    const indices = glyphStrokeIndices(strokes, grapheme);
     const position = indices.indexOf(selectedIndex) + 1;
     const paths = candidatePenPaths(strokes, grapheme);
     const chosen = paths.findIndex((path) => {
@@ -2884,6 +2884,17 @@ function quadratic(from, control, to, step) {
             + t * t * to.y),
     };
 }
+// All geometric starters sample the same integer-rounded quadratic arc.
+// The optional orientation is applied after rounding, as for mirror glyphs.
+function sampleQuadraticInk(from, control, to, line, orient) {
+    const ink = [];
+    for (let step = 0; step < ARCH_SEGMENTS; step += 1) {
+        const start = quadratic(from, control, to, step);
+        const end = quadratic(from, control, to, step + 1);
+        ink.push(line(orient ? orient(start) : start, orient ? orient(end) : end));
+    }
+    return ink;
+}
 // Apply a user-selected shear to every existing pen stroke of one exact
 // glyph. Interleaved NFC/NFD and unrelated glyphs are never modified.
 // One rejected endpoint prevents the entire candidate from being returned.
@@ -3062,8 +3073,7 @@ export function reflectGlyphStrokes(source, grapheme, axis, pivot) {
             y1: axis === "y" ? 2 * pivot - stroke.y1 : stroke.y1,
             y2: axis === "y" ? 2 * pivot - stroke.y2 : stroke.y2,
         };
-        if ([reflected.x1, reflected.x2].some((x) => x * 2 < stroke.width || x * 2 > 7000 - stroke.width)
-            || [reflected.y1, reflected.y2].some((y) => y * 2 < stroke.width || y * 2 > 9000 - stroke.width)) {
+        if (!penFitsGlyphCell(reflected)) {
             throw new Error("Reflected pen contour clips glyph cell");
         }
         return validateStroke(reflected);
@@ -3092,8 +3102,7 @@ export function translateGlyphStrokes(source, grapheme, dx, dy) {
         const moved = { ...stroke, x1: stroke.x1 + dx,
             y1: stroke.y1 + dy, x2: stroke.x2 + dx,
             y2: stroke.y2 + dy };
-        if ([moved.x1, moved.x2].some((x) => x * 2 < stroke.width || x * 2 > 7000 - stroke.width)
-            || [moved.y1, moved.y2].some((y) => y * 2 < stroke.width || y * 2 > 9000 - stroke.width)) {
+        if (!penFitsGlyphCell(moved)) {
             throw new Error("Translated pen contour clips glyph cell");
         }
         return validateStroke(moved);
@@ -3818,7 +3827,7 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         };
         return textMarkParts(cx, cy, radius, g).flatMap(({ from, control, to }) => control === undefined
             ? [line(from, to)]
-            : Array.from({ length: ARCH_SEGMENTS }, (_, step) => line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1))));
+            : sampleQuadraticInk(from, control, to, line));
     }
     if (/^[A-Z]$/.test(g)) {
         const line = (from, to) => {
@@ -3856,18 +3865,14 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         }
         else if (g === "S") {
             for (const [from, control, to] of smoothS(cx, cy, radius)) {
-                for (let step = 0; step < ARCH_SEGMENTS; step += 1) {
-                    output.push(line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1)));
-                }
+                output.push(...sampleQuadraticInk(from, control, to, line));
             }
         }
         for (const { from, control, to } of parts) {
             if (control === undefined)
                 output.push(line(from, to));
             else
-                for (let step = 0; step < ARCH_SEGMENTS; step += 1) {
-                    output.push(line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1)));
-                }
+                output.push(...sampleQuadraticInk(from, control, to, line));
         }
         return output;
     }
@@ -3887,7 +3892,7 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         };
         const ellipses = geometry.ellipses.flatMap((ellipse) => Array.from({ length: CIRCLE_SEGMENTS }, (_, step) => line(ellipsePoint(ellipse, step), ellipsePoint(ellipse, step + 1))));
         const parts = geometry.parts.flatMap(({ from, control, to }) => control === undefined ? [line(from, to)]
-            : Array.from({ length: ARCH_SEGMENTS }, (_, step) => line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1))));
+            : sampleQuadraticInk(from, control, to, line));
         return [...ellipses, ...parts];
     }
     if (CIRCLE_MARKS.includes(g)) {
@@ -3967,7 +3972,7 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         };
         return mathParts(cx, cy, radius, g).flatMap(({ from, control, to }) => control === undefined
             ? [line(from, to)]
-            : Array.from({ length: ARCH_SEGMENTS }, (_, step) => line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1))));
+            : sampleQuadraticInk(from, control, to, line));
     }
     if (CURRENCY_MARKS.includes(g)) {
         const line = (from, to) => {
@@ -3990,7 +3995,7 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
                 y: Math.round(first.y) }, { x: Math.round(last.x), y: Math.round(last.y) });
         }) : [];
         return [...arc, ...parts.flatMap(({ from, control, to }) => control === undefined ? [line(from, to)]
-                : Array.from({ length: ARCH_SEGMENTS }, (_, step) => line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1))))];
+                : sampleQuadraticInk(from, control, to, line))];
     }
     if (["«", "»", "‘", "’", "“", "”"].includes(g)) {
         const glyph = g;
@@ -4042,7 +4047,7 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         return parts.flatMap(({ from, to, control }) => {
             if (control === undefined)
                 return [line(orient(from), orient(to))];
-            return Array.from({ length: ARCH_SEGMENTS }, (_, step) => line(orient(quadratic(from, control, to, step)), orient(quadratic(from, control, to, step + 1))));
+            return sampleQuadraticInk(from, control, to, line, orient);
         });
     }
     if (g === "s") {
@@ -4160,9 +4165,7 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
             x2: to.x, y2: to.y, width: pen, color });
         const segments = [line(parts.stem.from, parts.stem.to)];
         const [from, control, to] = parts.turn;
-        for (let step = 0; step < ARCH_SEGMENTS; step += 1) {
-            segments.push(line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1)));
-        }
+        segments.push(...sampleQuadraticInk(from, control, to, line));
         segments.push(line(parts.dot.from, parts.dot.to));
         return segments;
     }
@@ -4217,9 +4220,7 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
             x2: to.x, y2: to.y, width: pen, color });
         lines.push(line(parts.stem.from, parts.stem.to));
         const [from, control, to] = parts.turn;
-        for (let step = 0; step < ARCH_SEGMENTS; step += 1) {
-            lines.push(line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1)));
-        }
+        lines.push(...sampleQuadraticInk(from, control, to, line));
         return lines;
     }
     if (twoStorey) {
