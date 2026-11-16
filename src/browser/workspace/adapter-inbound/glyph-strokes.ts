@@ -6509,6 +6509,13 @@ export function createGlyphStrokeEditor(): {
         releaseTrace();
         render();
     });
+    // Browser/OS capture loss may arrive without pointercancel or pointerup.
+    // The uncommitted gesture must not leave edits permanently disabled.
+    preview.addEventListener("lostpointercapture", (event) => {
+        if (drawing?.pointerId !== event.pointerId) return;
+        releaseTrace();
+        render();
+    });
     construct.addEventListener("click", () => {
         if (!active) return;
         try {

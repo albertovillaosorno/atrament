@@ -1431,6 +1431,54 @@ test("glyph switches and reset release abandoned pointer capture", async () => {
     }
 });
 
+// Capture can be lost by the browser without a matching pointercancel or
+// pointerup. Cancel the uncommitted ink and let the editor resume immediately.
+test("unexpected capture loss cancels trace without trapping the editor",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        const preview = get("preview");
+        const pointer = (x, y, pointerId = 37) => ({
+            clientX: x, clientY: y,
+            pointerId, isPrimary: true, button: 0,
+        });
+        editor.start();
+        get("add").dispatch("click");
+        get("save").dispatch("click");
+        const original = await downloads.at(-1).text();
+        preview.dispatch("pointerdown", pointer(50, 50));
+        preview.dispatch("pointermove", pointer(250, 300));
+        assert.equal(get("add").disabled, true);
+        assert.equal(preview.hasPointerCapture(37), true);
+        // Simulate the browser dropping pointer capture on focus loss.
+        preview.releasePointerCapture(37);
+        preview.dispatch("lostpointercapture", { pointerId: 38 });
+        assert.equal(get("add").disabled, true,
+            "a stray pointer ID cannot end someone else's trace");
+        preview.dispatch("lostpointercapture", { pointerId: 37 });
+        assert.equal(get("add").disabled, false,
+            "capture loss must restore the editing controls");
+        preview.dispatch("pointerup", pointer(250, 300));
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), original,
+            "late pointerup cannot publish the discarded trace");
+        preview.dispatch("pointerdown", pointer(50, 50, 39));
+        assert.equal(preview.hasPointerCapture(39), true,
+            "a new trace must be admitted after capture loss");
+        preview.dispatch("pointerup", pointer(250, 300, 39));
+        get("save").dispatch("click");
+        assert.equal(parseGlyphLibrary(await downloads.at(-1).text()).length,
+            2, "only the new completed gesture adds ink");
+        assert.equal(get("slant-undo").textContent, "Undo last pen trace");
+        get("slant-undo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), original);
+    } finally {
+        ui.restore();
+    }
+});
+
 test("pointer drawing validates segments on release", async () => {
     const ui = mountEditor();
     try {
