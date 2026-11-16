@@ -603,6 +603,25 @@ struct RuleChain {
     first_mark: usize,
 }
 
+// A completed row cannot simultaneously be a heading and a thematic rule.
+// Preserve that invariant in one state instead of independent booleans.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LastVisibleRow {
+    Heading,
+    Other,
+    Rule,
+}
+
+impl LastVisibleRow {
+    const fn is_heading(self) -> bool {
+        matches!(self, Self::Heading)
+    }
+
+    const fn is_rule(self) -> bool {
+        matches!(self, Self::Rule)
+    }
+}
+
 struct Layout<'model> {
     body_align: Option<BodyAlign>,
     body_continuation_indent_um: u32,
@@ -618,9 +637,8 @@ struct Layout<'model> {
     heading_attached_to_prior: bool,
     // Adjacent title chain for later whole-block pagination.
     heading_chain: Option<HeadingChain>,
-    last_visible_heading: bool,
-    // True only if the preceding rule actually reserved its next ink row.
-    last_visible_rule: bool,
+    // Rule is retained only when it reserves the following ink row.
+    last_visible: LastVisibleRow,
     left: u32,
     lines: Vec<TextRun>,
     list_quote_inset_um: u32,
@@ -628,9 +646,9 @@ struct Layout<'model> {
     ordered_align: Option<BodyAlign>,
     ornaments: Vec<NotebookInkLine>,
     page: usize,
-    pending_page_start: bool,
     paragraph_gap_um: u32,
     pending_blank_rows: usize,
+    pending_page_start: bool,
     pitch: u32,
     quote_align: Option<BodyAlign>,
     quote_color: Option<[u8; 3]>,
@@ -646,36 +664,6 @@ struct Layout<'model> {
 }
 
 impl Layout<'_> {
-    // A page break is a boundary before *following printable ink*, not a
-    // blank sheet at EOF. Repeated directives between ink collapse.
-    fn apply_pending_page_start(&mut self) -> Result<(), String> {
-        if !take(&mut self.pending_page_start) {
-            return Ok(());
-        }
-        let current_has_ink = self.lines.iter().any(|row| row.page == self.page)
-            || self.ornaments.iter().any(|mark| mark.page == self.page);
-        if current_has_ink {
-            self.page = self.page.checked_add(1)
-                .ok_or("flow page count overflow")?;
-            if self.page > MAX_PAGES {
-                return Err("flow exceeds 32 physical pages".into());
-            }
-        }
-        self.y = self.top.checked_add(INSET_UM)
-            .ok_or("flow top inset overflow")?;
-        Ok(())
-    }
-
-    fn request_page_start(&mut self) {
-        self.pending_page_start = true;
-        self.pending_blank_rows = 0;
-        self.heading_chain = None;
-        self.rule_chain = None;
-        self.heading_attached_to_prior = false;
-        self.last_visible_heading = false;
-        self.last_visible_rule = false;
-    }
-
     fn add_gap(&mut self) -> Result<(), String> {
         self.flush_blank_rows()?;
         self.y = self
@@ -815,6 +803,26 @@ impl Layout<'_> {
         };
         start_x.checked_add(shift)
             .ok_or_else(|| format!("flow {kind} alignment position overflow"))
+    }
+
+    // A page break is a boundary before *following printable ink*, not a
+    // blank sheet at EOF. Repeated directives between ink collapse.
+    fn apply_pending_page_start(&mut self) -> Result<(), String> {
+        if !take(&mut self.pending_page_start) {
+            return Ok(());
+        }
+        let current_has_ink = self.lines.iter().any(|row| row.page == self.page)
+            || self.ornaments.iter().any(|mark| mark.page == self.page);
+        if current_has_ink {
+            self.page = self.page.checked_add(1)
+                .ok_or("flow page count overflow")?;
+            if self.page > MAX_PAGES {
+                return Err("flow exceeds 32 physical pages".into());
+            }
+        }
+        self.y = self.top.checked_add(INSET_UM)
+            .ok_or("flow top inset overflow")?;
+        Ok(())
     }
 
     fn arrange_wrapped_block(
@@ -1462,7 +1470,8 @@ impl Layout<'_> {
     ) -> Result<(), String> {
         // The preceding title or rule already reserved this first row.
         // Its guarantee takes priority over the continuation guard.
-        if first && !self.last_visible_heading && !self.last_visible_rule
+        if first && !self.last_visible.is_heading()
+            && !self.last_visible.is_rule()
             && (protect_body && matches!(style, LineStyle::Body)
                 || matches!(style, LineStyle::Bullet | LineStyle::Ordered
                     | LineStyle::Quote | LineStyle::Task(_))) {
@@ -1479,9 +1488,9 @@ impl Layout<'_> {
         &mut self, content: &str, style: LineStyle, protect_body: bool,
     ) -> Result<(), String> {
         let (run_start, mark_start) = (self.lines.len(), self.ornaments.len());
-        let heading_before_block = self.last_visible_heading;
-        let preceding_reservation =
-            self.last_visible_heading || self.last_visible_rule;
+        let heading_before_block = self.last_visible.is_heading();
+        let preceding_reservation = self.last_visible.is_heading()
+            || self.last_visible.is_rule();
         let (mut start_x, mut cap, first_indent) =
             self.first_row_bounds(style, protect_body)?;
         let (hang, ordered_marker, enforce_body_continuation_width) =
@@ -1682,7 +1691,7 @@ impl Layout<'_> {
         if !matches!(style, LineStyle::Heading(_)) {
             return;
         }
-        let continues = self.last_visible_heading
+        let continues = self.last_visible.is_heading()
             && self.lines.last().is_some_and(|prior| {
                 prior.page == self.page
                     && prior.origin_um.1.checked_add(self.pitch)
@@ -1692,17 +1701,26 @@ impl Layout<'_> {
             });
         if !continues {
             self.heading_chain = Some(HeadingChain {
-                attached_to_prior: self.last_visible_rule
-                    || self.last_visible_heading,
+                attached_to_prior: self.last_visible.is_rule()
+                    || self.last_visible.is_heading(),
                 first_mark: self.ornaments.len(),
                 first_run: self.lines.len(),
-                leading_rules: if self.last_visible_rule {
+                leading_rules: if self.last_visible.is_rule() {
                     self.rule_chain
                 } else {
                     None
                 },
             });
         }
+    }
+
+    const fn request_page_start(&mut self) {
+        self.pending_page_start = true;
+        self.pending_blank_rows = 0;
+        self.heading_chain = None;
+        self.rule_chain = None;
+        self.heading_attached_to_prior = false;
+        self.last_visible = LastVisibleRow::Other;
     }
 
     fn write_last_row(
@@ -1875,10 +1893,13 @@ impl Layout<'_> {
         self.write_list_marker(style, first, start_x, y)?;
         if matches!(style, LineStyle::Heading(_)) {
             self.heading_attached_to_prior =
-                self.last_visible_heading || self.last_visible_rule;
+                self.last_visible.is_heading() || self.last_visible.is_rule();
         }
-        self.last_visible_heading = matches!(style, LineStyle::Heading(_));
-        self.last_visible_rule = false;
+        self.last_visible = if matches!(style, LineStyle::Heading(_)) {
+            LastVisibleRow::Heading
+        } else {
+            LastVisibleRow::Other
+        };
         self.lines.push(TextRun {
             heading_ink: if matches!(style, LineStyle::Heading(_)) {
                 self.heading.glyph_ink()
@@ -1909,9 +1930,8 @@ impl Layout<'_> {
             width_um: 400,
             rgb: [30, 48, 74],
         });
-        self.last_visible_heading = false;
         self.heading_chain = None;
-        let continuing = self.last_visible_rule;
+        let continuing = self.last_visible.is_rule();
         self.rule_chain = if continuing {
             let chain = self.rule_chain
                 .ok_or("flow reserved rule chain missing")?;
@@ -1929,7 +1949,11 @@ impl Layout<'_> {
         } else {
             None
         };
-        self.last_visible_rule = reserved_next || continuing;
+        self.last_visible = if reserved_next || continuing {
+            LastVisibleRow::Rule
+        } else {
+            LastVisibleRow::Other
+        };
         self.y = y.checked_add(self.pitch)
             .ok_or("separator row advance overflow")?;
         Ok(())
@@ -2218,15 +2242,17 @@ fn next_punctuation_cluster(
         // An exclamation in != is a relation prefix, not the closing
         // punctuation of the preceding word. Other exclamations retain
         // their ordinary punctuation behavior.
+        let absolute = from.checked_add(index)
+            .ok_or("flow punctuation offset overflow")?;
+        let following = absolute.checked_add(1)
+            .ok_or("flow punctuation lookahead overflow")?;
         let relation_not_equal = grapheme == "!"
-            && glyphs.get(from + index + 1)
-                .is_some_and(|item| item.0 == "=")
-            && numeric_joins.get(from + index)
-                .copied().unwrap_or(false);
+            && glyphs.get(following).is_some_and(|item| item.0 == "=")
+            && numeric_joins.get(absolute).copied().unwrap_or(false);
         if index > 0 && (!punctuation_pair_stays_together(
             previous, grapheme,
         ) || relation_not_equal)
-            && !numeric_joins.get(from + index - 1)
+            && !numeric_joins.get(absolute.saturating_sub(1))
                 .copied().unwrap_or(false) {
             break;
         }
@@ -2269,7 +2295,7 @@ fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
         matches!(grapheme, "\u{a0}" | "\u{202f}" | "\u{2011}")
     }
     nonbreaking(previous) || nonbreaking(next)
-        || (previous == "°" && matches!(next, "C" | "F"))
+        || (previous == "\u{b0}" && matches!(next, "C" | "F"))
         || matches!(previous, "¿" | "¡" | "«" | "‹" | "“" | "‘"
             | "(" | "[" | "{" | "$" | "€" | "£" | "¥")
         || matches!(next, "?" | "!" | "." | "," | ";" | ":"
@@ -2374,6 +2400,168 @@ fn parenthesized_uncertainty_end(
     cursor.checked_add(1)
 }
 
+const fn numeric_ascii_digit(grapheme: &str) -> bool {
+    matches!(grapheme.as_bytes(), [b'0'..=b'9'])
+}
+
+fn numeric_decimal_start(
+    glyphs: &[MeasuredGrapheme<'_>], offset: usize,
+) -> bool {
+    glyphs.get(offset).is_some_and(|item| matches!(item.0, "." | ","))
+        && glyphs.get(offset.saturating_add(1))
+            .is_some_and(|item| numeric_ascii_digit(item.0))
+}
+
+// A relation or arithmetic prefix belongs to the following number only.
+// Two adjacent + or * signs retain their authored language-token meaning.
+fn numeric_operator_prefix(
+    glyphs: &[MeasuredGrapheme<'_>], cursor: usize,
+) -> Option<usize> {
+    let preceding = cursor.checked_sub(1)?;
+    let operator = glyphs.get(preceding)?.0;
+    let before = preceding.checked_sub(1)
+        .and_then(|index| glyphs.get(index)).map(|item| item.0);
+    if !matches!(operator,
+        "=" | "<" | ">" | "\u{2264}" | "\u{2265}"
+        | "\u{2248}" | "\u{2260}" | "+" | "*"
+        | "\u{2212}" | "\u{d7}" | "\u{f7}"
+        | "\u{b7}" | "\u{22c5}" | "\u{2217}")
+        || matches!(operator, "+" | "*") && before == Some(operator) {
+        return None;
+    }
+    if operator == "=" && matches!(before, Some("<" | ">" | "!" | "=")) {
+        preceding.checked_sub(1)
+    } else {
+        Some(preceding)
+    }
+}
+
+// Parse only complete digit-adjacent separators; never absorb prose marks.
+fn scan_numeric_separators(
+    glyphs: &[MeasuredGrapheme<'_>], mut cursor: usize,
+) -> (usize, bool) {
+    let mut separated = false;
+    while let Some(&(separator, _, _)) = glyphs.get(cursor) {
+        let uncertainty = matches!(separator, "\u{b1}" | "\u{2213}");
+        if !(matches!(separator, "." | "," | ":" | "/" | "⁄"
+            | "-" | "−" | "–") || uncertainty)
+            || !(glyphs.get(cursor.saturating_add(1))
+                .is_some_and(|item| numeric_ascii_digit(item.0))
+                || uncertainty && numeric_decimal_start(
+                    glyphs, cursor.saturating_add(1),
+                )) {
+            break;
+        }
+        separated = true;
+        cursor = cursor.saturating_add(1);
+        // Uncertainty may omit a leading zero, unlike an ordinary
+        // thousands, date or clock separator.
+        if uncertainty && numeric_decimal_start(glyphs, cursor) {
+            cursor = cursor.saturating_add(1);
+        }
+        while glyphs.get(cursor)
+            .is_some_and(|item| numeric_ascii_digit(item.0)) {
+            cursor = cursor.saturating_add(1);
+        }
+    }
+    (cursor, separated)
+}
+
+// Extend a measured numeric core only for complete written exponents,
+// scientific multipliers and parenthesized uncertainty digits.
+fn scan_numeric_powers(
+    glyphs: &[MeasuredGrapheme<'_>], mut cursor: usize,
+) -> (usize, bool) {
+    let mut extended = false;
+    // The parenthesized last-digit uncertainty may precede a power
+    // of ten, as in 1.23(4)e-2 or 1.23(4)×10³.
+    if let Some(end) = parenthesized_uncertainty_end(glyphs, cursor) {
+        extended = true;
+        cursor = end;
+    }
+    // Bind a complete ASCII scientific exponent to its mantissa,
+    // including the optional signed power. An incomplete 1e or
+    // 1e+ remains ordinary authored ink and may wrap as before.
+    // ASCII digits and e/E are deliberate: do not infer Unicode
+    // superscript notation or synthesize unprovided glyphs.
+    if glyphs.get(cursor)
+        .is_some_and(|item| matches!(item.0, "e" | "E")) {
+        let power_start = cursor.saturating_add(1);
+        let digit_start = if glyphs.get(power_start)
+            .is_some_and(|item| matches!(
+                item.0, "+" | "-" | "\u{2212}"
+            )) {
+            power_start.saturating_add(1)
+        } else {
+            power_start
+        };
+        if glyphs.get(digit_start)
+            .is_some_and(|item| numeric_ascii_digit(item.0)) {
+            extended = true;
+            cursor = digit_start;
+            while glyphs.get(cursor)
+                .is_some_and(|item| numeric_ascii_digit(item.0)) {
+                cursor = cursor.saturating_add(1);
+            }
+        }
+    }
+    // Keep an explicitly authored ASCII caret power with its numeric
+    // base. The exponent must contain digits after its optional sign;
+    // bare ^ or ^- remains ordinary ink. No exponent is synthesized.
+    if glyphs.get(cursor).is_some_and(|item| item.0 == "^") {
+        let power_start = cursor.saturating_add(1);
+        let digit_start = if glyphs.get(power_start)
+            .is_some_and(|item| matches!(item.0, "+" | "-" | "\u{2212}")) {
+            power_start.saturating_add(1)
+        } else {
+            power_start
+        };
+        if glyphs.get(digit_start)
+            .is_some_and(|item| numeric_ascii_digit(item.0)) {
+            extended = true;
+            cursor = digit_start;
+            while glyphs.get(cursor)
+                .is_some_and(|item| numeric_ascii_digit(item.0)) {
+                cursor = cursor.saturating_add(1);
+            }
+        }
+    }
+    // Keep an authored Unicode superscript power with its numeric
+    // base when the complete cluster fits. A lone superscript sign
+    // is not an exponent; letters and missing superscript glyphs
+    // remain ordinary ink. No superscript shape is synthesized.
+    let superscript_digit = |offset: usize| {
+        glyphs.get(offset)
+            .is_some_and(|item| is_authored_superscript_digit(item.0))
+    };
+    let superscript_start = if glyphs.get(cursor)
+        .is_some_and(|item| matches!(item.0, "\u{207a}" | "\u{207b}")) {
+        cursor.saturating_add(1)
+    } else {
+        cursor
+    };
+    if superscript_digit(superscript_start) {
+        extended = true;
+        cursor = superscript_start;
+        while superscript_digit(cursor) {
+            cursor = cursor.saturating_add(1);
+        }
+    }
+    // This is a measured preference for a complete scientific
+    // product, not generic multiplication or an exponent renderer.
+    if let Some(end) = scientific_multiplier_end(glyphs, cursor) {
+        extended = true;
+        cursor = end;
+    }
+    // An uncertainty can also follow a completed exponent or power.
+    // The full numeric ink is only advisory when a real row fits.
+    if let Some(end) = parenthesized_uncertainty_end(glyphs, cursor) {
+        extended = true;
+        cursor = end;
+    }
+    (cursor, extended)
+}
+
 // A bounded ASCII number (including bare integers, decimal and thousands
 // separators, clock colons, digit fractions/dates and numeric ranges) is one
 // advisory ink cluster when it fits. Numeric comparison prefixes also bind the
@@ -2388,53 +2576,19 @@ fn parenthesized_uncertainty_end(
 // Compute the adjacent ties once per word: long 4,096-byte inputs must not
 // repeatedly rescan the rest of a number when measuring each glyph.
 fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
-    const fn ascii_digit(grapheme: &str) -> bool {
-        matches!(grapheme.as_bytes(), [b'0'..=b'9'])
-    }
     let mut joins = vec![false; glyphs.len().saturating_sub(1)];
     let mut cursor = 0usize;
     while let Some(&(grapheme, _, _)) = glyphs.get(cursor) {
-        // An omitted leading zero is still an authored decimal. Recognize
-        // .5 and ,5 only at a numeric boundary, never after sentence
-        // punctuation in ordinary prose (a.5, 1..5).
-        // Comparisons and authored arithmetic operators bind only a
-        // complete following numeric operand, never the left-hand word.
-        // Keep ASCII hyphens ambiguous and exclude C++17-style doubled
-        // plus and x**2-style doubled stars. Include both ASCII characters
-        // of <=, >=, != and ==.
-        let numeric_prefix_start = cursor.checked_sub(1)
-            .filter(|&index| glyphs.get(index).is_some_and(|item| {
-                matches!(item.0,
-                    "=" | "<" | ">" | "\u{2264}" | "\u{2265}"
-                    | "\u{2248}" | "\u{2260}" | "+" | "*"
-                    | "\u{2212}" | "\u{d7}" | "\u{f7}"
-                    | "\u{b7}" | "\u{22c5}" | "\u{2217}")
-                    && !(matches!(item.0, "+" | "*") && index > 0
-                        && glyphs[index - 1].0 == item.0)
-            }))
-            .map(|index| {
-                if glyphs[index].0 == "=" && index > 0
-                    && glyphs.get(index - 1).is_some_and(|item| {
-                        matches!(item.0, "<" | ">" | "!" | "=")
-                    }) {
-                    index - 1
-                } else {
-                    index
-                }
-            });
+        // A preceding relation or operator binds a complete operand.
+        let numeric_prefix_start = numeric_operator_prefix(glyphs, cursor);
         let numeric_boundary = cursor == 0
             || numeric_prefix_start.is_some()
             || glyphs.get(cursor.saturating_sub(1))
                 .is_some_and(|item| matches!(item.0,
                     "(" | "[" | "$" | "\u{20ac}"
                     | "\u{a3}" | "\u{a5}"));
-        let decimal_start = |offset: usize| {
-            glyphs.get(offset).is_some_and(|item| {
-                matches!(item.0, "." | ",")
-            }) && glyphs.get(offset.saturating_add(1))
-                .is_some_and(|item| ascii_digit(item.0))
-        };
-        let leading_decimal = numeric_boundary && decimal_start(cursor);
+        let leading_decimal = numeric_boundary
+            && numeric_decimal_start(glyphs, cursor);
         // A plus/minus uncertainty is a numeric prefix even when it
         // follows a variable (x±0.2), unlike an ordinary unary hyphen.
         let unary_sign = (numeric_boundary
@@ -2443,11 +2597,12 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
             // A doubled plus is one authored language/version token,
             // not two sequential algebraic numeric prefixes.
             && !(grapheme == "+" && cursor > 0
-                && glyphs[cursor - 1].0 == "+")
+                && glyphs.get(cursor.saturating_sub(1))
+                    .is_some_and(|item| item.0 == "+"))
             && (glyphs.get(cursor.saturating_add(1))
-                .is_some_and(|item| ascii_digit(item.0))
-                || decimal_start(cursor.saturating_add(1)));
-        if !unary_sign && !leading_decimal && !ascii_digit(grapheme) {
+                .is_some_and(|item| numeric_ascii_digit(item.0))
+                || numeric_decimal_start(glyphs, cursor.saturating_add(1)));
+        if !unary_sign && !leading_decimal && !numeric_ascii_digit(grapheme) {
             cursor = cursor.saturating_add(1);
             continue;
         }
@@ -2455,11 +2610,12 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
         if unary_sign {
             cursor = cursor.saturating_add(1);
         }
-        if (unary_sign || leading_decimal) && decimal_start(cursor) {
+        if (unary_sign || leading_decimal)
+            && numeric_decimal_start(glyphs, cursor) {
             cursor = cursor.saturating_add(1);
         }
         while glyphs.get(cursor)
-            .is_some_and(|item| ascii_digit(item.0)) {
+            .is_some_and(|item| numeric_ascii_digit(item.0)) {
             cursor = cursor.saturating_add(1);
         }
         // Even a bare multi-digit integer should move as one measured
@@ -2468,113 +2624,13 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
         let mut has_separator = numeric_prefix_start.is_some()
             || unary_sign || leading_decimal
             || cursor.saturating_sub(start) > 1;
-        while let Some(&(separator, _, _)) = glyphs.get(cursor) {
-            let uncertainty = matches!(separator, "\u{b1}" | "\u{2213}");
-            if !(matches!(separator, "." | "," | ":" | "/" | "⁄"
-                | "-" | "−" | "–") || uncertainty)
-                || !(glyphs.get(cursor.saturating_add(1))
-                    .is_some_and(|item| ascii_digit(item.0))
-                    || uncertainty && decimal_start(cursor.saturating_add(1))) {
-                break;
-            }
-            has_separator = true;
-            cursor = cursor.saturating_add(1);
-            // Uncertainty may omit a leading zero, unlike an ordinary
-            // thousands, date or clock separator.
-            if uncertainty && decimal_start(cursor) {
-                cursor = cursor.saturating_add(1);
-            }
-            while glyphs.get(cursor)
-                .is_some_and(|item| ascii_digit(item.0)) {
-                cursor = cursor.saturating_add(1);
-            }
-        }
-        // The parenthesized last-digit uncertainty may precede a power
-        // of ten, as in 1.23(4)e-2 or 1.23(4)×10³.
-        if let Some(end) = parenthesized_uncertainty_end(glyphs, cursor) {
-            has_separator = true;
-            cursor = end;
-        }
-        // Bind a complete ASCII scientific exponent to its mantissa,
-        // including the optional signed power. An incomplete 1e or
-        // 1e+ remains ordinary authored ink and may wrap as before.
-        // ASCII digits and e/E are deliberate: do not infer Unicode
-        // superscript notation or synthesize unprovided glyphs.
-        if glyphs.get(cursor)
-            .is_some_and(|item| matches!(item.0, "e" | "E")) {
-            let power_start = cursor.saturating_add(1);
-            let digit_start = if glyphs.get(power_start)
-                .is_some_and(|item| matches!(
-                    item.0, "+" | "-" | "\u{2212}"
-                )) {
-                power_start.saturating_add(1)
-            } else {
-                power_start
-            };
-            if glyphs.get(digit_start)
-                .is_some_and(|item| ascii_digit(item.0)) {
-                has_separator = true;
-                cursor = digit_start;
-                while glyphs.get(cursor)
-                    .is_some_and(|item| ascii_digit(item.0)) {
-                    cursor = cursor.saturating_add(1);
-                }
-            }
-        }
-        // Keep an explicitly authored ASCII caret power with its numeric
-        // base. The exponent must contain digits after its optional sign;
-        // bare ^ or ^- remains ordinary ink. No exponent is synthesized.
-        if glyphs.get(cursor).is_some_and(|item| item.0 == "^") {
-            let power_start = cursor.saturating_add(1);
-            let digit_start = if glyphs.get(power_start)
-                .is_some_and(|item| matches!(item.0, "+" | "-" | "\u{2212}")) {
-                power_start.saturating_add(1)
-            } else {
-                power_start
-            };
-            if glyphs.get(digit_start)
-                .is_some_and(|item| ascii_digit(item.0)) {
-                has_separator = true;
-                cursor = digit_start;
-                while glyphs.get(cursor)
-                    .is_some_and(|item| ascii_digit(item.0)) {
-                    cursor = cursor.saturating_add(1);
-                }
-            }
-        }
-        // Keep an authored Unicode superscript power with its numeric
-        // base when the complete cluster fits. A lone superscript sign
-        // is not an exponent; letters and missing superscript glyphs
-        // remain ordinary ink. No superscript shape is synthesized.
-        let superscript_digit = |offset: usize| {
-            glyphs.get(offset)
-                .is_some_and(|item| is_authored_superscript_digit(item.0))
-        };
-        let superscript_start = if glyphs.get(cursor)
-            .is_some_and(|item| matches!(item.0, "\u{207a}" | "\u{207b}")) {
-            cursor.saturating_add(1)
-        } else {
-            cursor
-        };
-        if superscript_digit(superscript_start) {
-            has_separator = true;
-            cursor = superscript_start;
-            while superscript_digit(cursor) {
-                cursor = cursor.saturating_add(1);
-            }
-        }
-        // This is a measured preference for a complete scientific
-        // product, not generic multiplication or an exponent renderer.
-        if let Some(end) = scientific_multiplier_end(glyphs, cursor) {
-            has_separator = true;
-            cursor = end;
-        }
-        // An uncertainty can also follow a completed exponent or power.
-        // The full numeric ink is only advisory when a real row fits.
-        if let Some(end) = parenthesized_uncertainty_end(glyphs, cursor) {
-            has_separator = true;
-            cursor = end;
-        }
+        let (separator_end, separated) =
+            scan_numeric_separators(glyphs, cursor);
+        cursor = separator_end;
+        has_separator |= separated;
+        let (power_end, extended) = scan_numeric_powers(glyphs, cursor);
+        cursor = power_end;
+        has_separator |= extended;
         // Keep ordinary multi-digit values with their already-supported
         // attached percent/per-mille/permyriad or degree punctuation. A
         // trailing C/F remains bound by the degree punctuation rule; no
@@ -2582,10 +2638,9 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
         let measurement_suffix = glyphs.get(cursor).is_some_and(|item| {
             matches!(item.0, "%" | "‰" | "‱" | "°")
         });
-        if has_separator || measurement_suffix {
-            if let Some(ties) = joins.get_mut(start..cursor.saturating_sub(1)) {
-                ties.fill(true);
-            }
+        if (has_separator || measurement_suffix)
+            && let Some(ties) = joins.get_mut(start..cursor.saturating_sub(1)) {
+            ties.fill(true);
         }
         // A complete exponent ends the first numeric scan before an
         // attached uncertainty sign. Join the sign to this preceding
@@ -2597,8 +2652,8 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
                 matches!(item.0, "\u{b1}" | "\u{2213}")
             })
             && (glyphs.get(cursor.saturating_add(1))
-                .is_some_and(|item| ascii_digit(item.0))
-                || decimal_start(cursor.saturating_add(1)))
+                .is_some_and(|item| numeric_ascii_digit(item.0))
+                || numeric_decimal_start(glyphs, cursor.saturating_add(1)))
             && let Some(tie) = joins.get_mut(cursor.saturating_sub(1)) {
             *tie = true;
         }
@@ -3273,8 +3328,8 @@ fn layout_thematic_separator<'text>(
     following: impl Iterator<Item = &'text str> + Clone,
 ) -> Result<(), String> {
     flush_paragraph(layout, paragraph, *previous)?;
-    let reserved_next = if !layout.last_visible_heading
-        && !layout.last_visible_rule {
+    let reserved_next = if !layout.last_visible.is_heading()
+        && !layout.last_visible.is_rule() {
         // Prefer the complete rule chain plus its first visible ink,
         // or all terminal rules when no later text follows. When that
         // cannot fit a fresh sheet, retain the older first-rule/next-
@@ -3338,8 +3393,8 @@ fn reserve_heading_first_row<'text>(
     following: impl Iterator<Item = &'text str> + Clone,
 ) -> Result<(), String> {
     if matches!(style, LineStyle::Heading(_))
-        && !layout.last_visible_rule {
-        if !layout.last_visible_heading
+        && !layout.last_visible.is_rule() {
+        if !layout.last_visible.is_heading()
             && terminal_rule_chain(following.clone())
             && let Some(group) = following_gap(following.clone(), true, true)
             && layout.keep_first_row_with_next(group)? {
@@ -3663,8 +3718,7 @@ fn initialize_layout<'model>(
         heading_attached_to_prior: false,
         heading_chain: None,
         rule_chain: None,
-        last_visible_heading: false,
-        last_visible_rule: false,
+        last_visible: LastVisibleRow::Other,
         statistics,
         lines: Vec::new(),
         ornaments: Vec::new(),
@@ -3936,6 +3990,32 @@ pub(super) fn layout_flow_with_typography(
     compose_flow_rows(source, layout)
 }
 
+// Keep adjacent Markdown body/quote lines together unless their block
+// kind changes or the caller explicitly supplied a hard line break.
+fn append_markdown_paragraph(
+    layout: &mut Layout<'_>, paragraph: &mut String,
+    paragraph_style: &mut LineStyle, row: (LineStyle, &str, bool),
+) -> Result<(), String> {
+    let (style, body, hard_break) = row;
+    // A quoted paragraph merges adjacent quoted soft lines, but
+    // never joins an unquoted paragraph or another block kind.
+    if !paragraph.is_empty()
+        && matches!(style, LineStyle::Quote)
+        != matches!(*paragraph_style, LineStyle::Quote)
+    {
+        flush_paragraph(layout, paragraph, *paragraph_style)?;
+    }
+    if !paragraph.is_empty() {
+        paragraph.push(' ');
+    }
+    *paragraph_style = style;
+    paragraph.push_str(body);
+    if hard_break {
+        flush_paragraph(layout, paragraph, *paragraph_style)?;
+    }
+    Ok(())
+}
+
 // Parse physical rows only after both selected spacing policies are admitted.
 fn compose_flow_rows(
     source: &FlowSource, mut layout: Layout<'_>,
@@ -4018,22 +4098,10 @@ fn compose_flow_rows(
         if source.format == FlowFormat::Markdown
             && matches!(style, LineStyle::Body | LineStyle::Quote)
         {
-            // A quoted paragraph merges adjacent quoted soft lines, but
-            // never joins an unquoted paragraph or another block kind.
-            if !paragraph.is_empty()
-                && matches!(style, LineStyle::Quote)
-                    != matches!(paragraph_style, LineStyle::Quote)
-            {
-                flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
-            }
-            if !paragraph.is_empty() {
-                paragraph.push(' ');
-            }
-            paragraph_style = style;
-            paragraph.push_str(body);
-            if hard_break {
-                flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
-            }
+            append_markdown_paragraph(
+                &mut layout, &mut paragraph, &mut paragraph_style,
+                (style, body, hard_break),
+            )?;
         } else {
             flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
             reserve_heading_first_row(
