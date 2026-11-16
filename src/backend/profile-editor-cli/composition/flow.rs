@@ -3042,7 +3042,9 @@ fn markdown_line(line: &str) -> (LineStyle, Cow<'_, str>) {
     if let Some(list) = markdown_bullet_line(block) {
         return list;
     }
-    if let Some(quote) = block.strip_prefix('>') {
+    // The quote marker must be a complete grapheme. A combining accent
+    // attached to > makes that exact cluster authored ink, not syntax.
+    if let Ok((">", quote)) = first_grapheme(block) {
         // One level of Markdown quote syntax, optionally followed by one
         // separator space. Nested > markers remain literal authored text.
         return (LineStyle::Quote, Cow::Borrowed(

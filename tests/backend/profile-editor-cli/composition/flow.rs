@@ -6526,6 +6526,34 @@ fn chained_empty_quotes_share_exact_collapsed_gaps_across_pages()
 }
 
 #[test]
+fn combining_mark_on_quote_symbol_is_literal_grapheme_not_markdown_syntax()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let marked = ">\u{301}";
+    assert_eq!(super::first_grapheme(marked)?.0, marked);
+    for source_text in [format!("{marked}a"), format!("  {marked}a")] {
+        let (style, body) = super::markdown_line(&source_text);
+        assert!(matches!(style, super::LineStyle::Body),
+            "a combining mark belongs to the quote glyph: {source_text:?}");
+        assert_eq!(body.as_ref(), format!("{marked}a"));
+        let source = FlowSource::new(FlowFormat::Markdown, &source_text)?;
+        let (runs, marks, pages) = super::layout_flow(
+            &source, &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+        )?;
+        assert_eq!(pages, 1);
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].text, format!("{marked}a"));
+        assert!(marks.is_empty(), "no quote rule for literal Unicode ink");
+    }
+    let (style, body) = super::markdown_line(">a");
+    assert!(matches!(style, super::LineStyle::Quote));
+    assert_eq!(body, "a");
+    Ok(())
+}
+
+#[test]
 fn empty_quote_separator_requires_uninterrupted_quoted_ink()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;

@@ -5452,3 +5452,20 @@ positioned authored strokes and verify missing exponent or uncertainty glyphs
 cannot replace an accepted export. This extends physical wrapping evidence
 only; it does not parse mathematical values or complete saved-notebook
 rendering.
+
+## Exact Unicode quote-marker admission (partial) — 2026-11-16
+
+The export-only Markdown parser now recognizes `>` as a blockquote marker
+only when it is one complete Unicode grapheme. A combining mark immediately
+attached to `>` is part of the exact authored glyph, not quote syntax;
+one to three leading structural spaces do not alter that identity.
+This reuses the existing Unicode segmentation authority and never normalizes
+or invents a fallback glyph.
+
+A red-to-green native Rust regression verifies the previously lost grapheme,
+absence of a synthetic quote rule, and unchanged ordinary `>a` blockquotes.
+A real-process test verifies exact PDF and transparent PNG parity with
+plain-text ink, two-space Markdown indentation equivalence, and refusal to
+replace a valid output when only a distinct unaccented `>` is authored.
+This remains a CLI-only correctness fix, not a persisted semantic notebook
+or full Markdown implementation.

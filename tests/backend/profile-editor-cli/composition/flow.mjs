@@ -10524,3 +10524,46 @@ test('algebraic numeric operands preserve exact native PDF/PNG ink', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('combining-accent quote glyph stays literal in native PDF and PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-combined-quote-'));
+        try {
+            const marked = '>\u0301';
+            const literal = `${marked}a`;
+            const markedStroke = [
+                '--glyph-stroke', marked, '600', '500', '1800',
+                '3000', '250', '#123456',
+            ];
+            const unrelatedQuote = [
+                '--glyph-stroke', '>', '600', '500', '1800',
+                '3000', '250', '#123456',
+            ];
+            for (const format of ['pdf', 'png']) {
+                const markdown = render(dir, literal, format, markedStroke);
+                assert.equal(markdown.result.status, 0,
+                    markdown.result.stderr);
+                const expected = readFileSync(markdown.output);
+                const indented = render(dir, `  ${literal}`, format,
+                    markedStroke);
+                assert.equal(indented.result.status, 0,
+                    indented.result.stderr);
+                assert.deepEqual(readFileSync(indented.output), expected,
+                    'Markdown indentation cannot strip combined quote ink');
+                const plain = render(dir, literal, format, markedStroke,
+                    '--flow-text');
+                assert.equal(plain.result.status, 0, plain.result.stderr);
+                assert.deepEqual(readFileSync(plain.output), expected,
+                    'a literal marked quote is not a synthetic quote rule');
+                const missing = render(dir, literal, format,
+                    unrelatedQuote);
+                assert.notEqual(missing.result.status, 0);
+                assert.match(missing.result.stderr,
+                    /missing authored glyph|no authored strokes/i);
+                assert.deepEqual(readFileSync(missing.output), expected,
+                    'a different exact grapheme cannot replace valid output');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
