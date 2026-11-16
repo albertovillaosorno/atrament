@@ -2354,10 +2354,11 @@ fn scientific_multiplier_end(
 // advisory ink cluster when it fits. Numeric comparison prefixes also bind the
 // following number, including leading decimals and complete exponents.
 // Authored numeric caret and Unicode superscript powers also bind a base.
-// Only separators surrounded by ASCII digits join a numeric run;
-// terminal punctuation and words stay separate.
-// A leading +, hyphen or mathematical minus also joins following digits;
-// after a letter, the ordinary hyphen retains its previous layout.
+// Ordinary numeric separators require ASCII digits on either side;
+// uncertainty signs (±/∓) also accept a leading decimal without zero.
+// Terminal punctuation and words stay separate. A leading +, hyphen or
+// mathematical minus joins digits only at numeric boundaries; an authored
+// uncertainty can also follow a variable without detaching its number.
 // Compute the adjacent ties once per word: long 4,096-byte inputs must not
 // repeatedly rescan the rest of a number when measuring each glyph.
 fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
@@ -2402,8 +2403,11 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
                 .is_some_and(|item| ascii_digit(item.0))
         };
         let leading_decimal = numeric_boundary && decimal_start(cursor);
-        let unary_sign = numeric_boundary
+        // A plus/minus uncertainty is a numeric prefix even when it
+        // follows a variable (x±0.2), unlike an ordinary unary hyphen.
+        let unary_sign = (numeric_boundary
             && matches!(grapheme, "+" | "-" | "\u{2212}")
+            || matches!(grapheme, "\u{b1}" | "\u{2213}"))
             && (glyphs.get(cursor.saturating_add(1))
                 .is_some_and(|item| ascii_digit(item.0))
                 || decimal_start(cursor.saturating_add(1)));
@@ -2428,13 +2432,22 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
         let mut has_separator = comparison_start.is_some()
             || unary_sign || leading_decimal
             || cursor.saturating_sub(start) > 1;
-        while glyphs.get(cursor).is_some_and(|item| {
-            matches!(item.0, "." | "," | ":" | "/" | "⁄"
-                | "-" | "−" | "–")
-        }) && glyphs.get(cursor.saturating_add(1))
-            .is_some_and(|item| ascii_digit(item.0)) {
+        while let Some(&(separator, _, _)) = glyphs.get(cursor) {
+            let uncertainty = matches!(separator, "\u{b1}" | "\u{2213}");
+            if !(matches!(separator, "." | "," | ":" | "/" | "⁄"
+                | "-" | "−" | "–") || uncertainty)
+                || !(glyphs.get(cursor.saturating_add(1))
+                    .is_some_and(|item| ascii_digit(item.0))
+                    || uncertainty && decimal_start(cursor.saturating_add(1))) {
+                break;
+            }
             has_separator = true;
             cursor = cursor.saturating_add(1);
+            // Uncertainty may omit a leading zero, unlike an ordinary
+            // thousands, date or clock separator.
+            if uncertainty && decimal_start(cursor) {
+                cursor = cursor.saturating_add(1);
+            }
             while glyphs.get(cursor)
                 .is_some_and(|item| ascii_digit(item.0)) {
                 cursor = cursor.saturating_add(1);

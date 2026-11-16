@@ -5316,3 +5316,18 @@ native-process test proves PDF and transparent PNG bytes match explicitly
 placed rows and that an omitted digit stroke cannot overwrite valid output.
 This is advisory CLI wrapping, not parsed numeric semantics, glyph creation,
 or a completed saved-notebook Export journey.
+## Authored numeric uncertainty grouping (partial) — 2026-11-15
+
+The export-only CLI now keeps complete signed uncertainty notation together
+when its authored ink fits one physical row: `1.2±0.4`, `1.2∓0.4`, `±.25`
+and `∓0.2`. `±` and `∓` bind following ASCII digits or a leading decimal
+without requiring a left-hand number, allowing `x±.2` to keep the numeric
+suffix intact. An attached complete uncertainty remains part of the preceding
+number's advisory cluster. Missing right-hand digits do not acquire ties.
+
+Two Rust regressions cover both source modes, physical row dimensions,
+complete and incomplete suffixes, and narrow-sheet exact-grapheme fallback.
+All 155 native flow tests pass. The behavior uses existing authored glyph
+shapes and does not invent mathematical syntax, font positioning, a numeric
+calculator or persisted semantic notebook state. The full saved-content
+render/export journey remains open.

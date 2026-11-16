@@ -9458,6 +9458,71 @@ fn scientific_multiplication_powers_bind_complete_authored_notation()
 }
 
 #[test]
+fn scientific_uncertainties_keep_complete_measured_numeric_ink()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 33_000, height: 72_000,
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        for (source, expected) in [
+            ("abc1.2±0.4", &["abc", "1.2±0.4"][..]),
+            ("abc1.2∓0.4", &["abc", "1.2∓0.4"]),
+            ("abcd±.25", &["abcd", "±.25"]),
+            ("abcd∓.25", &["abcd", "∓.25"]),
+            ("abcd±0.2", &["abcd", "±0.2"]),
+            ("abcd∓0.2", &["abcd", "∓0.2"]),
+        ] {
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            let texts = rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>();
+            assert_eq!(pages, 1, "{source}");
+            assert!(marks.is_empty());
+            assert_eq!(texts, expected, "{source} {format:?}");
+            assert_eq!(texts.concat(), source);
+        }
+        let narrow = super::FlowRegion {
+            width: 9_000, height: 80_000, ..region
+        };
+        for source in ["1.2±0.4", "1.2∓.4", "±0.25", "∓.25"] {
+            let (rows, _, _) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(narrow),
+            )?;
+            assert_eq!(rows.iter().map(|row| row.text.as_str())
+                .collect::<String>(), source);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn uncertainty_ties_require_a_complete_numeric_neighbor() {
+    let joins = |source: &str| {
+        let glyphs = source.chars().map(|character| {
+            let text = match character {
+                '1' => "1", '2' => "2", 'x' => "x", '.' => ".",
+                '±' => "±", '∓' => "∓", _ => unreachable!(),
+            };
+            (text, 4_000, 4_800)
+        }).collect::<Vec<_>>();
+        super::numeric_separator_joins(&glyphs)
+    };
+    assert_eq!(joins("1±2"), [true, true]);
+    assert_eq!(joins("1∓.2"), [true, true, true]);
+    assert_eq!(joins("x±.2"), [false, true, true]);
+    assert_eq!(joins("±.2"), [true, true]);
+    assert_eq!(joins("1±x"), [false, false]);
+    assert_eq!(joins("1∓."), [false, false]);
+}
+
+#[test]
 fn fitting_bare_integer_ink_moves_intact_before_wrapping()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;
