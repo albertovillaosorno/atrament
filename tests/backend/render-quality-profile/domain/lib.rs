@@ -34,6 +34,8 @@
 
 //! CPU render quality profile regression tests.
 
+use std::ptr;
+
 use atrament_render_quality_profile::{
     RenderQualityCost, RenderQualityMode, RenderQualityPairError,
     RenderQualityProfile, SharedRenderAuthority, validate_preview_final_pair,
@@ -49,8 +51,9 @@ type Authority = SharedRenderAuthority<
     u64,
 >;
 type Cost = RenderQualityCost<u32, u32>;
+type QualityProfile = RenderQualityProfile<Authority, Cost>;
 
-fn authority() -> Authority {
+const fn authority() -> Authority {
     SharedRenderAuthority {
         blend_order: "accepted-blend-order",
         geometry: "vector-geometry-12",
@@ -61,7 +64,7 @@ fn authority() -> Authority {
     }
 }
 
-fn profile(
+const fn profile(
     mode: RenderQualityMode,
     cost: Cost,
 ) -> RenderQualityProfile<Authority, Cost> {
@@ -139,7 +142,7 @@ fn material_or_noise_drift_rejects_as_shared_authority_mismatch() {
             ..authority()
         },
     ] {
-        let final_profile = RenderQualityProfile {
+        let final_profile: QualityProfile = RenderQualityProfile {
             authority,
             cost: RenderQualityCost {
                 sampling_cost: 8,
@@ -177,7 +180,7 @@ fn seed_blend_or_physical_drift_rejects_as_shared_authority_mismatch() {
             ..authority()
         },
     ] {
-        let final_profile = RenderQualityProfile {
+        let final_profile: QualityProfile = RenderQualityProfile {
             authority,
             cost: RenderQualityCost {
                 sampling_cost: 8,
@@ -240,11 +243,11 @@ fn wrong_final_role_rejects_before_authority_comparison() {
 
 #[test]
 fn all_256_role_and_authority_drift_masks_match_pair_precedence() {
-    let mut cases = 0_u16;
+    let mut cases = 0u16;
     let mut outcomes = [false; 4];
-    for mask in 0_u16..256 {
-        let preview_role_wrong = mask & (1 << 0) != 0;
-        let final_role_wrong = mask & (1 << 1) != 0;
+    for mask in 0u16..256 {
+        let preview_role_wrong = mask & (1u16 << 0u32) != 0;
+        let final_role_wrong = mask & (1u16 << 1u32) != 0;
         let mut preview = profile(
             if preview_role_wrong {
                 RenderQualityMode::Final
@@ -267,22 +270,22 @@ fn all_256_role_and_authority_drift_masks_match_pair_precedence() {
                 texture_resolution: 4096,
             },
         );
-        if mask & (1 << 2) != 0 {
+        if mask & (1u16 << 2u32) != 0 {
             final_profile.authority.blend_order = "drifted-blend-order";
         }
-        if mask & (1 << 3) != 0 {
+        if mask & (1u16 << 3u32) != 0 {
             final_profile.authority.geometry = "drifted-geometry";
         }
-        if mask & (1 << 4) != 0 {
+        if mask & (1u16 << 4u32) != 0 {
             final_profile.authority.material_authority = "drifted-material";
         }
-        if mask & (1 << 5) != 0 {
+        if mask & (1u16 << 5u32) != 0 {
             final_profile.authority.noise_scale = 9_999;
         }
-        if mask & (1 << 6) != 0 {
+        if mask & (1u16 << 6u32) != 0 {
             final_profile.authority.physical_bounds = (1, 2);
         }
-        if mask & (1 << 7) != 0 {
+        if mask & (1u16 << 7u32) != 0 {
             final_profile.authority.seed = 123_456;
         }
         preview.cost.sampling_cost = 2;
@@ -307,16 +310,18 @@ fn all_256_role_and_authority_drift_masks_match_pair_precedence() {
         );
         match expected {
             Ok(()) => {
-                let validated = validate_preview_final_pair_view(
+                let sealed = validate_preview_final_pair_view(
                     &preview,
                     &final_profile,
-                )
-                .expect("matching pair seals");
-                assert!(std::ptr::eq(validated.preview(), &preview));
-                assert!(std::ptr::eq(
-                    validated.final_profile(),
-                    &final_profile,
-                ));
+                );
+                assert!(sealed.is_ok(), "matching pair seals");
+                if let Ok(validated) = sealed {
+                    assert!(ptr::eq(validated.preview(), &raw const preview));
+                    assert!(ptr::eq(
+                        validated.final_profile(),
+                        &raw const final_profile,
+                    ));
+                }
             },
             Err(reason) => assert_eq!(
                 validate_preview_final_pair_view(&preview, &final_profile),
