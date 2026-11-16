@@ -39,7 +39,94 @@ use atrament_flow_pagination::{
 };
 use atrament_physical_page_profile::{Length, Rect};
 
-fn fragment(owner: u64, width: u64, height: u64) -> MeasuredFragment<u64> {
+macro_rules! require_at_mut {
+    ($slice:expr, $index:expr) => {{
+        let element = ($slice).get_mut($index);
+        assert!(element.is_some(), "missing mutable fixture at {}", $index);
+        let Some(element) = element else {
+            return;
+        };
+        element
+    }};
+}
+
+macro_rules! require_at {
+    ($slice:expr, $index:expr) => {{
+        let element = ($slice).get($index);
+        assert!(element.is_some(), "missing indexed fixture at {}", $index);
+        let Some(element) = element else {
+            return;
+        };
+        element
+    }};
+}
+
+macro_rules! require_ok {
+    ($expression:expr, $context:literal) => {{
+        let result = $expression;
+        assert!(result.is_ok(), "{}: {result:?}", $context);
+        let Ok(value) = result else {
+            return;
+        };
+        value
+    }};
+}
+
+#[derive(Default)]
+struct PaginationOutcomeCoverage {
+    saw_no_fit: bool,
+    saw_no_page: bool,
+    saw_success: bool,
+}
+
+impl PaginationOutcomeCoverage {
+    fn assert_complete(self) {
+        assert!(self.saw_success, "reference oracle must succeed");
+        assert!(self.saw_no_fit, "reference oracle must exercise no-fit");
+        assert!(self.saw_no_page, "reference oracle must exhaust a page");
+    }
+
+    fn observe(
+        &mut self,
+        result: &Result<
+            Vec<PlacedFragment<u64, u64>>,
+            PaginationError<u64, u64>,
+        >,
+    ) {
+        match result {
+            Ok(_) => self.saw_success = true,
+            Err(PaginationError::FragmentDoesNotFitAnyPage { .. }) => {
+                self.saw_no_fit = true;
+            },
+            Err(PaginationError::NoPageAvailable { .. }) => {
+                self.saw_no_page = true;
+            },
+            Err(
+                PaginationError::InvalidPageRegion { .. }
+                | PaginationError::DuplicatePageIdentity { .. }
+                | PaginationError::ZeroHeightFragment { .. },
+            ) => {
+                assert_eq!(
+                    result.as_ref().err(),
+                    None,
+                    "Cartesian fixtures only construct valid page regions"
+                );
+            },
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ReferenceCursor {
+    page_index: usize,
+    used_height: u64,
+}
+
+const fn fragment(
+    owner: u64,
+    width: u64,
+    height: u64,
+) -> MeasuredFragment<u64> {
     MeasuredFragment {
         height: Length::from_micrometres(height),
         owner,
@@ -47,7 +134,7 @@ fn fragment(owner: u64, width: u64, height: u64) -> MeasuredFragment<u64> {
     }
 }
 
-fn page(page: u64, y: u64, width: u64, height: u64) -> PageRegion<u64> {
+const fn page(page: u64, y: u64, width: u64, height: u64) -> PageRegion<u64> {
     PageRegion {
         page,
         writable: Rect {
@@ -59,7 +146,7 @@ fn page(page: u64, y: u64, width: u64, height: u64) -> PageRegion<u64> {
     }
 }
 
-fn unit(
+const fn unit(
     policy: FlowUnitPolicy,
     fragments: Vec<MeasuredFragment<u64>>,
 ) -> MeasuredFlowUnit<u64> {
@@ -102,7 +189,9 @@ fn reference_independent(
                     .y
                     .micrometres()
                     .checked_add(used_height)
-                    .expect("small oracle coordinates cannot overflow");
+                    .ok_or(PaginationError::InvalidPageRegion {
+                        page: current.page,
+                    })?;
                 placements.push(PlacedFragment {
                     height: fragment.height,
                     owner: fragment.owner,
@@ -115,17 +204,18 @@ fn reference_independent(
                     top: Length::from_micrometres(top),
                     width: fragment.width,
                 });
-                used_height += fragment.height.micrometres();
+                used_height =
+                    used_height.saturating_add(fragment.height.micrometres());
                 break;
             }
-            page_index += 1;
+            page_index = page_index.saturating_add(1);
             used_height = 0;
         }
     }
     Ok(placements)
 }
 
-fn next_case_value(seed: &mut u64) -> u64 {
+const fn next_case_value(seed: &mut u64) -> u64 {
     *seed = seed
         .wrapping_mul(6_364_136_223_846_793_005)
         .wrapping_add(1_442_695_040_888_963_407);
@@ -135,21 +225,26 @@ fn next_case_value(seed: &mut u64) -> u64 {
 // Deliberately independent small-integer reservation oracle: it never calls
 // the production group extent or page-selection helpers.
 fn reference_next_reservation(
-    units: &[MeasuredFlowUnit<u64>], start: usize,
+    units: &[MeasuredFlowUnit<u64>],
+    start: usize,
 ) -> Option<(u64, u64)> {
     let mut total_height = 0u64;
     let mut maximum_width = 0u64;
     for unit in units.iter().skip(start) {
-        if unit.fragments.is_empty() { continue; }
+        if unit.fragments.is_empty() {
+            continue;
+        }
         if unit.policy == FlowUnitPolicy::StartOnNewPage {
             return None;
         }
         let count = if unit.policy == FlowUnitPolicy::Independent {
             1
-        } else { unit.fragments.len() };
+        } else {
+            unit.fragments.len()
+        };
         for fragment in unit.fragments.iter().take(count) {
-            total_height = total_height.checked_add(
-                fragment.height.micrometres())?;
+            total_height =
+                total_height.checked_add(fragment.height.micrometres())?;
             maximum_width = maximum_width.max(fragment.width.micrometres());
         }
         if unit.policy != FlowUnitPolicy::KeepWithNextWhenPossible {
@@ -167,15 +262,18 @@ fn reference_mixed_units(
     if proposed.is_ok() {
         return proposed;
     }
-    if units.iter().any(|unit| unit.policy
-        == FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible)
-        && let Ok(fallback) = reference_mixed_once(pages, units, false, true)
+    if units.iter().any(|unit| {
+        unit.policy == FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible
+    }) && let Ok(fallback) = reference_mixed_once(pages, units, false, true)
     {
         return Ok(fallback);
     }
-    if units.iter().any(|unit| !matches!(unit.policy,
-        FlowUnitPolicy::Independent | FlowUnitPolicy::StartOnNewPage))
-        && let Ok(fallback) = reference_mixed_once(pages, units, false, false)
+    if units.iter().any(|unit| {
+        !matches!(
+            unit.policy,
+            FlowUnitPolicy::Independent | FlowUnitPolicy::StartOnNewPage
+        )
+    }) && let Ok(fallback) = reference_mixed_once(pages, units, false, false)
     {
         return Ok(fallback);
     }
@@ -194,32 +292,36 @@ fn reference_mixed_once(
     };
     let mut placements = Vec::new();
     for (unit_index, unit) in units.iter().enumerate() {
-        if unit.fragments.is_empty() {
+        let Some(first_fragment) = unit.fragments.first() else {
             continue;
-        }
-        if !use_preferences
-            && unit.policy != FlowUnitPolicy::StartOnNewPage
-        {
+        };
+        if !use_preferences && unit.policy != FlowUnitPolicy::StartOnNewPage {
             reference_place_group(
-                pages, &unit.fragments, unit_index,
-                &mut cursor, &mut placements,
+                pages,
+                &unit.fragments,
+                unit_index,
+                &mut cursor,
+                &mut placements,
             )?;
             continue;
         }
         match unit.policy {
             FlowUnitPolicy::StartOnNewPage => {
                 if cursor.used_height > 0 {
-                    cursor.page_index += 1;
+                    cursor.page_index = cursor.page_index.saturating_add(1);
                     cursor.used_height = 0;
                     if cursor.page_index >= pages.len() {
                         return Err(PaginationError::NoPageAvailable {
-                            owner: unit.fragments[0].owner,
+                            owner: first_fragment.owner,
                         });
                     }
                 }
                 reference_place_group(
-                    pages, &unit.fragments, unit_index,
-                    &mut cursor, &mut placements,
+                    pages,
+                    &unit.fragments,
+                    unit_index,
+                    &mut cursor,
+                    &mut placements,
                 )?;
             },
             FlowUnitPolicy::Independent => reference_place_group(
@@ -232,55 +334,43 @@ fn reference_mixed_once(
             FlowUnitPolicy::KeepTogetherWhenPossible
             | FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible
             | FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible => {
-                let first_placement = placements.len();
-                let total_height = unit
-                    .fragments
-                    .iter()
-                    .map(|fragment| fragment.height.micrometres())
-                    .sum::<u64>();
-                let maximum_width = unit
-                    .fragments
-                    .iter()
-                    .map(|fragment| fragment.width)
-                    .max()
-                    .unwrap_or(Length::ZERO);
-                let current = pages.get(cursor.page_index);
-                let current_fits = current.is_some_and(|page| {
-                    let remaining = page
-                        .writable
-                        .height
-                        .micrometres()
-                        .saturating_sub(cursor.used_height);
-                    total_height <= remaining
-                        && maximum_width <= page.writable.width
-                });
-                if current_fits {
-                    reference_place_group(
-                        pages,
-                        &unit.fragments,
-                        unit_index,
-                        &mut cursor,
-                        &mut placements,
-                    )?;
-                    continue;
-                }
-                let later = cursor
-                    .page_index
-                    .checked_add(1)
-                    .and_then(|start| {
-                        pages
+                reference_place_keep_together(
+                    pages,
+                    unit,
+                    unit_index,
+                    balance_opening,
+                    &mut cursor,
+                    &mut placements,
+                )?;
+            },
+            FlowUnitPolicy::KeepWithNextWhenPossible => {
+                if let Some((height, width)) =
+                    reference_next_reservation(units, unit_index)
+                {
+                    let fits_here =
+                        pages.get(cursor.page_index).is_some_and(|page| {
+                            height
+                                <= page
+                                    .writable
+                                    .height
+                                    .micrometres()
+                                    .saturating_sub(cursor.used_height)
+                                && width <= page.writable.width.micrometres()
+                        });
+                    if !fits_here
+                        && let Some((later, _)) = pages
                             .iter()
                             .enumerate()
-                            .skip(start)
+                            .skip(cursor.page_index.saturating_add(1))
                             .find(|(_, page)| {
-                                total_height
-                                    <= page.writable.height.micrometres()
-                                    && maximum_width <= page.writable.width
+                                height <= page.writable.height.micrometres()
+                                    && width
+                                        <= page.writable.width.micrometres()
                             })
-                    });
-                if let Some((page_index, _page)) = later {
-                    cursor.page_index = page_index;
-                    cursor.used_height = 0;
+                    {
+                        cursor.page_index = later;
+                        cursor.used_height = 0;
+                    }
                 }
                 reference_place_group(
                     pages,
@@ -289,54 +379,88 @@ fn reference_mixed_once(
                     &mut cursor,
                     &mut placements,
                 )?;
-                if balance_opening && unit.policy
-                    == FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible
-                {
-                    reference_balance_opening(
-                        pages, &unit.fragments, unit_index, first_placement,
-                        &mut cursor, &mut placements,
-                    );
-                }
-                if matches!(unit.policy,
-                    FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible
-                    | FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible)
-                {
-                    reference_balance_tail(pages, first_placement,
-                        &mut cursor, &mut placements);
-                }
-            },
-            FlowUnitPolicy::KeepWithNextWhenPossible => {
-                if let Some((height, width)) =
-                    reference_next_reservation(units, unit_index)
-                {
-                    let fits_here = pages.get(cursor.page_index)
-                        .is_some_and(|page| {
-                            height <= page.writable.height.micrometres()
-                                .saturating_sub(cursor.used_height)
-                                && width <= page.writable.width.micrometres()
-                        });
-                    if !fits_here {
-                        if let Some((later, _)) = pages.iter().enumerate()
-                            .skip(cursor.page_index.saturating_add(1))
-                            .find(|(_, page)| {
-                                height <= page.writable.height.micrometres()
-                                    && width <=
-                                        page.writable.width.micrometres()
-                            })
-                        {
-                            cursor.page_index = later;
-                            cursor.used_height = 0;
-                        }
-                    }
-                }
-                reference_place_group(
-                    pages, &unit.fragments, unit_index,
-                    &mut cursor, &mut placements,
-                )?;
             },
         }
     }
     Ok(placements)
+}
+
+fn reference_place_keep_together(
+    pages: &[PageRegion<u64>],
+    unit: &MeasuredFlowUnit<u64>,
+    unit_index: usize,
+    balance_opening: bool,
+    cursor: &mut ReferenceCursor,
+    placements: &mut Vec<PlacedFragment<u64, u64>>,
+) -> Result<(), PaginationError<u64, u64>> {
+    let first_placement = placements.len();
+    let total_height = unit
+        .fragments
+        .iter()
+        .map(|fragment| fragment.height.micrometres())
+        .sum::<u64>();
+    let maximum_width = unit
+        .fragments
+        .iter()
+        .map(|fragment| fragment.width)
+        .max()
+        .unwrap_or(Length::ZERO);
+    let current = pages.get(cursor.page_index);
+    let current_fits = current.is_some_and(|page| {
+        let remaining = page
+            .writable
+            .height
+            .micrometres()
+            .saturating_sub(cursor.used_height);
+        total_height <= remaining && maximum_width <= page.writable.width
+    });
+    if current_fits {
+        reference_place_group(
+            pages,
+            &unit.fragments,
+            unit_index,
+            cursor,
+            placements,
+        )?;
+        return Ok(());
+    }
+    let later = cursor.page_index.checked_add(1).and_then(|start| {
+        pages.iter().enumerate().skip(start).find(|(_, page)| {
+            total_height <= page.writable.height.micrometres()
+                && maximum_width <= page.writable.width
+        })
+    });
+    if let Some((page_index, _page)) = later {
+        cursor.page_index = page_index;
+        cursor.used_height = 0;
+    }
+    reference_place_group(
+        pages,
+        &unit.fragments,
+        unit_index,
+        cursor,
+        placements,
+    )?;
+    if balance_opening
+        && unit.policy == FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible
+    {
+        reference_balance_opening(
+            pages,
+            &unit.fragments,
+            unit_index,
+            first_placement,
+            cursor,
+            placements,
+        );
+    }
+    if matches!(
+        unit.policy,
+        FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible
+            | FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible
+    ) {
+        reference_balance_tail(pages, first_placement, cursor, placements);
+    }
+    Ok(())
 }
 
 // Independent reference for the first-row preference: simulate the full
@@ -350,24 +474,37 @@ fn reference_balance_opening(
     cursor: &mut ReferenceCursor,
     placements: &mut Vec<PlacedFragment<u64, u64>>,
 ) {
-    let Some(rows) = placements.get(start..) else { return; };
+    let Some(rows) = placements.get(start..) else {
+        return;
+    };
     let Some([first_row, second_row, ..]) = rows.get(..) else {
         return;
     };
     if rows.len() < 3 || first_row.page == second_row.page {
         return;
     }
-    let Some((next_index, next)) = pages.iter().enumerate()
-        .find(|(_, page)| page.page == second_row.page) else {
+    let Some((next_index, next)) = pages
+        .iter()
+        .enumerate()
+        .find(|(_, page)| page.page == second_row.page)
+    else {
         return;
     };
     let (Some(first), Some(second)) = (fragments.first(), fragments.get(1))
-    else { return; };
-    let Some(pair_height) = first.height.micrometres()
-        .checked_add(second.height.micrometres()) else { return; };
+    else {
+        return;
+    };
+    let Some(pair_height) = first
+        .height
+        .micrometres()
+        .checked_add(second.height.micrometres())
+    else {
+        return;
+    };
     if pair_height > next.writable.height.micrometres()
         || first.width > next.writable.width
-        || second.width > next.writable.width {
+        || second.width > next.writable.width
+    {
         return;
     }
     let mut trial_cursor = ReferenceCursor {
@@ -376,8 +513,16 @@ fn reference_balance_opening(
     };
     let mut trial = Vec::new();
     if reference_place_group(
-        pages, fragments, unit_index, &mut trial_cursor, &mut trial,
-    ).is_err() { return; }
+        pages,
+        fragments,
+        unit_index,
+        &mut trial_cursor,
+        &mut trial,
+    )
+    .is_err()
+    {
+        return;
+    }
     placements.truncate(start);
     placements.extend(trial);
     *cursor = trial_cursor;
@@ -392,13 +537,19 @@ fn reference_balance_tail(
     cursor: &mut ReferenceCursor,
     placements: &mut [PlacedFragment<u64, u64>],
 ) {
-    let Some(rows) = placements.get(start..) else { return; };
+    let Some(rows) = placements.get(start..) else {
+        return;
+    };
     let Some(tail_start) = rows.len().checked_sub(4) else {
         return;
     };
-    let Some([first_old, second_old, to_move, last]) =
-        rows.get(tail_start..) else { return; };
-    let Some(target) = pages.get(cursor.page_index) else { return; };
+    let Some([first_old, second_old, to_move, last]) = rows.get(tail_start..)
+    else {
+        return;
+    };
+    let Some(target) = pages.get(cursor.page_index) else {
+        return;
+    };
     let can_balance = first_old.page == to_move.page
         && second_old.page == to_move.page
         && to_move.page != last.page
@@ -406,22 +557,38 @@ fn reference_balance_tail(
         && last.top == target.writable.y
         && cursor.used_height == last.height.micrometres()
         && to_move.width <= target.writable.width
-        && to_move.height.micrometres()
+        && to_move
+            .height
+            .micrometres()
             .checked_add(last.height.micrometres())
-            .is_some_and(|height| height <=
-                target.writable.height.micrometres());
+            .is_some_and(|height| {
+                height <= target.writable.height.micrometres()
+            });
     if !can_balance {
         return;
     }
-    let Some(new_height) = to_move.height.micrometres()
-        .checked_add(last.height.micrometres()) else { return; };
-    let Some(new_final_top) = target.writable.y.micrometres()
-        .checked_add(to_move.height.micrometres()) else { return; };
+    let Some(new_height) = to_move
+        .height
+        .micrometres()
+        .checked_add(last.height.micrometres())
+    else {
+        return;
+    };
+    let Some(new_final_top) = target
+        .writable
+        .y
+        .micrometres()
+        .checked_add(to_move.height.micrometres())
+    else {
+        return;
+    };
     let Some(pair_start) = placements.len().checked_sub(2) else {
         return;
     };
-    let Some([moved_row, trailing_row]) =
-        placements.get_mut(pair_start..) else { return; };
+    let Some([moved_row, trailing_row]) = placements.get_mut(pair_start..)
+    else {
+        return;
+    };
     moved_row.page = target.page;
     moved_row.top = target.writable.y;
     moved_row.writable = target.writable;
@@ -446,7 +613,12 @@ fn reference_covered_pages(
             return covered;
         }
     }
-    panic!("reference placement outside supplied page authority");
+    // An unknown page is a failed reference invariant, not a valid empty plan.
+    assert!(
+        pages.iter().any(|page| page.page == last.page),
+        "reference placement outside supplied page authority"
+    );
+    Vec::new()
 }
 
 // The oracle checks where fragments land. Independently prove that the plan
@@ -489,32 +661,70 @@ fn assert_placement_source_bijection(
     assert_eq!(actual, expected, "source-to-placement bijection");
 
     for placed in placements {
-        let expected_page = pages
-            .iter()
-            .find(|page| page.page == placed.page)
-            .expect("placed page must belong to input");
-        assert_eq!(placed.writable, expected_page.writable);
-        assert!(placed.top >= placed.writable.y);
-        assert!(placed.width <= placed.writable.width);
+        let source_page = pages.iter().find(|page| page.page == placed.page);
+        assert!(source_page.is_some(), "placed page must belong to input");
+        let Some(expected_page) = source_page else {
+            return;
+        };
+        assert_eq!(
+            placed.writable, expected_page.writable,
+            "placed writable geometry matches physical page"
+        );
+        assert!(
+            placed.top >= placed.writable.y,
+            "placed top within writable page"
+        );
+        assert!(
+            placed.width <= placed.writable.width,
+            "placed width within page"
+        );
         let end = placed
             .top
             .micrometres()
-            .checked_add(placed.height.micrometres())
-            .expect("placed bottom must be finite");
+            .checked_add(placed.height.micrometres());
+        assert!(end.is_some(), "placed bottom must be finite");
         let writable_bottom = placed
             .writable
             .y
             .micrometres()
-            .checked_add(placed.writable.height.micrometres())
-            .expect("writable bottom must be finite");
+            .checked_add(placed.writable.height.micrometres());
+        assert!(writable_bottom.is_some(), "writable bottom must be finite");
         assert!(end <= writable_bottom, "placed row exceeds writable page");
     }
+}
+
+fn generate_oracle_pages(
+    seed: &mut u64,
+    seen_page_counts: &mut [bool; 4],
+) -> Vec<PageRegion<u64>> {
+    let page_count =
+        usize::try_from(next_case_value(seed).rem_euclid(4).saturating_add(1))
+            .unwrap_or_default();
+    assert_eq!(
+        seen_page_counts
+            .get_mut(page_count.saturating_sub(1))
+            .map(|seen| *seen = true),
+        Some(()),
+        "generated page count must be within the fixture coverage array",
+    );
+    let mut pages = Vec::with_capacity(page_count);
+    for index in 0..page_count {
+        let width = next_case_value(seed).rem_euclid(6).saturating_add(1);
+        let height = next_case_value(seed).rem_euclid(6).saturating_add(1);
+        pages.push(page(
+            100u64.saturating_add(u64::try_from(index).unwrap_or_default()),
+            1_000u64.saturating_mul(u64::try_from(index).unwrap_or_default()),
+            width,
+            height,
+        ));
+    }
+    pages
 }
 
 #[test]
 fn mixed_policy_pagination_matches_reference_oracle() {
     const CASES: usize = 10_000;
-    let mut seed = 0x5eed_f10f_u64;
+    let mut seed = 0x5eed_f10fu64;
     let mut seen_page_counts = [false; 4];
     let mut seen_unit_counts = [false; 4];
     let mut seen_policies = [false; 6];
@@ -522,29 +732,28 @@ fn mixed_policy_pagination_matches_reference_oracle() {
     let mut saw_success = false;
     let mut saw_failure = false;
     for case in 0..CASES {
-        let page_count = (next_case_value(&mut seed) % 4 + 1) as usize;
-        seen_page_counts[page_count - 1] = true;
-        let mut pages = Vec::with_capacity(page_count);
-        for index in 0..page_count {
-            let width = next_case_value(&mut seed) % 6 + 1;
-            let height = next_case_value(&mut seed) % 6 + 1;
-            pages.push(page(
-                100 + index as u64,
-                1_000 * index as u64,
-                width,
-                height,
-            ));
-        }
+        let pages = generate_oracle_pages(&mut seed, &mut seen_page_counts);
 
-        let unit_count = (next_case_value(&mut seed) % 4 + 1) as usize;
-        seen_unit_counts[unit_count - 1] = true;
+        let unit_count = usize::try_from(
+            next_case_value(&mut seed).rem_euclid(4).saturating_add(1),
+        )
+        .unwrap_or_default();
+        assert_eq!(
+            seen_unit_counts
+                .get_mut(unit_count.saturating_sub(1))
+                .map(|seen| *seen = true),
+            Some(())
+        );
         let mut units = Vec::with_capacity(unit_count);
         let mut owner = 1u64;
         for _ in 0..unit_count {
-            let policy_index = usize::try_from(
-                next_case_value(&mut seed).rem_euclid(6),
-            ).unwrap_or_default();
-            seen_policies[policy_index] = true;
+            let policy_index =
+                usize::try_from(next_case_value(&mut seed).rem_euclid(6))
+                    .unwrap_or_default();
+            assert_eq!(
+                seen_policies.get_mut(policy_index).map(|seen| *seen = true),
+                Some(())
+            );
             let policy = match policy_index {
                 0 => FlowUnitPolicy::Independent,
                 1 => FlowUnitPolicy::KeepTogetherWhenPossible,
@@ -553,18 +762,23 @@ fn mixed_policy_pagination_matches_reference_oracle() {
                 4 => FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible,
                 _ => FlowUnitPolicy::StartOnNewPage,
             };
-            let fragment_count = usize::try_from(
-                next_case_value(&mut seed).rem_euclid(6),
-            ).unwrap_or_default();
-            seen_fragment_counts[fragment_count] = true;
+            let fragment_count =
+                usize::try_from(next_case_value(&mut seed).rem_euclid(6))
+                    .unwrap_or_default();
+            assert_eq!(
+                seen_fragment_counts
+                    .get_mut(fragment_count)
+                    .map(|seen| *seen = true),
+                Some(())
+            );
             let mut fragments = Vec::with_capacity(fragment_count);
             for _ in 0..fragment_count {
                 fragments.push(fragment(
                     owner,
-                    next_case_value(&mut seed) % 7 + 1,
-                    next_case_value(&mut seed) % 7 + 1,
+                    next_case_value(&mut seed).rem_euclid(7).saturating_add(1),
+                    next_case_value(&mut seed).rem_euclid(7).saturating_add(1),
                 ));
-                owner += 1;
+                owner = owner.saturating_add(1);
             }
             units.push(unit(policy, fragments));
         }
@@ -574,14 +788,19 @@ fn mixed_policy_pagination_matches_reference_oracle() {
         if let (Ok(plan), Ok(placements)) = (&actual, &expected) {
             assert_placement_source_bijection(&pages, &units, &plan.placements);
             saw_success = true;
-            assert_eq!(plan.covered_pages,
+            assert_eq!(
+                plan.covered_pages,
                 reference_covered_pages(&pages, placements),
-                "generated coverage case {case}");
+                "generated coverage case {case}"
+            );
         } else {
             saw_failure = true;
         }
-        assert_eq!(actual.map(|plan| plan.placements), expected,
-            "generated case {case}");
+        assert_eq!(
+            actual.map(|plan| plan.placements),
+            expected,
+            "generated case {case}"
+        );
     }
     assert!(seen_page_counts.into_iter().all(|seen| seen));
     assert!(seen_unit_counts.into_iter().all(|seen| seen));
@@ -589,46 +808,6 @@ fn mixed_policy_pagination_matches_reference_oracle() {
     assert!(seen_fragment_counts.into_iter().all(|seen| seen));
     assert!(saw_success);
     assert!(saw_failure);
-}
-
-#[derive(Default)]
-struct PaginationOutcomeCoverage {
-    saw_no_fit: bool,
-    saw_no_page: bool,
-    saw_success: bool,
-}
-
-impl PaginationOutcomeCoverage {
-    fn observe(
-        &mut self,
-        result: &Result<
-            Vec<PlacedFragment<u64, u64>>,
-            PaginationError<u64, u64>,
-        >,
-    ) {
-        match result {
-            Ok(_) => self.saw_success = true,
-            Err(PaginationError::FragmentDoesNotFitAnyPage { .. }) => {
-                self.saw_no_fit = true;
-            },
-            Err(PaginationError::NoPageAvailable { .. }) => {
-                self.saw_no_page = true;
-            },
-            Err(
-                PaginationError::InvalidPageRegion { .. }
-                | PaginationError::DuplicatePageIdentity { .. }
-                | PaginationError::ZeroHeightFragment { .. },
-            ) => {
-                panic!("Cartesian fixtures only construct valid page regions");
-            },
-        }
-    }
-
-    fn assert_complete(self) {
-        assert!(self.saw_success);
-        assert!(self.saw_no_fit);
-        assert!(self.saw_no_page);
-    }
 }
 
 #[test]
@@ -665,18 +844,25 @@ fn independent_pagination_matches_reference_oracle() {
                                     )];
                                     let actual = paginate(&pages, &units);
                                     let expected = reference_independent(
-                                        &pages,
-                                        &fragments,
+                                        &pages, &fragments,
                                     );
                                     outcomes.observe(&expected);
                                     if let (Ok(plan), Ok(placements)) =
-                                        (&actual, &expected) {
-                                        assert_eq!(plan.covered_pages,
+                                        (&actual, &expected)
+                                    {
+                                        assert_eq!(
+                                            plan.covered_pages,
                                             reference_covered_pages(
-                                                &pages, placements));
+                                                &pages, placements
+                                            )
+                                        );
                                     }
-                                    assert_eq!(actual.map(|p| p.placements),
-                                        expected);
+                                    assert_eq!(
+                                        actual.map(|placement_plan| {
+                                            placement_plan.placements
+                                        }),
+                                        expected
+                                    );
                                     cases += 1;
                                 }
                             }
@@ -688,12 +874,6 @@ fn independent_pagination_matches_reference_oracle() {
     }
     assert_eq!(cases, 1_296);
     outcomes.assert_complete();
-}
-
-#[derive(Clone, Copy)]
-struct ReferenceCursor {
-    page_index: usize,
-    used_height: u64,
 }
 
 fn reference_place_fragment(
@@ -733,14 +913,19 @@ fn reference_place_fragment(
                 source,
                 writable: page.writable,
                 top: Length::from_micrometres(
-                    page.writable.y.micrometres() + cursor.used_height,
+                    page.writable
+                        .y
+                        .micrometres()
+                        .saturating_add(cursor.used_height),
                 ),
                 width: fragment.width,
             });
-            cursor.used_height += fragment.height.micrometres();
+            cursor.used_height = cursor
+                .used_height
+                .saturating_add(fragment.height.micrometres());
             return Ok(());
         }
-        cursor.page_index += 1;
+        cursor.page_index = cursor.page_index.saturating_add(1);
         cursor.used_height = 0;
     }
 }
@@ -802,7 +987,7 @@ fn reference_keep_together_fresh(
             top: Length::from_micrometres(top),
             width: fragment.width,
         });
-        top += fragment.height.micrometres();
+        top = top.saturating_add(fragment.height.micrometres());
     }
     Ok(placements)
 }
@@ -843,24 +1028,27 @@ fn keep_together_pagination_matches_fresh_page_reference_oracle() {
                                                     KeepTogetherWhenPossible,
                                                 fragments.clone(),
                                             )];
-                                            let actual = paginate(
-                                                &pages,
-                                                &units,
-                                            );
+                                            let actual =
+                                                paginate(&pages, &units);
                                             let expected =
                                                 reference_keep_together_fresh(
-                                                    &pages,
-                                                    &fragments,
+                                                    &pages, &fragments,
                                                 );
                                             outcomes.observe(&expected);
                                             if let (Ok(plan), Ok(placements)) =
-                                                (&actual, &expected) {
-                                                assert_eq!(plan.covered_pages,
+                                                (&actual, &expected)
+                                            {
+                                                assert_eq!(
+                                                    plan.covered_pages,
                                                     reference_covered_pages(
-                                                        &pages, placements));
+                                                        &pages, placements
+                                                    )
+                                                );
                                             }
                                             assert_eq!(
-                                                actual.map(|p| p.placements),
+                                                actual.map(|placement_plan| {
+                                                    placement_plan.placements
+                                                }),
                                                 expected,
                                             );
                                             cases += 1;
@@ -904,7 +1092,9 @@ fn reference_prefix_then_keep(
         .map(|fragment| fragment.width)
         .max()
         .unwrap_or(Length::ZERO);
-    let current = &pages[cursor.page_index];
+    let Some(current) = pages.get(cursor.page_index) else {
+        return Err(PaginationError::NoPageAvailable { owner: prefix.owner });
+    };
     let remaining = current
         .writable
         .height
@@ -928,7 +1118,7 @@ fn reference_prefix_then_keep(
     if let Some((page_index, page)) = pages
         .iter()
         .enumerate()
-        .skip(cursor.page_index + 1)
+        .skip(cursor.page_index.saturating_add(1))
         .find(|(_, page)| {
             total_height <= page.writable.height.micrometres()
                 && maximum_width <= page.writable.width
@@ -947,11 +1137,16 @@ fn reference_prefix_then_keep(
                 },
                 writable: page.writable,
                 top: Length::from_micrometres(
-                    page.writable.y.micrometres() + cursor.used_height,
+                    page.writable
+                        .y
+                        .micrometres()
+                        .saturating_add(cursor.used_height),
                 ),
                 width: fragment.width,
             });
-            cursor.used_height += fragment.height.micrometres();
+            cursor.used_height = cursor
+                .used_height
+                .saturating_add(fragment.height.micrometres());
         }
         return Ok(placements);
     }
@@ -974,25 +1169,22 @@ fn keep_together_remainder_matches_reference_oracle() {
                     ];
                     for prefix_width in 1..=2 {
                         for prefix_height in 1..=2 {
-                            let prefix = fragment(
-                                10,
-                                prefix_width,
-                                prefix_height,
-                            );
-                            for first_width in 1..=2 {
-                                for first_height in 1..=2 {
-                                    for second_width in 1..=2 {
-                                        for second_height in 1..=2 {
+                            let prefix =
+                                fragment(10, prefix_width, prefix_height);
+                            for group_first_width in 1..=2 {
+                                for group_first_height in 1..=2 {
+                                    for group_second_width in 1..=2 {
+                                        for group_second_height in 1..=2 {
                                             let group = vec![
                                                 fragment(
                                                     11,
-                                                    first_width,
-                                                    first_height,
+                                                    group_first_width,
+                                                    group_first_height,
                                                 ),
                                                 fragment(
                                                     12,
-                                                    second_width,
-                                                    second_height,
+                                                    group_second_width,
+                                                    group_second_height,
                                                 ),
                                             ];
                                             let units = [
@@ -1006,15 +1198,12 @@ fn keep_together_remainder_matches_reference_oracle() {
                                                 ),
                                             ];
                                             let actual = paginate(
-                                                &pages,
-                                                &units,
+                                                &pages, &units,
                                             )
                                             .map(|plan| plan.placements);
                                             let expected =
                                                 reference_prefix_then_keep(
-                                                    &pages,
-                                                    prefix,
-                                                    &group,
+                                                    &pages, prefix, &group,
                                                 );
                                             outcomes.observe(&expected);
                                             assert_eq!(actual, expected);
@@ -1035,12 +1224,12 @@ fn keep_together_remainder_matches_reference_oracle() {
 
 #[test]
 fn empty_flow_needs_no_page_authority() {
-    let plan = paginate::<u64, u64>(&[], &[]).expect("empty flow");
-    assert!(plan.placements.is_empty());
-    assert!(plan.covered_pages.is_empty());
+    let plan = require_ok!(paginate::<u64, u64>(&[], &[]), "empty flow");
+    assert_eq!(plan.placements.len(), 0);
+    assert_eq!(plan.covered_pages.len(), 0);
 
     let invalid_pages = [PageRegion {
-        page: 7_u64,
+        page: 7u64,
         writable: Rect {
             height: Length::ZERO,
             width: Length::ZERO,
@@ -1048,14 +1237,14 @@ fn empty_flow_needs_no_page_authority() {
             y: Length::from_micrometres(u64::MAX),
         },
     }];
-    let empty_units = [unit(
-        FlowUnitPolicy::KeepTogetherWhenPossible,
-        Vec::new(),
-    )];
-    let plan = paginate(&invalid_pages, &empty_units)
-        .expect("empty measured flow must not inspect unused page authority");
-    assert!(plan.placements.is_empty());
-    assert!(plan.covered_pages.is_empty());
+    let empty_units =
+        [unit(FlowUnitPolicy::KeepTogetherWhenPossible, Vec::new())];
+    let empty_plan = require_ok!(
+        paginate(&invalid_pages, &empty_units),
+        "empty measured flow must not inspect unused page authority"
+    );
+    assert_eq!(empty_plan.placements.len(), 0);
+    assert_eq!(empty_plan.covered_pages.len(), 0);
 }
 
 #[test]
@@ -1067,7 +1256,7 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
         fragment(3, 70, 20),
     ])];
 
-    let plan = paginate(&pages, &units).expect("measured flow");
+    let plan = require_ok!(paginate(&pages, &units), "measured flow");
     assert_eq!(plan.placements, vec![
         PlacedFragment {
             height: Length::from_micrometres(60),
@@ -1129,7 +1318,8 @@ fn placed_fragments_retain_each_selected_pages_writable_horizontal_bounds() {
             unit(FlowUnitPolicy::Independent, vec![fragment(1, 50, 30)]),
             unit(policy, vec![fragment(2, 30, 15), fragment(3, 30, 15)]),
         ];
-        let plan = paginate(&[first, second], &units).expect("page placements");
+        let plan =
+            require_ok!(paginate(&[first, second], &units), "page placements");
         assert_eq!(plan.placements.len(), 3);
         assert_eq!(
             plan.placements.first().map(|placed| placed.writable.x),
@@ -1172,7 +1362,7 @@ fn placed_fragments_retain_each_selected_pages_writable_horizontal_bounds() {
                     .map(|placed| placed.writable.x),
                 Some(Length::from_micrometres(left))
             );
-            assert_eq!(plan.placements[position + 1].page, page);
+            assert_eq!(require_at!(&plan.placements, position + 1).page, page);
         }
     }
 }
@@ -1188,7 +1378,8 @@ fn placed_fragments_retain_page_vertical_bounds_across_layout_policies() {
             unit(FlowUnitPolicy::Independent, vec![fragment(1, 20, 30)]),
             unit(policy, vec![fragment(2, 20, 15), fragment(3, 20, 15)]),
         ];
-        let plan = paginate(&pages, &units).expect("valid measured placements");
+        let plan =
+            require_ok!(paginate(&pages, &units), "valid measured placements");
         assert_eq!(plan.placements.len(), 3);
         let expected_pages = if policy == FlowUnitPolicy::Independent {
             [1, 1, 2]
@@ -1198,10 +1389,12 @@ fn placed_fragments_retain_page_vertical_bounds_across_layout_policies() {
         for (placement, expected_page) in
             plan.placements.iter().zip(expected_pages)
         {
-            let source = pages
-                .iter()
-                .find(|page| page.page == expected_page)
-                .expect("expected page exists");
+            let source_page =
+                pages.iter().find(|page| page.page == expected_page);
+            assert!(source_page.is_some(), "the expected physical page exists");
+            let Some(source) = source_page else {
+                return;
+            };
             assert_eq!(placement.page, expected_page);
             assert_eq!(placement.writable, source.writable);
             assert!(placement.top >= placement.writable.y);
@@ -1211,7 +1404,10 @@ fn placed_fragments_retain_page_vertical_bounds_across_layout_policies() {
                         + placement.writable.height.micrometres()
             );
         }
-        assert_eq!(plan.placements[0].top, Length::from_micrometres(310));
+        assert_eq!(
+            require_at!(&plan.placements, 0usize).top,
+            Length::from_micrometres(310)
+        );
     }
 }
 
@@ -1223,10 +1419,13 @@ fn exact_bottom_fit_does_not_create_spurious_page_break() {
         fragment(2, 100, 25),
     ])];
 
-    let plan = paginate(&pages, &units).expect("exact page fill");
+    let plan = require_ok!(paginate(&pages, &units), "exact page fill");
     assert_eq!(plan.placements.len(), 2);
-    assert_eq!(plan.placements[1].page, 1);
-    assert_eq!(plan.placements[1].top, Length::from_micrometres(5_075));
+    assert_eq!(require_at!(&plan.placements, 1usize).page, 1);
+    assert_eq!(
+        require_at!(&plan.placements, 1usize).top,
+        Length::from_micrometres(5_075)
+    );
 }
 
 #[test]
@@ -1240,12 +1439,18 @@ fn keep_together_group_moves_whole_when_fresh_page_fits() {
         ]),
     ];
 
-    let plan = paginate(&pages, &units).expect("keep together");
-    assert_eq!(plan.placements[0].page, 1);
-    assert_eq!(plan.placements[1].page, 2);
-    assert_eq!(plan.placements[1].top, Length::from_micrometres(1_000));
-    assert_eq!(plan.placements[2].page, 2);
-    assert_eq!(plan.placements[2].top, Length::from_micrometres(1_020));
+    let plan = require_ok!(paginate(&pages, &units), "keep together");
+    assert_eq!(require_at!(&plan.placements, 0usize).page, 1);
+    assert_eq!(require_at!(&plan.placements, 1usize).page, 2);
+    assert_eq!(
+        require_at!(&plan.placements, 1usize).top,
+        Length::from_micrometres(1_000)
+    );
+    assert_eq!(require_at!(&plan.placements, 2usize).page, 2);
+    assert_eq!(
+        require_at!(&plan.placements, 2usize).top,
+        Length::from_micrometres(1_020)
+    );
 }
 
 #[test]
@@ -1259,10 +1464,16 @@ fn keep_together_group_stays_on_current_page_when_remainder_fits() {
         ]),
     ];
 
-    let plan = paginate(&pages, &units).expect("current remainder");
+    let plan = require_ok!(paginate(&pages, &units), "current remainder");
     assert!(plan.placements.iter().all(|placement| placement.page == 1));
-    assert_eq!(plan.placements[1].top, Length::from_micrometres(430));
-    assert_eq!(plan.placements[2].top, Length::from_micrometres(450));
+    assert_eq!(
+        require_at!(&plan.placements, 1usize).top,
+        Length::from_micrometres(430)
+    );
+    assert_eq!(
+        require_at!(&plan.placements, 2usize).top,
+        Length::from_micrometres(450)
+    );
 }
 
 #[test]
@@ -1280,11 +1491,18 @@ fn oversized_keep_group_splits_only_at_fragment_boundaries() {
         ]),
     ];
 
-    let plan = paginate(&pages, &units).expect("fragment-boundary fallback");
-    assert_eq!(plan.placements[1].page, 2);
-    assert_eq!(plan.placements[1].top, Length::from_micrometres(1_000));
-    assert_eq!(plan.placements[2].page, 3);
-    assert_eq!(plan.placements[2].top, Length::from_micrometres(2_000));
+    let plan =
+        require_ok!(paginate(&pages, &units), "fragment-boundary fallback");
+    assert_eq!(require_at!(&plan.placements, 1usize).page, 2);
+    assert_eq!(
+        require_at!(&plan.placements, 1usize).top,
+        Length::from_micrometres(1_000)
+    );
+    assert_eq!(require_at!(&plan.placements, 2usize).page, 3);
+    assert_eq!(
+        require_at!(&plan.placements, 2usize).top,
+        Length::from_micrometres(2_000)
+    );
 }
 
 #[test]
@@ -1302,9 +1520,9 @@ fn keep_group_skips_narrow_page_for_earliest_whole_fit() {
         ]),
     ];
 
-    let plan = paginate(&pages, &units).expect("heterogeneous pages");
-    assert_eq!(plan.placements[1].page, 3);
-    assert_eq!(plan.placements[2].page, 3);
+    let plan = require_ok!(paginate(&pages, &units), "heterogeneous pages");
+    assert_eq!(require_at!(&plan.placements, 1usize).page, 3);
+    assert_eq!(require_at!(&plan.placements, 2usize).page, 3);
     // The sheet skipped by ink remains an ordered part of the physical plan.
     assert_eq!(plan.covered_pages, pages);
 }
@@ -1318,8 +1536,10 @@ fn covered_pages_stop_at_last_ink_not_unused_trailing_paper() {
         page(45, 2_000, 100, 100),
         page(3, 3_000, 100, 100),
     ];
-    pages[1].writable.x = Length::from_micrometres(55);
-    pages[2].writable.x = Length::from_micrometres(75);
+    require_at_mut!(&mut pages, 1usize).writable.x =
+        Length::from_micrometres(55);
+    require_at_mut!(&mut pages, 2usize).writable.x =
+        Length::from_micrometres(75);
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(1, 50, 80)]),
         unit(FlowUnitPolicy::KeepTogetherWhenPossible, vec![
@@ -1327,10 +1547,15 @@ fn covered_pages_stop_at_last_ink_not_unused_trailing_paper() {
             fragment(3, 80, 20),
         ]),
     ];
-    let plan = paginate(&pages, &units).expect("covered physical pages");
+    let plan = require_ok!(paginate(&pages, &units), "covered physical pages");
     assert_eq!(plan.covered_pages, pages[..3]);
-    assert_eq!(plan.placements.iter().map(|p| p.page)
-        .collect::<Vec<_>>(), [91, 45, 45]);
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|page_placement| page_placement.page)
+            .collect::<Vec<_>>(),
+        [91, 45, 45]
+    );
 }
 
 #[test]
@@ -1349,7 +1574,8 @@ fn later_fragment_never_backfills_page_skipped_by_keep_group() {
         unit(FlowUnitPolicy::Independent, vec![fragment(4, 20, 10)]),
     ];
 
-    let plan = paginate(&pages, &units).expect("ordered page advancement");
+    let plan =
+        require_ok!(paginate(&pages, &units), "ordered page advancement");
     assert_eq!(
         plan.placements
             .iter()
@@ -1357,7 +1583,10 @@ fn later_fragment_never_backfills_page_skipped_by_keep_group() {
             .collect::<Vec<_>>(),
         [1, 3, 3, 3],
     );
-    assert_eq!(plan.placements[3].top, Length::from_micrometres(2_040));
+    assert_eq!(
+        require_at!(&plan.placements, 3usize).top,
+        Length::from_micrometres(2_040)
+    );
 }
 
 #[test]
@@ -1404,7 +1633,7 @@ fn fragment_larger_than_every_remaining_page_is_typed_failure() {
 #[test]
 fn invalid_page_region_rejects_before_any_placement() {
     let pages = [PageRegion {
-        page: 9_u64,
+        page: 9u64,
         writable: Rect {
             height: Length::from_micrometres(100),
             width: Length::from_micrometres(2),
@@ -1450,11 +1679,9 @@ fn zero_height_fragment_cannot_be_emitted_as_a_page_placement() {
         FlowUnitPolicy::Independent,
         FlowUnitPolicy::KeepTogetherWhenPossible,
     ] {
-        for (owner, heights) in [
-            (1, [0, 30, 30]),
-            (2, [30, 0, 30]),
-            (3, [30, 30, 0]),
-        ] {
+        for (owner, heights) in
+            [(1, [0, 30, 30]), (2, [30, 0, 30]), (3, [30, 30, 0])]
+        {
             let [first, second, third] = heights;
             let units = [unit(policy, vec![
                 fragment(1, 20, first),
@@ -1519,10 +1746,10 @@ fn empty_unit_is_semantically_inert() {
         unit(FlowUnitPolicy::Independent, vec![fragment(4, 10, 10)]),
     ];
 
-    let plan = paginate(&pages, &units).expect("empty unit");
+    let plan = require_ok!(paginate(&pages, &units), "empty unit");
     assert_eq!(plan.placements.len(), 1);
-    assert_eq!(plan.placements[0].owner, 4);
-    assert_eq!(plan.placements[0].top, Length::ZERO);
+    assert_eq!(require_at!(&plan.placements, 0usize).owner, 4);
+    assert_eq!(require_at!(&plan.placements, 0usize).top, Length::ZERO);
 }
 
 #[test]
@@ -1533,10 +1760,10 @@ fn overflowing_group_sum_falls_back_to_safe_fragment_pagination() {
         fragment(2, 1, 1),
     ])];
 
-    let plan = paginate(&pages, &units).expect("overflow-safe split");
+    let plan = require_ok!(paginate(&pages, &units), "overflow-safe split");
     assert_eq!(plan.placements.len(), 2);
-    assert_eq!(plan.placements[0].page, 1);
-    assert_eq!(plan.placements[1].page, 2);
+    assert_eq!(require_at!(&plan.placements, 0usize).page, 1);
+    assert_eq!(require_at!(&plan.placements, 1usize).page, 2);
 }
 
 #[test]
@@ -1554,7 +1781,7 @@ fn placement_source_tracks_measured_units_across_empty_units_and_skips() {
             fragment(9, 55, 15),
         ]),
     ];
-    let plan = paginate(&pages, &units).expect("measured fragments fit");
+    let plan = require_ok!(paginate(&pages, &units), "measured fragments fit");
     assert_eq!(
         plan.placements
             .iter()
@@ -1566,7 +1793,10 @@ fn placement_source_tracks_measured_units_across_empty_units_and_skips() {
             .collect::<Vec<_>>(),
         [(41, 0, 0), (43, 2, 0), (43, 2, 1)],
     );
-    assert_eq!(plan.placements[1].owner, plan.placements[0].owner);
+    assert_eq!(
+        require_at!(&plan.placements, 1usize).owner,
+        require_at!(&plan.placements, 0usize).owner
+    );
 }
 
 #[test]
@@ -1574,16 +1804,30 @@ fn keep_with_next_moves_heading_and_first_body_row_together() {
     let pages = [page(1, 500, 100, 100), page(2, 700, 100, 100)];
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(1, 50, 75)]),
-        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
-            vec![fragment(2, 50, 15)]),
-        unit(FlowUnitPolicy::Independent,
-            vec![fragment(3, 50, 20), fragment(4, 50, 30)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible, vec![fragment(
+            2, 50, 15,
+        )]),
+        unit(FlowUnitPolicy::Independent, vec![
+            fragment(3, 50, 20),
+            fragment(4, 50, 30),
+        ]),
     ];
-    let plan = paginate(&pages, &units).expect("heading can travel with body");
-    assert_eq!(plan.placements.iter().map(|p| p.page).collect::<Vec<_>>(),
-        [1, 2, 2, 2]);
-    assert_eq!(plan.placements.iter().map(|p| p.top.micrometres())
-        .collect::<Vec<_>>(), [500, 700, 715, 735]);
+    let plan =
+        require_ok!(paginate(&pages, &units), "heading can travel with body");
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|page_placement| page_placement.page)
+            .collect::<Vec<_>>(),
+        [1, 2, 2, 2]
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|page_placement| page_placement.top.micrometres())
+            .collect::<Vec<_>>(),
+        [500, 700, 715, 735]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
     assert_eq!(plan.covered_pages, pages);
 }
@@ -1597,19 +1841,34 @@ fn keep_with_next_chain_skips_empty_units_and_narrow_pages() {
     ];
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(1, 40, 80)]),
-        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
-            vec![fragment(2, 40, 10)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible, vec![fragment(
+            2, 40, 10,
+        )]),
         unit(FlowUnitPolicy::Independent, vec![]),
-        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
-            vec![fragment(3, 40, 10)]),
-        unit(FlowUnitPolicy::KeepTogetherWhenPossible,
-            vec![fragment(4, 40, 15), fragment(5, 40, 15)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible, vec![fragment(
+            3, 40, 10,
+        )]),
+        unit(FlowUnitPolicy::KeepTogetherWhenPossible, vec![
+            fragment(4, 40, 15),
+            fragment(5, 40, 15),
+        ]),
     ];
-    let plan = paginate(&pages, &units).expect("two titles join full body");
-    assert_eq!(plan.placements.iter().map(|p| p.page).collect::<Vec<_>>(),
-        [1, 3, 3, 3, 3]);
-    assert_eq!(plan.placements.iter().map(|p| p.top.micrometres())
-        .collect::<Vec<_>>(), [0, 2000, 2010, 2020, 2035]);
+    let plan =
+        require_ok!(paginate(&pages, &units), "two titles join full body");
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|page_placement| page_placement.page)
+            .collect::<Vec<_>>(),
+        [1, 3, 3, 3, 3]
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|page_placement| page_placement.top.micrometres())
+            .collect::<Vec<_>>(),
+        [0, 2000, 2010, 2020, 2035]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
     assert_eq!(plan.covered_pages, pages);
 }
@@ -1619,14 +1878,20 @@ fn keep_with_next_degrades_when_no_common_page_fits() {
     let pages = [page(1, 0, 100, 100), page(2, 1000, 100, 100)];
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(1, 50, 80)]),
-        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
-            vec![fragment(2, 50, 10)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible, vec![fragment(
+            2, 50, 10,
+        )]),
         unit(FlowUnitPolicy::Independent, vec![fragment(3, 50, 95)]),
     ];
-    let plan = paginate(&pages, &units)
-        .expect("unsatisfiable pair is advisory");
-    assert_eq!(plan.placements.iter().map(|p| p.page).collect::<Vec<_>>(),
-        [1, 1, 2]);
+    let plan =
+        require_ok!(paginate(&pages, &units), "unsatisfiable pair is advisory");
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|page_placement| page_placement.page)
+            .collect::<Vec<_>>(),
+        [1, 1, 2]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 }
 
@@ -1635,14 +1900,20 @@ fn keep_with_next_exact_current_fit_does_not_skip_a_page() {
     let pages = [page(1, 10, 100, 100), page(2, 200, 100, 100)];
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(1, 50, 60)]),
-        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
-            vec![fragment(2, 50, 20)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible, vec![fragment(
+            2, 50, 20,
+        )]),
         unit(FlowUnitPolicy::Independent, vec![fragment(3, 50, 20)]),
     ];
-    let plan = paginate(&pages, &units).expect("exact bottom fit");
-    assert_eq!(plan.placements.iter().map(|p| p.page).collect::<Vec<_>>(),
-        [1, 1, 1]);
-    assert_eq!(plan.covered_pages, vec![pages[0]]);
+    let plan = require_ok!(paginate(&pages, &units), "exact bottom fit");
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|page_placement| page_placement.page)
+            .collect::<Vec<_>>(),
+        [1, 1, 1]
+    );
+    assert_eq!(plan.covered_pages, vec![*require_at!(&pages, 0usize)]);
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 }
 
@@ -1650,30 +1921,44 @@ fn keep_with_next_exact_current_fit_does_not_skip_a_page() {
 fn keep_with_next_without_successor_is_independent() {
     let pages = [page(1, 0, 100, 30), page(2, 100, 100, 30)];
     let units = [
-        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
-            vec![fragment(1, 30, 20), fragment(2, 30, 20)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible, vec![
+            fragment(1, 30, 20),
+            fragment(2, 30, 20),
+        ]),
         unit(FlowUnitPolicy::KeepTogetherWhenPossible, vec![]),
     ];
-    let plan = paginate(&pages, &units).expect("trailing heading is legal");
-    assert_eq!(plan.placements.iter().map(|p| p.page).collect::<Vec<_>>(),
-        [1, 2]);
+    let plan =
+        require_ok!(paginate(&pages, &units), "trailing heading is legal");
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|page_placement| page_placement.page)
+            .collect::<Vec<_>>(),
+        [1, 2]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 }
 
 #[test]
 fn keep_with_next_overflow_falls_back_without_wrapping() {
-    let pages = [
-        page(1, 0, 100, u64::MAX),
-        page(2, 0, 100, 100),
-    ];
+    let pages = [page(1, 0, 100, u64::MAX), page(2, 0, 100, 100)];
     let units = [
-        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
-            vec![fragment(1, 50, u64::MAX - 10)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible, vec![fragment(
+            1,
+            50,
+            u64::MAX - 10,
+        )]),
         unit(FlowUnitPolicy::Independent, vec![fragment(2, 50, 20)]),
     ];
-    let plan = paginate(&pages, &units).expect("no overflowing group sum");
-    assert_eq!(plan.placements.iter().map(|p| p.page).collect::<Vec<_>>(),
-        [1, 2]);
+    let plan =
+        require_ok!(paginate(&pages, &units), "no overflowing group sum");
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|page_placement| page_placement.page)
+            .collect::<Vec<_>>(),
+        [1, 2]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 }
 
@@ -1682,56 +1967,77 @@ fn long_keep_with_next_chain_reserves_one_page_in_source_order() {
     // A large chain is intentionally linear to process. Each unit remains
     // identifiable rather than being folded into a synthetic giant fragment.
     let pages = [page(1, 0, 100, 1_000), page(2, 20_000, 100, 16_385)];
-    let mut units = vec![unit(
-        FlowUnitPolicy::Independent,
-        vec![fragment(1, 20, 999)],
-    )];
+    let mut units = vec![unit(FlowUnitPolicy::Independent, vec![fragment(
+        1, 20, 999,
+    )])];
     for owner in 2..=16_385u64 {
-        units.push(unit(
-            FlowUnitPolicy::KeepWithNextWhenPossible,
-            vec![fragment(owner, 20, 1)],
-        ));
+        units.push(unit(FlowUnitPolicy::KeepWithNextWhenPossible, vec![
+            fragment(owner, 20, 1),
+        ]));
     }
-    units.push(unit(
-        FlowUnitPolicy::Independent,
-        vec![fragment(16_386, 20, 1)],
-    ));
-    let plan = paginate(&pages, &units)
-        .expect("full heading chain fits page 2");
+    units.push(unit(FlowUnitPolicy::Independent, vec![fragment(
+        16_386, 20, 1,
+    )]));
+    let plan =
+        require_ok!(paginate(&pages, &units), "full heading chain fits page 2");
     assert_eq!(plan.placements.len(), 16_386);
     assert_eq!(plan.placements.first().map(|placed| placed.page), Some(1));
     assert_eq!(plan.placements.last().map(|placed| placed.page), Some(2));
-    assert!(plan.placements.iter().skip(1).all(|placed| placed.page == 2));
-    assert_eq!(plan.placements.last().map(|placed| placed.top),
-        Some(Length::from_micrometres(36_384)));
+    assert!(
+        plan.placements
+            .iter()
+            .skip(1)
+            .all(|placed| placed.page == 2)
+    );
+    assert_eq!(
+        plan.placements.last().map(|placed| placed.top),
+        Some(Length::from_micrometres(36_384))
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 }
 
 #[test]
 fn keep_with_next_cannot_exhaust_usable_pages_by_skipping_an_opening() {
     let pages = [
-        page(80, 100, 30, 8), page(5, 200, 5, 12),
+        page(80, 100, 30, 8),
+        page(5, 200, 5, 12),
         page(60, 300, 30, 7),
     ];
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(1, 20, 5)]),
-        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
-            vec![fragment(2, 20, 2)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible, vec![fragment(
+            2, 20, 2,
+        )]),
         unit(FlowUnitPolicy::Independent, vec![fragment(3, 20, 4)]),
         unit(FlowUnitPolicy::Independent, vec![fragment(4, 20, 2)]),
     ];
-    assert_eq!(reference_mixed_once(&pages, &units, true, true),
-        Err(PaginationError::NoPageAvailable { owner: 4 }));
-    let plan = paginate(&pages, &units)
-        .expect("an advisory heading group must not exhaust the next row");
+    assert_eq!(
+        reference_mixed_once(&pages, &units, true, true),
+        Err(PaginationError::NoPageAvailable { owner: 4 })
+    );
+    let plan = require_ok!(
+        paginate(&pages, &units),
+        "an advisory heading group must not exhaust the next row"
+    );
     assert_eq!(plan.covered_pages, pages);
-    assert_eq!(plan.placements.iter().map(|placed| placed.page)
-        .collect::<Vec<_>>(), [80, 80, 60, 60]);
-    assert_eq!(plan.placements.iter().map(|placed| placed.top.micrometres())
-        .collect::<Vec<_>>(), [100, 105, 300, 304]);
-    assert_eq!(plan.placements,
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placed| placed.page)
+            .collect::<Vec<_>>(),
+        [80, 80, 60, 60]
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placed| placed.top.micrometres())
+            .collect::<Vec<_>>(),
+        [100, 105, 300, 304]
+    );
+    assert_eq!(
+        Ok(plan.placements.clone()),
         reference_mixed_once(&pages, &units, false, false)
-            .expect("independent reference can fit all fragments"));
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 }
 
@@ -1748,27 +2054,46 @@ fn keep_together_page_preference_cannot_strand_later_measured_rows() {
             unit(policy, vec![fragment(2, 20, 2), fragment(3, 20, 2)]),
             unit(FlowUnitPolicy::Independent, vec![fragment(4, 20, 4)]),
         ];
-        assert_eq!(reference_mixed_once(&pages, &units, true, true),
-            Err(PaginationError::NoPageAvailable { owner: 4 }));
-        let plan = paginate(&pages, &units)
-            .expect("full-unit preference must yield to a valid split");
-        assert_eq!(plan.placements.iter().map(|placed| placed.page)
-            .collect::<Vec<_>>(), [40, 40, 17, 17]);
-        assert_eq!(plan.placements.iter().map(
-            |placed| placed.top.micrometres())
-            .collect::<Vec<_>>(), [100, 105, 300, 302]);
-        assert_eq!(plan.placements,
+        assert_eq!(
+            reference_mixed_once(&pages, &units, true, true),
+            Err(PaginationError::NoPageAvailable { owner: 4 })
+        );
+        let plan = require_ok!(
+            paginate(&pages, &units),
+            "full-unit preference must yield to a valid split"
+        );
+        assert_eq!(
+            plan.placements
+                .iter()
+                .map(|placed| placed.page)
+                .collect::<Vec<_>>(),
+            [40, 40, 17, 17]
+        );
+        assert_eq!(
+            plan.placements
+                .iter()
+                .map(|placed| placed.top.micrometres())
+                .collect::<Vec<_>>(),
+            [100, 105, 300, 302]
+        );
+        assert_eq!(
+            Ok(plan.placements.clone()),
             reference_mixed_once(&pages, &units, false, false)
-                .expect("independent reference fits"));
+        );
         assert_placement_source_bijection(&pages, &units, &plan.placements);
 
         // An impossible final row must still refuse with its original
         // source owner, even if a fallback can split the earlier group.
-        let mut impossible = units.clone();
-        impossible[2].fragments[0].height =
-            Length::from_micrometres(8);
-        assert_eq!(paginate(&pages, &impossible),
-            Err(PaginationError::FragmentDoesNotFitAnyPage { owner: 4 }));
+        let mut impossible = units;
+        require_at_mut!(
+            &mut require_at_mut!(&mut impossible, 2usize).fragments,
+            0usize
+        )
+        .height = Length::from_micrometres(8);
+        assert_eq!(
+            paginate(&pages, &impossible),
+            Err(PaginationError::FragmentDoesNotFitAnyPage { owner: 4 })
+        );
     }
 }
 
@@ -1779,7 +2104,10 @@ fn exhausted_group_preferences_match_exhaustive_split_reference() {
     for (policy_index, policy) in [
         FlowUnitPolicy::KeepWithNextWhenPossible,
         FlowUnitPolicy::KeepTogetherWhenPossible,
-    ].into_iter().enumerate() {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         for first_page_height in 2..=10 {
             for last_page_height in 2..=10 {
                 let pages = [
@@ -1793,41 +2121,57 @@ fn exhausted_group_preferences_match_exhaustive_split_reference() {
                                 == FlowUnitPolicy::KeepWithNextWhenPossible
                             {
                                 [
-                                    unit(policy,
-                                        vec![fragment(2, 20, first_height)]),
-                                    unit(FlowUnitPolicy::Independent,
-                                        vec![fragment(3, 20, last_height)]),
+                                    unit(policy, vec![fragment(
+                                        2,
+                                        20,
+                                        first_height,
+                                    )]),
+                                    unit(FlowUnitPolicy::Independent, vec![
+                                        fragment(3, 20, last_height),
+                                    ]),
                                 ]
                             } else {
                                 [
-                                    unit(policy,
-                                        vec![fragment(2, 20, first_height),
-                                            fragment(3, 20, last_height)]),
+                                    unit(policy, vec![
+                                        fragment(2, 20, first_height),
+                                        fragment(3, 20, last_height),
+                                    ]),
                                     unit(FlowUnitPolicy::Independent, vec![]),
                                 ]
                             };
                             for final_height in 1..=6 {
                                 let units = [
-                                    unit(FlowUnitPolicy::Independent,
-                                        vec![fragment(1, 20, prior_height)]),
-                                    grouped[0].clone(), grouped[1].clone(),
-                                    unit(FlowUnitPolicy::Independent,
-                                        vec![fragment(4, 20, final_height)]),
+                                    unit(FlowUnitPolicy::Independent, vec![
+                                        fragment(1, 20, prior_height),
+                                    ]),
+                                    grouped[0].clone(),
+                                    grouped[1].clone(),
+                                    unit(FlowUnitPolicy::Independent, vec![
+                                        fragment(4, 20, final_height),
+                                    ]),
                                 ];
                                 let proposed = reference_mixed_once(
-                                    &pages, &units, true, true);
+                                    &pages, &units, true, true,
+                                );
                                 let independent = reference_mixed_once(
-                                    &pages, &units, false, false);
-                                if proposed.is_err() && independent.is_ok() {
-                                    salvaged[policy_index] += 1;
+                                    &pages, &units, false, false,
+                                );
+                                if proposed.is_err()
+                                    && independent.is_ok()
+                                    && let Some(count) =
+                                        salvaged.get_mut(policy_index)
+                                {
+                                    *count = count.saturating_add(1);
                                 }
                                 let expected = proposed.or_else(|original| {
-                                    independent.map_err(|_| original)
+                                    independent.or(Err(original))
                                 });
                                 let actual = paginate(&pages, &units);
-                                assert_eq!(actual.map(|plan| plan.placements),
+                                assert_eq!(
+                                    actual.map(|plan| plan.placements),
                                     expected,
-                                    "case {cases}, policy {policy:?}");
+                                    "case {cases}, policy {policy:?}"
+                                );
                                 cases += 1;
                             }
                         }
@@ -1842,19 +2186,32 @@ fn exhausted_group_preferences_match_exhaustive_split_reference() {
 
 #[test]
 fn group_preference_replay_preserves_structural_input_refusals() {
-    let units = [unit(FlowUnitPolicy::KeepWithNextWhenPossible,
-        vec![fragment(2, 10, 2)]),
-        unit(FlowUnitPolicy::Independent, vec![fragment(3, 10, 2)])];
+    let units = [
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible, vec![fragment(
+            2, 10, 2,
+        )]),
+        unit(FlowUnitPolicy::Independent, vec![fragment(3, 10, 2)]),
+    ];
     let duplicate = [page(11, 100, 30, 8), page(11, 300, 30, 8)];
-    assert_eq!(paginate(&duplicate, &units),
-        Err(PaginationError::DuplicatePageIdentity { page: 11 }));
+    assert_eq!(
+        paginate(&duplicate, &units),
+        Err(PaginationError::DuplicatePageIdentity { page: 11 })
+    );
     let invalid = [page(11, u64::MAX, 30, 8)];
-    assert_eq!(paginate(&invalid, &units),
-        Err(PaginationError::InvalidPageRegion { page: 11 }));
-    let mut zero = units.clone();
-    zero[1].fragments[0].height = Length::ZERO;
-    assert_eq!(paginate(&[page(11, 100, 30, 8)], &zero),
-        Err(PaginationError::ZeroHeightFragment { owner: 3 }));
+    assert_eq!(
+        paginate(&invalid, &units),
+        Err(PaginationError::InvalidPageRegion { page: 11 })
+    );
+    let mut zero = units;
+    require_at_mut!(
+        &mut require_at_mut!(&mut zero, 1usize).fragments,
+        0usize
+    )
+    .height = Length::ZERO;
+    assert_eq!(
+        paginate(&[page(11, 100, 30, 8)], &zero),
+        Err(PaginationError::ZeroHeightFragment { owner: 3 })
+    );
 }
 
 #[test]
@@ -1862,37 +2219,67 @@ fn successful_keep_preference_is_not_weakened_by_fallback() {
     let pages = [page(1, 100, 30, 8), page(2, 300, 30, 8)];
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(1, 20, 5)]),
-        unit(FlowUnitPolicy::KeepTogetherWhenPossible,
-            vec![fragment(2, 20, 2), fragment(3, 20, 2)]),
+        unit(FlowUnitPolicy::KeepTogetherWhenPossible, vec![
+            fragment(2, 20, 2),
+            fragment(3, 20, 2),
+        ]),
         unit(FlowUnitPolicy::Independent, vec![fragment(4, 20, 2)]),
     ];
-    let plan = paginate(&pages, &units).expect("preferred group fits");
-    assert_eq!(plan.placements.iter().map(|placed| placed.page)
-        .collect::<Vec<_>>(), [1, 2, 2, 2]);
-    assert_eq!(plan.placements.iter().map(|placed| placed.top.micrometres())
-        .collect::<Vec<_>>(), [100, 300, 302, 304]);
+    let plan = require_ok!(paginate(&pages, &units), "preferred group fits");
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placed| placed.page)
+            .collect::<Vec<_>>(),
+        [1, 2, 2, 2]
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placed| placed.top.micrometres())
+            .collect::<Vec<_>>(),
+        [100, 300, 302, 304]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 }
 
 #[test]
 fn balanced_ends_moves_opening_row_and_then_guards_trailing_row() {
-    let pages = [page(19, 100, 100, 60), page(7, 500, 100, 40),
-        page(31, 900, 100, 40)];
-    let rows = (0..5).map(|index| fragment(index + 1, 40, 10))
+    let pages = [
+        page(19, 100, 100, 60),
+        page(7, 500, 100, 40),
+        page(31, 900, 100, 40),
+    ];
+    let rows = (0..5)
+        .map(|index| fragment(index + 1, 40, 10))
         .collect::<Vec<_>>();
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(90, 40, 45)]),
-        unit(FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible,
-            rows.clone()),
+        unit(
+            FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible,
+            rows.clone(),
+        ),
         unit(FlowUnitPolicy::Independent, vec![fragment(91, 40, 10)]),
     ];
     let outcome = paginate(&pages, &units);
     assert!(outcome.is_ok(), "balanced ends: {outcome:?}");
-    let Ok(plan) = outcome else { return; };
-    assert_eq!(plan.placements.iter().map(|row| row.page)
-        .collect::<Vec<_>>(), [19, 7, 7, 7, 31, 31, 31]);
-    assert_eq!(plan.placements.iter().map(|row| row.top.micrometres())
-        .collect::<Vec<_>>(), [100, 500, 510, 520, 900, 910, 920]);
+    let Ok(plan) = outcome else {
+        return;
+    };
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|row| row.page)
+            .collect::<Vec<_>>(),
+        [19, 7, 7, 7, 31, 31, 31]
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|row| row.top.micrometres())
+            .collect::<Vec<_>>(),
+        [100, 500, 510, 520, 900, 910, 920]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 
     let original = [
@@ -1902,122 +2289,217 @@ fn balanced_ends_moves_opening_row_and_then_guards_trailing_row() {
     ];
     let result = paginate(&pages, &original);
     assert!(result.is_ok(), "original policy: {result:?}");
-    let Ok(baseline) = result else { return; };
-    assert_eq!(baseline.placements.iter().map(|row| row.page)
-        .collect::<Vec<_>>(), [19, 19, 7, 7, 7, 7, 31]);
+    let Ok(baseline) = result else {
+        return;
+    };
+    assert_eq!(
+        baseline
+            .placements
+            .iter()
+            .map(|row| row.page)
+            .collect::<Vec<_>>(),
+        [19, 19, 7, 7, 7, 7, 31]
+    );
 }
 
 #[test]
 fn balanced_ends_does_not_turn_fitting_layout_into_exhaustion() {
     let pages = [page(1, 100, 100, 15), page(2, 300, 100, 20)];
-    let rows = vec![fragment(1, 30, 10), fragment(2, 30, 10),
-        fragment(3, 30, 10)];
+    let rows = vec![
+        fragment(1, 30, 10),
+        fragment(2, 30, 10),
+        fragment(3, 30, 10),
+    ];
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(90, 20, 5)]),
         unit(FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible, rows),
     ];
     let result = paginate(&pages, &units);
-    assert!(result.is_ok(), "must retain successful baseline: {result:?}");
-    let Ok(plan) = result else { return; };
-    assert_eq!(plan.placements.iter().map(|row| row.page)
-        .collect::<Vec<_>>(), [1, 1, 2, 2]);
-    assert_eq!(plan.placements.iter().map(|row| row.top.micrometres())
-        .collect::<Vec<_>>(), [100, 105, 300, 310]);
+    assert!(
+        result.is_ok(),
+        "must retain successful baseline: {result:?}"
+    );
+    let Ok(plan) = result else {
+        return;
+    };
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|row| row.page)
+            .collect::<Vec<_>>(),
+        [1, 1, 2, 2]
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|row| row.top.micrometres())
+            .collect::<Vec<_>>(),
+        [100, 105, 300, 310]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 }
 
 #[test]
 fn balanced_ends_recovers_when_later_block_needs_remaining_page() {
     let pages = [
-        page(8, 100, 100, 60), page(90, 300, 100, 40),
+        page(8, 100, 100, 60),
+        page(90, 300, 100, 40),
         page(7, 700, 100, 30),
     ];
-    let rows = (0..5).map(|n| fragment(n + 1, 30, 10))
+    let rows = (0..5)
+        .map(|index| fragment(index + 1, 30, 10))
         .collect::<Vec<_>>();
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(91, 30, 45)]),
-        unit(FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible,
-            rows.clone()),
+        unit(
+            FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible,
+            rows.clone(),
+        ),
         unit(FlowUnitPolicy::Independent, vec![fragment(92, 30, 30)]),
     ];
     let result = paginate(&pages, &units);
     assert!(result.is_ok(), "later block must retain space: {result:?}");
-    let Ok(plan) = result else { return; };
-    assert_eq!(plan.placements.iter().map(|row| row.page)
-        .collect::<Vec<_>>(), [8, 8, 90, 90, 90, 90, 7]);
+    let Ok(plan) = result else {
+        return;
+    };
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|row| row.page)
+            .collect::<Vec<_>>(),
+        [8, 8, 90, 90, 90, 90, 7]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
     let baseline_units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(91, 30, 45)]),
-        unit(FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible,
-            rows),
+        unit(FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible, rows),
         unit(FlowUnitPolicy::Independent, vec![fragment(92, 30, 30)]),
     ];
     let baseline = paginate(&pages, &baseline_units);
-    assert_eq!(baseline.map(|plan| plan.placements),
-        Ok(plan.placements));
+    assert_eq!(
+        baseline.map(|baseline_plan| baseline_plan.placements),
+        Ok(plan.placements)
+    );
 }
 
 #[test]
 fn balanced_ends_respects_width_and_skipped_unsorted_page_ids() {
     let pages = [
-        page(90, 100, 100, 40), page(2, 300, 5, 50),
-        page(87, 500, 100, 30), page(3, 700, 100, 30),
+        page(90, 100, 100, 40),
+        page(2, 300, 5, 50),
+        page(87, 500, 100, 30),
+        page(3, 700, 100, 30),
     ];
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(99, 20, 30)]),
-        unit(FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible,
-            vec![fragment(1, 20, 10), fragment(2, 20, 10),
-                fragment(3, 20, 10), fragment(4, 20, 10)]),
+        unit(
+            FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible,
+            vec![
+                fragment(1, 20, 10),
+                fragment(2, 20, 10),
+                fragment(3, 20, 10),
+                fragment(4, 20, 10),
+            ],
+        ),
     ];
     let outcome = paginate(&pages, &units);
     assert!(outcome.is_ok(), "skipped narrow region: {outcome:?}");
-    let Ok(plan) = outcome else { return; };
+    let Ok(plan) = outcome else {
+        return;
+    };
     assert_eq!(plan.covered_pages, pages);
-    assert_eq!(plan.placements.iter().map(|row| row.page)
-        .collect::<Vec<_>>(), [90, 87, 87, 3, 3]);
-    assert_eq!(plan.placements.iter().map(|row| row.top.micrometres())
-        .collect::<Vec<_>>(), [100, 500, 510, 700, 710]);
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|row| row.page)
+            .collect::<Vec<_>>(),
+        [90, 87, 87, 3, 3]
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|row| row.top.micrometres())
+            .collect::<Vec<_>>(),
+        [100, 500, 510, 700, 710]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 
     let narrow_pair = [page(1, 0, 100, 30), page(2, 100, 10, 20)];
     let narrower_units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(90, 20, 20)]),
-        unit(FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible,
-            vec![fragment(1, 20, 10), fragment(2, 10, 10),
-                fragment(3, 10, 10)]),
+        unit(
+            FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible,
+            vec![
+                fragment(1, 20, 10),
+                fragment(2, 10, 10),
+                fragment(3, 10, 10),
+            ],
+        ),
     ];
-    let outcome = paginate(&narrow_pair, &narrower_units);
-    assert!(outcome.is_ok(), "pair too wide: {outcome:?}");
-    let Ok(plan) = outcome else { return; };
-    assert_eq!(plan.placements.iter().map(|row| row.page)
-        .collect::<Vec<_>>(), [1, 1, 2, 2]);
+    let narrow_outcome = paginate(&narrow_pair, &narrower_units);
+    assert!(narrow_outcome.is_ok(), "pair too wide: {narrow_outcome:?}");
+    let Ok(narrow_plan) = narrow_outcome else {
+        return;
+    };
+    assert_eq!(
+        narrow_plan
+            .placements
+            .iter()
+            .map(|row| row.page)
+            .collect::<Vec<_>>(),
+        [1, 1, 2, 2]
+    );
     assert_placement_source_bijection(
-        &narrow_pair, &narrower_units, &plan.placements);
+        &narrow_pair,
+        &narrower_units,
+        &narrow_plan.placements,
+    );
 }
 
 #[test]
 fn balanced_tail_moves_one_long_paragraph_row_without_stranding_its_start() {
     let pages = [page(17, 100, 100, 70), page(3, 500, 100, 70)];
     let rows = vec![
-        fragment(1, 40, 20), fragment(2, 40, 20),
-        fragment(3, 40, 20), fragment(4, 40, 20),
+        fragment(1, 40, 20),
+        fragment(2, 40, 20),
+        fragment(3, 40, 20),
+        fragment(4, 40, 20),
     ];
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(9, 40, 10)]),
-        unit(FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible,
-            rows.clone()),
+        unit(
+            FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible,
+            rows.clone(),
+        ),
         unit(FlowUnitPolicy::Independent, vec![fragment(10, 40, 30)]),
     ];
     let outcome1 = paginate(&pages, &units);
     assert!(outcome1.is_ok(), "expected pagination: {outcome1:?}");
-    let Ok(plan) = outcome1 else { return; };
+    let Ok(plan) = outcome1 else {
+        return;
+    };
     assert_eq!(plan.covered_pages, pages);
-    assert_eq!(plan.placements.iter().map(|placed| placed.page)
-        .collect::<Vec<_>>(), [17, 17, 17, 3, 3, 3]);
-    assert_eq!(plan.placements.iter().map(|placed| placed.top.micrometres())
-        .collect::<Vec<_>>(), [100, 110, 130, 500, 520, 540]);
-    assert_eq!(plan.placements.iter().map(|placed| placed.owner)
-        .collect::<Vec<_>>(), [9, 1, 2, 3, 4, 10]);
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placed| placed.page)
+            .collect::<Vec<_>>(),
+        [17, 17, 17, 3, 3, 3]
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placed| placed.top.micrometres())
+            .collect::<Vec<_>>(),
+        [100, 110, 130, 500, 520, 540]
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placed| placed.owner)
+            .collect::<Vec<_>>(),
+        [9, 1, 2, 3, 4, 10]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 
     let baseline_units = [
@@ -2027,9 +2509,17 @@ fn balanced_tail_moves_one_long_paragraph_row_without_stranding_its_start() {
     ];
     let outcome2 = paginate(&pages, &baseline_units);
     assert!(outcome2.is_ok(), "expected pagination: {outcome2:?}");
-    let Ok(unbalanced) = outcome2 else { return; };
-    assert_eq!(unbalanced.placements.iter().map(|placed| placed.page)
-        .collect::<Vec<_>>(), [17, 17, 17, 17, 3, 3]);
+    let Ok(unbalanced) = outcome2 else {
+        return;
+    };
+    assert_eq!(
+        unbalanced
+            .placements
+            .iter()
+            .map(|placed| placed.page)
+            .collect::<Vec<_>>(),
+        [17, 17, 17, 17, 3, 3]
+    );
 }
 
 #[test]
@@ -2042,27 +2532,44 @@ fn balanced_tail_keeps_two_starting_rows_and_honors_later_page_limits() {
     for (last_page, expected) in samples {
         let pages = [page(1, 0, 100, 60), last_page];
         let units = [unit(policy, vec![
-            fragment(1, 40, 20), fragment(2, 40, 20),
-            fragment(3, 40, 20), fragment(4, 10, 20),
+            fragment(1, 40, 20),
+            fragment(2, 40, 20),
+            fragment(3, 40, 20),
+            fragment(4, 10, 20),
         ])];
         let outcome1 = paginate(&pages, &units);
         assert!(outcome1.is_ok(), "expected pagination: {outcome1:?}");
-        let Ok(plan) = outcome1 else { return; };
-        assert_eq!(plan.placements.iter().map(|placed| placed.page)
-            .collect::<Vec<_>>(), expected);
+        let Ok(plan) = outcome1 else {
+            return;
+        };
+        assert_eq!(
+            plan.placements
+                .iter()
+                .map(|placed| placed.page)
+                .collect::<Vec<_>>(),
+            expected
+        );
         assert_placement_source_bijection(&pages, &units, &plan.placements);
     }
 
     let pages = [page(1, 0, 100, 40), page(2, 100, 100, 60)];
     let units = [unit(policy, vec![
-        fragment(1, 40, 20), fragment(2, 40, 20),
+        fragment(1, 40, 20),
+        fragment(2, 40, 20),
         fragment(3, 40, 20),
     ])];
     let outcome2 = paginate(&pages, &units);
     assert!(outcome2.is_ok(), "expected pagination: {outcome2:?}");
-    let Ok(plan) = outcome2 else { return; };
-    assert_eq!(plan.placements.iter().map(|placed| placed.page)
-        .collect::<Vec<_>>(), [2, 2, 2]);
+    let Ok(plan) = outcome2 else {
+        return;
+    };
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placed| placed.page)
+            .collect::<Vec<_>>(),
+        [2, 2, 2]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 }
 
@@ -2075,17 +2582,33 @@ fn balanced_tail_tracks_skipped_narrow_page_and_unsorted_page_ids() {
     ];
     let units = [unit(
         FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible,
-        vec![fragment(1, 25, 20), fragment(2, 25, 20),
-            fragment(3, 25, 20), fragment(4, 25, 20)],
+        vec![
+            fragment(1, 25, 20),
+            fragment(2, 25, 20),
+            fragment(3, 25, 20),
+            fragment(4, 25, 20),
+        ],
     )];
     let outcome1 = paginate(&pages, &units);
     assert!(outcome1.is_ok(), "expected pagination: {outcome1:?}");
-    let Ok(plan) = outcome1 else { return; };
+    let Ok(plan) = outcome1 else {
+        return;
+    };
     assert_eq!(plan.covered_pages, pages);
-    assert_eq!(plan.placements.iter().map(|placed| placed.page)
-        .collect::<Vec<_>>(), [91, 91, 42, 42]);
-    assert_eq!(plan.placements.iter().map(|placed| placed.top.micrometres())
-        .collect::<Vec<_>>(), [100, 120, 600, 620]);
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placed| placed.page)
+            .collect::<Vec<_>>(),
+        [91, 91, 42, 42]
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placed| placed.top.micrometres())
+            .collect::<Vec<_>>(),
+        [100, 120, 600, 620]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 }
 
@@ -2094,19 +2617,38 @@ fn balanced_tail_preserves_complete_groups_and_heading_reservations() {
     let pages = [page(1, 100, 100, 90), page(2, 700, 100, 100)];
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(1, 40, 60)]),
-        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
-            vec![fragment(2, 40, 10)]),
-        unit(FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible,
-            vec![fragment(3, 40, 20), fragment(4, 40, 20),
-                fragment(5, 40, 20), fragment(6, 40, 20)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible, vec![fragment(
+            2, 40, 10,
+        )]),
+        unit(
+            FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible,
+            vec![
+                fragment(3, 40, 20),
+                fragment(4, 40, 20),
+                fragment(5, 40, 20),
+                fragment(6, 40, 20),
+            ],
+        ),
     ];
     let outcome1 = paginate(&pages, &units);
     assert!(outcome1.is_ok(), "expected pagination: {outcome1:?}");
-    let Ok(plan) = outcome1 else { return; };
-    assert_eq!(plan.placements.iter().map(|placed| placed.page)
-        .collect::<Vec<_>>(), [1, 2, 2, 2, 2, 2]);
-    assert_eq!(plan.placements.iter().map(|placed| placed.top.micrometres())
-        .collect::<Vec<_>>(), [100, 700, 710, 730, 750, 770]);
+    let Ok(plan) = outcome1 else {
+        return;
+    };
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placed| placed.page)
+            .collect::<Vec<_>>(),
+        [1, 2, 2, 2, 2, 2]
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placed| placed.top.micrometres())
+            .collect::<Vec<_>>(),
+        [100, 700, 710, 730, 750, 770]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 }
 
@@ -2137,24 +2679,36 @@ fn balanced_tail_exhaustive_small_page_reference_and_real_moves() {
                             let expected =
                                 reference_mixed_units(&pages, &units);
                             if let (Ok(plan), Ok(expected_rows)) =
-                                (&actual, &expected) {
+                                (&actual, &expected)
+                            {
                                 assert_placement_source_bijection(
-                                    &pages, &units, &plan.placements);
-                                assert_eq!(plan.covered_pages,
+                                    &pages,
+                                    &units,
+                                    &plan.placements,
+                                );
+                                assert_eq!(
+                                    plan.covered_pages,
                                     reference_covered_pages(
-                                        &pages, expected_rows));
+                                        &pages,
+                                        expected_rows
+                                    )
+                                );
                                 let baseline_units = [unit(
                                     FlowUnitPolicy::KeepTogetherWhenPossible,
                                     fragments,
                                 )];
                                 if let Ok(baseline) =
                                     paginate(&pages, &baseline_units)
-                                    && baseline.placements != plan.placements {
+                                    && baseline.placements != plan.placements
+                                {
                                     moved += 1;
                                 }
                             }
-                            assert_eq!(actual.map(|plan| plan.placements),
-                                expected, "fixture {total}");
+                            assert_eq!(
+                                actual.map(|plan| plan.placements),
+                                expected,
+                                "fixture {total}"
+                            );
                             total += 1;
                         }
                     }
@@ -2195,37 +2749,38 @@ fn balanced_ends_exhaustive_three_page_reference_and_real_moves() {
                                         fragment(4, 10, fourth),
                                     ];
                                     let units = [
-                                        unit(FlowUnitPolicy::Independent,
-                                            vec![fragment(99, 10, prefill)]),
                                         unit(
-                                            BalanceEnds,
-                                            rows.clone(),
+                                            FlowUnitPolicy::Independent,
+                                            vec![fragment(99, 10, prefill)],
                                         ),
+                                        unit(BalanceEnds, rows.clone()),
                                     ];
                                     let actual = paginate(&pages, &units);
                                     let oracle =
                                         reference_mixed_units(&pages, &units);
                                     if let (Ok(plan), Ok(expected)) =
-                                        (&actual, &oracle) {
+                                        (&actual, &oracle)
+                                    {
                                         assert_placement_source_bijection(
-                                            &pages, &units, &plan.placements);
-                                        assert_eq!(plan.covered_pages,
+                                            &pages,
+                                            &units,
+                                            &plan.placements,
+                                        );
+                                        assert_eq!(
+                                            plan.covered_pages,
                                             reference_covered_pages(
-                                                &pages, expected));
+                                                &pages, expected
+                                            )
+                                        );
                                         let baseline_units = [
                                             unit(
                                                 FlowUnitPolicy::Independent,
-                                                vec![fragment(
-                                                    99, 10, prefill,
-                                                )],
+                                                vec![fragment(99, 10, prefill)],
                                             ),
-                                            unit(
-                                                BalanceTail,
-                                                rows,
-                                            ),
+                                            unit(BalanceTail, rows),
                                         ];
-                                        let baseline = paginate(
-                                            &pages, &baseline_units);
+                                        let baseline =
+                                            paginate(&pages, &baseline_units);
                                         if let Ok(before) = baseline {
                                             if before.placements
                                                 == plan.placements
@@ -2238,7 +2793,8 @@ fn balanced_ends_exhaustive_three_page_reference_and_real_moves() {
                                     }
                                     assert_eq!(
                                         actual.map(|plan| plan.placements),
-                                        oracle, "three-page fixture {cases}",
+                                        oracle,
+                                        "three-page fixture {cases}",
                                     );
                                     cases += 1;
                                 }
@@ -2264,15 +2820,26 @@ fn explicit_page_start_respects_used_page_and_preserves_source_and_geometry() {
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(1, 8, 2)]),
         unit(FlowUnitPolicy::StartOnNewPage, vec![
-            fragment(2, 8, 2), fragment(3, 8, 2),
+            fragment(2, 8, 2),
+            fragment(3, 8, 2),
         ]),
         unit(FlowUnitPolicy::Independent, vec![fragment(4, 8, 1)]),
     ];
-    let plan = paginate(&pages, &units).expect("explicit page start");
-    assert_eq!(plan.placements.iter().map(|row| row.page)
-        .collect::<Vec<_>>(), [17, 25, 25, 25]);
-    assert_eq!(plan.placements.iter().map(|row| row.top.micrometres())
-        .collect::<Vec<_>>(), [80, 480, 482, 484]);
+    let plan = require_ok!(paginate(&pages, &units), "explicit page start");
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|row| row.page)
+            .collect::<Vec<_>>(),
+        [17, 25, 25, 25]
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|row| row.top.micrometres())
+            .collect::<Vec<_>>(),
+        [80, 480, 482, 484]
+    );
     assert_eq!(plan.covered_pages, pages);
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 }
@@ -2286,30 +2853,43 @@ fn explicit_page_start_does_not_waste_initial_or_empty_pages() {
         unit(FlowUnitPolicy::StartOnNewPage, vec![]),
         unit(FlowUnitPolicy::StartOnNewPage, vec![fragment(12, 4, 1)]),
     ];
-    let plan = paginate(&pages, &units).expect("nonempty break units");
-    assert_eq!(plan.placements.iter().map(|row| row.page)
-        .collect::<Vec<_>>(), [7, 9]);
-    assert_eq!(plan.placements.iter().map(|row| row.top.micrometres())
-        .collect::<Vec<_>>(), [50, 150]);
+    let plan = require_ok!(paginate(&pages, &units), "nonempty break units");
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|row| row.page)
+            .collect::<Vec<_>>(),
+        [7, 9]
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|row| row.top.micrometres())
+            .collect::<Vec<_>>(),
+        [50, 150]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 }
 
 #[test]
 fn mandatory_break_blocks_keep_with_next_across_the_boundary() {
-    let pages = [
-        page(11, 20, 8, 2),
-        page(22, 60, 8, 2),
-        page(33, 100, 8, 2),
-    ];
+    let pages = [page(11, 20, 8, 2), page(22, 60, 8, 2), page(33, 100, 8, 2)];
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(1, 3, 1)]),
-        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
-            vec![fragment(2, 3, 1)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible, vec![fragment(
+            2, 3, 1,
+        )]),
         unit(FlowUnitPolicy::StartOnNewPage, vec![fragment(3, 3, 1)]),
     ];
-    let plan = paginate(&pages, &units).expect("heading cannot cross break");
-    assert_eq!(plan.placements.iter().map(|row| row.page)
-        .collect::<Vec<_>>(), [11, 11, 22]);
+    let plan =
+        require_ok!(paginate(&pages, &units), "heading cannot cross break");
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|row| row.page)
+            .collect::<Vec<_>>(),
+        [11, 11, 22]
+    );
     assert_eq!(plan.covered_pages, pages[..2]);
     assert_placement_source_bijection(&pages, &units, &plan.placements);
 }
@@ -2321,11 +2901,18 @@ fn explicit_break_refuses_without_an_available_fresh_sheet() {
         unit(FlowUnitPolicy::Independent, vec![fragment(1, 4, 1)]),
         unit(FlowUnitPolicy::StartOnNewPage, vec![fragment(2, 4, 1)]),
     ];
-    assert_eq!(paginate(&pages, &units),
-        Err(PaginationError::NoPageAvailable { owner: 2 }));
-    let initial = [unit(FlowUnitPolicy::StartOnNewPage,
-        vec![fragment(7, 4, 1)])];
-    assert_eq!(paginate(&pages, &initial).unwrap().placements[0].page, 1);
+    assert_eq!(
+        paginate(&pages, &units),
+        Err(PaginationError::NoPageAvailable { owner: 2 })
+    );
+    let initial = [unit(FlowUnitPolicy::StartOnNewPage, vec![fragment(
+        7, 4, 1,
+    )])];
+    let initial_plan = require_ok!(
+        paginate(&pages, &initial),
+        "initial mandatory page start must fit"
+    );
+    assert_eq!(require_at!(&initial_plan.placements, 0usize).page, 1);
 }
 
 #[test]
@@ -2337,25 +2924,39 @@ fn independent_rescue_preserves_mandatory_break_after_advisory_keep_group() {
     ];
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(1, 3, 1)]),
-        unit(FlowUnitPolicy::KeepTogetherWhenPossible,
-            vec![fragment(2, 3, 2), fragment(3, 3, 2)]),
+        unit(FlowUnitPolicy::KeepTogetherWhenPossible, vec![
+            fragment(2, 3, 2),
+            fragment(3, 3, 2),
+        ]),
         unit(FlowUnitPolicy::StartOnNewPage, vec![fragment(4, 3, 1)]),
     ];
-    let plan = paginate(&pages, &units)
-        .expect("independent replay must rescue without discarding break");
-    assert_eq!(plan.placements.iter().map(|row| row.page)
-        .collect::<Vec<_>>(), [71, 71, 5, 92]);
-    assert_eq!(plan.placements.iter().map(|row| row.top.micrometres())
-        .collect::<Vec<_>>(), [100, 101, 300, 500]);
+    let plan = require_ok!(
+        paginate(&pages, &units),
+        "independent replay must rescue without discarding break"
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|row| row.page)
+            .collect::<Vec<_>>(),
+        [71, 71, 5, 92]
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|row| row.top.micrometres())
+            .collect::<Vec<_>>(),
+        [100, 101, 300, 500]
+    );
     assert_placement_source_bijection(&pages, &units, &plan.placements);
     assert_eq!(plan.covered_pages, pages);
 }
 
 #[test]
 fn explicit_page_start_matches_independent_reference_across_physical_shapes() {
-    let mut cases = 0;
-    let mut accepted = 0;
-    let mut refused = 0;
+    let mut cases = 0usize;
+    let mut accepted = 0usize;
+    let mut refused = 0usize;
     for first_height in 1..=3 {
         for second_height in 1..=3 {
             for first_width in 1..=3 {
@@ -2368,29 +2969,39 @@ fn explicit_page_start_matches_independent_reference_across_physical_shapes() {
                         for after in 1..=3 {
                             for after_width in 1..=3 {
                                 let units = [
-                                    unit(FlowUnitPolicy::Independent,
-                                        vec![fragment(4, 1, before)]),
-                                    unit(FlowUnitPolicy::StartOnNewPage,
-                                        vec![fragment(5, after_width, after)]),
+                                    unit(FlowUnitPolicy::Independent, vec![
+                                        fragment(4, 1, before),
+                                    ]),
+                                    unit(FlowUnitPolicy::StartOnNewPage, vec![
+                                        fragment(5, after_width, after),
+                                    ]),
                                 ];
                                 let actual = paginate(&pages, &units);
-                                let expected = reference_mixed_units(
-                                    &pages, &units);
+                                let expected =
+                                    reference_mixed_units(&pages, &units);
                                 if let (Ok(plan), Ok(oracle)) =
-                                    (&actual, &expected) {
-                                    accepted += 1;
+                                    (&actual, &expected)
+                                {
+                                    accepted = accepted.saturating_add(1);
                                     assert_placement_source_bijection(
-                                        &pages, &units, &plan.placements);
-                                    assert_eq!(plan.covered_pages,
-                                        reference_covered_pages(
-                                            &pages, oracle));
+                                        &pages,
+                                        &units,
+                                        &plan.placements,
+                                    );
+                                    assert_eq!(
+                                        plan.covered_pages,
+                                        reference_covered_pages(&pages, oracle)
+                                    );
                                 } else {
-                                    refused += 1;
+                                    refused = refused.saturating_add(1);
                                 }
                                 assert_eq!(
-                                    actual.map(|p| p.placements), expected,
-                                    "physical break case {cases}");
-                                cases += 1;
+                                    actual.map(|placement_plan| placement_plan
+                                        .placements),
+                                    expected,
+                                    "physical break case {cases}"
+                                );
+                                cases = cases.saturating_add(1);
                             }
                         }
                     }
@@ -2405,26 +3016,35 @@ fn explicit_page_start_matches_independent_reference_across_physical_shapes() {
 
 #[test]
 fn explicit_page_starts_use_all_thirty_two_supplied_sheets_without_reuse() {
-    let pages = (0..32).map(|index| page(
-        100 - index, index * 100, 10, 5,
-    )).collect::<Vec<_>>();
-    let mut units = (0..32).map(|index| unit(
-        FlowUnitPolicy::StartOnNewPage,
-        vec![fragment(index + 1, 4, 1)],
-    )).collect::<Vec<_>>();
-    let plan = paginate(&pages, &units).expect("32 independent section starts");
+    let pages = (0..32)
+        .map(|index| page(100 - index, index * 100, 10, 5))
+        .collect::<Vec<_>>();
+    let mut units = (0..32)
+        .map(|index| {
+            unit(FlowUnitPolicy::StartOnNewPage, vec![fragment(
+                index + 1,
+                4,
+                1,
+            )])
+        })
+        .collect::<Vec<_>>();
+    let plan =
+        require_ok!(paginate(&pages, &units), "32 independent section starts");
     assert_eq!(plan.covered_pages, pages);
     assert_eq!(plan.placements.len(), 32);
     for (index, row) in plan.placements.iter().enumerate() {
-        assert_eq!(row.page, pages[index].page);
-        assert_eq!(row.top, pages[index].writable.y);
+        assert_eq!(row.page, require_at!(&pages, index).page);
+        assert_eq!(row.top, require_at!(&pages, index).writable.y);
         assert_eq!(row.source, FragmentSource { unit: index, fragment: 0 });
     }
     assert_placement_source_bijection(&pages, &units, &plan.placements);
-    units.push(unit(FlowUnitPolicy::StartOnNewPage,
-        vec![fragment(33, 4, 1)]));
-    assert_eq!(paginate(&pages, &units),
-        Err(PaginationError::NoPageAvailable { owner: 33 }));
+    units.push(unit(FlowUnitPolicy::StartOnNewPage, vec![fragment(
+        33, 4, 1,
+    )]));
+    assert_eq!(
+        paginate(&pages, &units),
+        Err(PaginationError::NoPageAvailable { owner: 33 })
+    );
 }
 
 #[test]
@@ -2434,34 +3054,49 @@ fn opening_balance_fallback_cannot_erase_explicit_page_boundary() {
         page(4, 300, 100, 40),
         page(83, 700, 100, 30),
     ];
-    let rows = (0..5).map(|index| fragment(index + 1, 30, 10))
+    let rows = (0..5)
+        .map(|index| fragment(index + 1, 30, 10))
         .collect::<Vec<_>>();
     let units = [
         unit(FlowUnitPolicy::Independent, vec![fragment(90, 30, 45)]),
-        unit(FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible,
-            rows.clone()),
+        unit(
+            FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible,
+            rows.clone(),
+        ),
         unit(FlowUnitPolicy::StartOnNewPage, vec![fragment(91, 30, 1)]),
     ];
-    let plan = paginate(&pages, &units)
-        .expect("tail-only replay preserves mandatory later break");
-    assert_eq!(plan.placements.iter().map(|placed| placed.page)
-        .collect::<Vec<_>>(), [19, 19, 4, 4, 4, 4, 83]);
-    assert_eq!(plan.placements.iter().map(
-        |placed| placed.top.micrometres()).collect::<Vec<_>>(),
-        [100, 145, 300, 310, 320, 330, 700]);
+    let plan = require_ok!(
+        paginate(&pages, &units),
+        "tail-only replay preserves mandatory later break"
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placed| placed.page)
+            .collect::<Vec<_>>(),
+        [19, 19, 4, 4, 4, 4, 83]
+    );
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placed| placed.top.micrometres())
+            .collect::<Vec<_>>(),
+        [100, 145, 300, 310, 320, 330, 700]
+    );
     assert_eq!(plan.covered_pages, pages);
     assert_placement_source_bijection(&pages, &units, &plan.placements);
-    assert_eq!(reference_mixed_units(&pages, &units),
-        Ok(plan.placements));
+    assert_eq!(reference_mixed_units(&pages, &units), Ok(plan.placements));
 
     let preferred_without_break = [
         unit(FlowUnitPolicy::Independent, vec![fragment(90, 30, 45)]),
         unit(FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible, rows),
         unit(FlowUnitPolicy::Independent, vec![fragment(91, 30, 1)]),
     ];
-    let alternate = paginate(&pages, &preferred_without_break)
-        .expect("advisory opening balance can put tail on last page");
-    assert_eq!(alternate.placements[1].page, 4);
-    assert_eq!(alternate.placements[5].page, 83);
-    assert_eq!(alternate.placements[6].page, 83);
+    let alternate = require_ok!(
+        paginate(&pages, &preferred_without_break),
+        "advisory opening balance can put tail on last page"
+    );
+    assert_eq!(require_at!(&alternate.placements, 1usize).page, 4);
+    assert_eq!(require_at!(&alternate.placements, 5usize).page, 83);
+    assert_eq!(require_at!(&alternate.placements, 6usize).page, 83);
 }
