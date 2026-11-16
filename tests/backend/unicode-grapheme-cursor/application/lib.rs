@@ -37,6 +37,7 @@
 //! Exact cursor-position regression tests.
 
 use std::cell::Cell;
+use std::cmp::Ordering;
 
 use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
@@ -48,50 +49,9 @@ use atrament_unicode_grapheme_cursor::resolve_grapheme_cursor_selection;
 use atrament_unicode_grapheme_cursor::resolve_grapheme_cursor_step;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
-#[test]
-fn composed_decomposed_and_emoji_text_resolves_every_cursor_boundary() {
-    let provider = UnicodeGraphemeSegmentation;
-    let source = "Áe\u{301}👩‍🔬Z";
-    let expected = [
-        0,
-        "Á".len(),
-        "Áe\u{301}".len(),
-        "Áe\u{301}👩‍🔬".len(),
-        source.len(),
-    ];
-    for (grapheme_index, byte_offset) in expected.into_iter().enumerate() {
-        let resolved =
-            resolve_grapheme_cursor_position(&provider, source, grapheme_index);
-        assert_eq!(
-            resolved,
-            Ok(GraphemeCursorPosition {
-                byte_offset,
-                grapheme_index,
-            }),
-        );
-    }
+struct ImpossibleGraphemeCountProvider {
+    byte_offset_called: Cell<bool>,
 }
-
-#[test]
-fn empty_text_has_one_valid_cursor_position() {
-    let provider = UnicodeGraphemeSegmentation;
-    assert_eq!(
-        resolve_grapheme_cursor_position(&provider, "", 0),
-        Ok(GraphemeCursorPosition {
-            byte_offset: 0,
-            grapheme_index: 0,
-        }),
-    );
-    assert_eq!(
-        resolve_grapheme_cursor_position(&provider, "", 1),
-        Err(GraphemeCursorError::CursorOutOfBounds {
-            grapheme_count: 0,
-            grapheme_index: 1,
-        }),
-    );
-}
-
-struct ImpossibleGraphemeCountProvider;
 
 impl GraphemeBoundaryProvider for ImpossibleGraphemeCountProvider {
     fn byte_offset(
@@ -99,28 +59,13 @@ impl GraphemeBoundaryProvider for ImpossibleGraphemeCountProvider {
         _source: &str,
         _grapheme_index: usize,
     ) -> Option<usize> {
-        panic!("impossible count must reject before boundary access");
+        self.byte_offset_called.set(true);
+        None
     }
 
     fn grapheme_count(&self, source: &str) -> usize {
         source.len().saturating_add(1)
     }
-}
-
-#[test]
-fn impossible_grapheme_count_rejects_before_boundary_access() {
-    let source = "éx";
-    assert_eq!(
-        resolve_grapheme_cursor_position(
-            &ImpossibleGraphemeCountProvider,
-            source,
-            0,
-        ),
-        Err(GraphemeCursorError::GraphemeCountExceedsSourceBytes {
-            grapheme_count: source.len() + 1,
-            source_bytes: source.len(),
-        }),
-    );
 }
 
 struct ChangingInternalBoundaryProvider {
@@ -139,7 +84,7 @@ impl GraphemeBoundaryProvider for ChangingInternalBoundaryProvider {
                 let calls = self.internal_calls.get();
                 self.internal_calls.set(calls.saturating_add(1));
                 if calls == 0 {
-                    Some("é".len())
+                    Some("\u{e9}".len())
                 } else {
                     Some(source.len())
                 }
@@ -152,21 +97,6 @@ impl GraphemeBoundaryProvider for ChangingInternalBoundaryProvider {
     fn grapheme_count(&self, _source: &str) -> usize {
         2
     }
-}
-
-#[test]
-fn internal_cursor_boundary_is_resolved_once() {
-    let provider = ChangingInternalBoundaryProvider {
-        internal_calls: Cell::new(0),
-    };
-    assert_eq!(
-        resolve_grapheme_cursor_position(&provider, "éx", 1),
-        Ok(GraphemeCursorPosition {
-            byte_offset: "é".len(),
-            grapheme_index: 1,
-        }),
-    );
-    assert_eq!(provider.internal_calls.get(), 1);
 }
 
 struct BrokenBoundaryProvider {
@@ -193,7 +123,6 @@ impl GraphemeBoundaryProvider for BrokenBoundaryProvider {
         match self.mode {
             BrokenBoundaryMode::InternalAtEnd => match grapheme_index {
                 0 => Some(0),
-                1 => Some(source.len()),
                 _ => Some(source.len()),
             },
             BrokenBoundaryMode::InternalAtStart => match grapheme_index {
@@ -211,12 +140,12 @@ impl GraphemeBoundaryProvider for BrokenBoundaryProvider {
                 _ => Some(source.len()),
             },
             BrokenBoundaryMode::ShiftedFirst => match grapheme_index {
-                0 => Some("é".len()),
+                0 => Some("\u{e9}".len()),
                 _ => Some(source.len()),
             },
             BrokenBoundaryMode::TruncatedFinal => match grapheme_index {
                 0 => Some(0),
-                _ => Some("é".len()),
+                _ => Some("\u{e9}".len()),
             },
             BrokenBoundaryMode::UnderreportedCount => Some(0),
         }
@@ -225,99 +154,13 @@ impl GraphemeBoundaryProvider for BrokenBoundaryProvider {
     fn grapheme_count(&self, _source: &str) -> usize {
         match self.mode {
             BrokenBoundaryMode::UnderreportedCount => 0,
-            _ => 2,
+            BrokenBoundaryMode::InternalAtEnd
+            | BrokenBoundaryMode::InternalAtStart
+            | BrokenBoundaryMode::InvalidUtf8
+            | BrokenBoundaryMode::MissingInternal
+            | BrokenBoundaryMode::ShiftedFirst
+            | BrokenBoundaryMode::TruncatedFinal => 2,
         }
-    }
-}
-
-#[test]
-fn provider_anchor_failures_precede_caller_bounds() {
-    let source = "éx";
-    assert_eq!(
-        resolve_grapheme_cursor_position(
-            &BrokenBoundaryProvider {
-                mode: BrokenBoundaryMode::UnderreportedCount,
-            },
-            source,
-            1,
-        ),
-        Err(GraphemeCursorError::BoundaryAnchorMismatch {
-            expected: source.len(),
-            grapheme_index: 0,
-            observed: 0,
-        }),
-    );
-    assert_eq!(
-        resolve_grapheme_cursor_position(
-            &BrokenBoundaryProvider {
-                mode: BrokenBoundaryMode::ShiftedFirst,
-            },
-            source,
-            3,
-        ),
-        Err(GraphemeCursorError::BoundaryAnchorMismatch {
-            expected: 0,
-            grapheme_index: 0,
-            observed: "é".len(),
-        }),
-    );
-    assert_eq!(
-        resolve_grapheme_cursor_position(
-            &BrokenBoundaryProvider {
-                mode: BrokenBoundaryMode::TruncatedFinal,
-            },
-            source,
-            3,
-        ),
-        Err(GraphemeCursorError::BoundaryAnchorMismatch {
-            expected: source.len(),
-            grapheme_index: 2,
-            observed: "é".len(),
-        }),
-    );
-}
-
-#[test]
-fn invalid_and_missing_internal_boundaries_are_typed_failures() {
-    let source = "éx";
-    assert_eq!(
-        resolve_grapheme_cursor_position(
-            &BrokenBoundaryProvider {
-                mode: BrokenBoundaryMode::InvalidUtf8,
-            },
-            source,
-            1,
-        ),
-        Err(GraphemeCursorError::InvalidBoundary {
-            byte_offset: 1,
-            grapheme_index: 1,
-        }),
-    );
-    assert_eq!(
-        resolve_grapheme_cursor_position(
-            &BrokenBoundaryProvider {
-                mode: BrokenBoundaryMode::MissingInternal,
-            },
-            source,
-            1,
-        ),
-        Err(GraphemeCursorError::BoundaryUnavailable { grapheme_index: 1 }),
-    );
-    for (mode, byte_offset) in [
-        (BrokenBoundaryMode::InternalAtStart, 0),
-        (BrokenBoundaryMode::InternalAtEnd, source.len()),
-    ] {
-        assert_eq!(
-            resolve_grapheme_cursor_position(
-                &BrokenBoundaryProvider { mode },
-                source,
-                1,
-            ),
-            Err(GraphemeCursorError::InternalBoundaryAtSourceEdge {
-                byte_offset,
-                grapheme_index: 1,
-            }),
-        );
     }
 }
 
@@ -345,212 +188,6 @@ impl GraphemeBoundaryProvider for ImpossibleInternalCapacityProvider {
     }
 }
 
-#[test]
-fn internal_boundary_requires_byte_capacity_on_both_sides() {
-    let source = "abcd";
-    for (internal_index, internal_byte) in [(3, 1), (1, 3)] {
-        let provider = ImpossibleInternalCapacityProvider {
-            internal_byte,
-            internal_index,
-        };
-        assert_eq!(
-            resolve_grapheme_cursor_position(
-                &provider,
-                source,
-                internal_index,
-            ),
-            Err(GraphemeCursorError::InternalBoundaryCapacityMismatch {
-                byte_offset: internal_byte,
-                grapheme_count: 4,
-                grapheme_index: internal_index,
-                source_bytes: source.len(),
-            }),
-        );
-    }
-}
-
-#[test]
-fn valid_provider_reports_caller_positions_after_the_end_as_out_of_bounds() {
-    let provider = UnicodeGraphemeSegmentation;
-    assert_eq!(
-        resolve_grapheme_cursor_position(&provider, "aé", 3),
-        Err(GraphemeCursorError::CursorOutOfBounds {
-            grapheme_count: 2,
-            grapheme_index: 3,
-        }),
-    );
-}
-
-#[test]
-fn bilingual_inventory_exposes_only_start_and_end_cursor_positions() {
-    let provider = UnicodeGraphemeSegmentation;
-    for required in REQUIRED_TEXT_GRAPHEMES {
-        assert_eq!(
-            resolve_grapheme_cursor_position(&provider, required.grapheme, 0),
-            Ok(GraphemeCursorPosition {
-                byte_offset: 0,
-                grapheme_index: 0,
-            }),
-            "start boundary for {:?}",
-            required.grapheme,
-        );
-        assert_eq!(
-            resolve_grapheme_cursor_position(&provider, required.grapheme, 1),
-            Ok(GraphemeCursorPosition {
-                byte_offset: required.grapheme.len(),
-                grapheme_index: 1,
-            }),
-            "end boundary for {:?}",
-            required.grapheme,
-        );
-        assert_eq!(
-            resolve_grapheme_cursor_position(&provider, required.grapheme, 2),
-            Err(GraphemeCursorError::CursorOutOfBounds {
-                grapheme_count: 1,
-                grapheme_index: 2,
-            }),
-            "post-end rejection for {:?}",
-            required.grapheme,
-        );
-    }
-}
-
-#[test]
-fn selection_preserves_forward_reverse_and_collapsed_endpoint_order() {
-    let provider = UnicodeGraphemeSegmentation;
-    let source = "Áe\u{301}👩‍🔬Z";
-    let position =
-        |grapheme_index: usize, byte_offset: usize| GraphemeCursorPosition {
-            byte_offset,
-            grapheme_index,
-        };
-    assert_eq!(
-        resolve_grapheme_cursor_selection(&provider, source, 1, 3),
-        Ok(GraphemeCursorSelection {
-            anchor: position(1, "Á".len()),
-            focus: position(3, "Áe\u{301}👩‍🔬".len()),
-        }),
-    );
-    assert_eq!(
-        resolve_grapheme_cursor_selection(&provider, source, 3, 1),
-        Ok(GraphemeCursorSelection {
-            anchor: position(3, "Áe\u{301}👩‍🔬".len()),
-            focus: position(1, "Á".len()),
-        }),
-    );
-    assert_eq!(
-        resolve_grapheme_cursor_selection(&provider, source, 2, 2),
-        Ok(GraphemeCursorSelection {
-            anchor: position(2, "Áe\u{301}".len()),
-            focus: position(2, "Áe\u{301}".len()),
-        }),
-    );
-}
-
-#[test]
-fn collapsed_internal_selection_resolves_boundary_once() {
-    let provider = ChangingInternalBoundaryProvider {
-        internal_calls: Cell::new(0),
-    };
-    let position = GraphemeCursorPosition {
-        byte_offset: "é".len(),
-        grapheme_index: 1,
-    };
-    assert_eq!(
-        resolve_grapheme_cursor_selection(&provider, "éx", 1, 1),
-        Ok(GraphemeCursorSelection {
-            anchor: position,
-            focus: position,
-        }),
-    );
-    assert_eq!(provider.internal_calls.get(), 1);
-}
-
-#[test]
-fn selection_reports_anchor_then_focus_bounds_without_reordering() {
-    let provider = UnicodeGraphemeSegmentation;
-    assert_eq!(
-        resolve_grapheme_cursor_selection(&provider, "aé", 3, 1),
-        Err(GraphemeCursorError::CursorOutOfBounds {
-            grapheme_count: 2,
-            grapheme_index: 3,
-        }),
-    );
-    assert_eq!(
-        resolve_grapheme_cursor_selection(&provider, "aé", 1, 3),
-        Err(GraphemeCursorError::CursorOutOfBounds {
-            grapheme_count: 2,
-            grapheme_index: 3,
-        }),
-    );
-}
-
-#[test]
-fn empty_text_accepts_only_collapsed_zero_selection() {
-    let provider = UnicodeGraphemeSegmentation;
-    let zero = GraphemeCursorPosition {
-        byte_offset: 0,
-        grapheme_index: 0,
-    };
-    assert_eq!(
-        resolve_grapheme_cursor_selection(&provider, "", 0, 0),
-        Ok(GraphemeCursorSelection {
-            anchor: zero,
-            focus: zero,
-        }),
-    );
-    assert_eq!(
-        resolve_grapheme_cursor_selection(&provider, "", 0, 1),
-        Err(GraphemeCursorError::CursorOutOfBounds {
-            grapheme_count: 0,
-            grapheme_index: 1,
-        }),
-    );
-}
-
-#[test]
-fn bilingual_inventory_resolves_both_full_grapheme_selection_directions() {
-    let provider = UnicodeGraphemeSegmentation;
-    for required in REQUIRED_TEXT_GRAPHEMES {
-        let start = GraphemeCursorPosition {
-            byte_offset: 0,
-            grapheme_index: 0,
-        };
-        let end = GraphemeCursorPosition {
-            byte_offset: required.grapheme.len(),
-            grapheme_index: 1,
-        };
-        assert_eq!(
-            resolve_grapheme_cursor_selection(
-                &provider,
-                required.grapheme,
-                0,
-                1,
-            ),
-            Ok(GraphemeCursorSelection {
-                anchor: start,
-                focus: end,
-            }),
-            "forward selection for {:?}",
-            required.grapheme,
-        );
-        assert_eq!(
-            resolve_grapheme_cursor_selection(
-                &provider,
-                required.grapheme,
-                1,
-                0,
-            ),
-            Ok(GraphemeCursorSelection {
-                anchor: end,
-                focus: start,
-            }),
-            "reverse selection for {:?}",
-            required.grapheme,
-        );
-    }
-}
-
 struct MisorderedSelectionBoundaryProvider;
 
 impl GraphemeBoundaryProvider for MisorderedSelectionBoundaryProvider {
@@ -573,30 +210,6 @@ impl GraphemeBoundaryProvider for MisorderedSelectionBoundaryProvider {
     }
 }
 
-#[test]
-fn selection_rejects_provider_boundaries_that_reverse_index_order() {
-    let provider = MisorderedSelectionBoundaryProvider;
-    let source = "abcdef";
-    assert_eq!(
-        resolve_grapheme_cursor_selection(&provider, source, 1, 2),
-        Err(GraphemeCursorError::SelectionBoundaryOrderMismatch {
-            anchor_byte: 4,
-            anchor_index: 1,
-            focus_byte: 2,
-            focus_index: 2,
-        }),
-    );
-    assert_eq!(
-        resolve_grapheme_cursor_selection(&provider, source, 2, 1),
-        Err(GraphemeCursorError::SelectionBoundaryOrderMismatch {
-            anchor_byte: 2,
-            anchor_index: 2,
-            focus_byte: 4,
-            focus_index: 1,
-        }),
-    );
-}
-
 struct CompressedBoundaryProvider;
 
 impl GraphemeBoundaryProvider for CompressedBoundaryProvider {
@@ -617,76 +230,6 @@ impl GraphemeBoundaryProvider for CompressedBoundaryProvider {
     fn grapheme_count(&self, _source: &str) -> usize {
         4
     }
-}
-
-#[test]
-fn multi_boundary_queries_reject_impossible_byte_distance() {
-    let provider = CompressedBoundaryProvider;
-    let source = "abcdefgh";
-    assert_eq!(
-        resolve_grapheme_cursor_selection(&provider, source, 1, 3),
-        Err(GraphemeCursorError::BoundaryDistanceTooSmall {
-            byte_distance: 1,
-            grapheme_distance: 2,
-        }),
-    );
-    assert_eq!(
-        resolve_grapheme_cursor_selection(&provider, source, 3, 1),
-        Err(GraphemeCursorError::BoundaryDistanceTooSmall {
-            byte_distance: 1,
-            grapheme_distance: 2,
-        }),
-    );
-    assert_eq!(
-        resolve_grapheme_cursor_step(&provider, source, 1, 2),
-        Err(GraphemeCursorError::BoundaryDistanceTooSmall {
-            byte_distance: 1,
-            grapheme_distance: 2,
-        }),
-    );
-}
-
-#[test]
-fn signed_steps_resolve_exact_grapheme_boundaries_without_clamping() {
-    let provider = UnicodeGraphemeSegmentation;
-    let source = "Áe\u{301}👩‍🔬Z";
-    assert_eq!(
-        resolve_grapheme_cursor_step(&provider, source, 2, 1),
-        Ok(GraphemeCursorPosition {
-            byte_offset: "Áe\u{301}👩‍🔬".len(),
-            grapheme_index: 3,
-        }),
-    );
-    assert_eq!(
-        resolve_grapheme_cursor_step(&provider, source, 2, -2),
-        Ok(GraphemeCursorPosition {
-            byte_offset: 0,
-            grapheme_index: 0,
-        }),
-    );
-    assert_eq!(
-        resolve_grapheme_cursor_step(&provider, source, 4, 1),
-        Err(GraphemeCursorError::CursorStepOutOfBounds {
-            grapheme_count: 4,
-            origin_index: 4,
-            step: 1,
-        }),
-    );
-    assert_eq!(
-        resolve_grapheme_cursor_step(&provider, source, 0, -1),
-        Err(GraphemeCursorError::CursorStepOutOfBounds {
-            grapheme_count: 4,
-            origin_index: 0,
-            step: -1,
-        }),
-    );
-    assert_eq!(
-        resolve_grapheme_cursor_step(&provider, source, 5, 0),
-        Err(GraphemeCursorError::CursorOutOfBounds {
-            grapheme_count: 4,
-            grapheme_index: 5,
-        }),
-    );
 }
 
 struct MisorderedStepBoundaryProvider {
@@ -714,79 +257,6 @@ impl GraphemeBoundaryProvider for MisorderedStepBoundaryProvider {
     }
 }
 
-#[test]
-fn signed_steps_reject_provider_boundaries_that_do_not_advance() {
-    let source = "abcdef";
-    for (origin_byte, target_byte) in [(3, 3), (4, 3)] {
-        let provider = MisorderedStepBoundaryProvider {
-            first_internal: origin_byte,
-            second_internal: target_byte,
-        };
-        assert_eq!(
-            resolve_grapheme_cursor_step(&provider, source, 1, 1),
-            Err(GraphemeCursorError::StepBoundaryOrderMismatch {
-                origin_byte,
-                origin_index: 1,
-                target_byte,
-                target_index: 2,
-            }),
-        );
-    }
-
-    let provider = MisorderedStepBoundaryProvider {
-        first_internal: 3,
-        second_internal: 2,
-    };
-    assert_eq!(
-        resolve_grapheme_cursor_step(&provider, source, 2, -1),
-        Err(GraphemeCursorError::StepBoundaryOrderMismatch {
-            origin_byte: 2,
-            origin_index: 2,
-            target_byte: 3,
-            target_index: 1,
-        }),
-    );
-}
-
-#[test]
-fn zero_step_reuses_the_resolved_origin_boundary() {
-    let provider = ChangingInternalBoundaryProvider {
-        internal_calls: Cell::new(0),
-    };
-    assert_eq!(
-        resolve_grapheme_cursor_step(&provider, "éx", 1, 0),
-        Ok(GraphemeCursorPosition {
-            byte_offset: "é".len(),
-            grapheme_index: 1,
-        }),
-    );
-    assert_eq!(provider.internal_calls.get(), 1);
-}
-
-#[test]
-fn every_required_bilingual_grapheme_steps_between_its_two_boundaries() {
-    let provider = UnicodeGraphemeSegmentation;
-    for required in REQUIRED_TEXT_GRAPHEMES {
-        assert_eq!(
-            resolve_grapheme_cursor_step(&provider, required.grapheme, 0, 1),
-            Ok(GraphemeCursorPosition {
-                byte_offset: required.grapheme.len(),
-                grapheme_index: 1,
-            }),
-            "forward step for {:?}",
-            required.grapheme,
-        );
-        assert_eq!(
-            resolve_grapheme_cursor_step(&provider, required.grapheme, 1, -1),
-            Ok(GraphemeCursorPosition {
-                byte_offset: 0,
-                grapheme_index: 0,
-            }),
-            "backward step for {:?}",
-            required.grapheme,
-        );
-    }
-}
 struct CompactAnchoredBoundaryMap {
     internal: [usize; 3],
 }
@@ -799,7 +269,8 @@ impl GraphemeBoundaryProvider for CompactAnchoredBoundaryMap {
     ) -> Option<usize> {
         match grapheme_index {
             0 => Some(0),
-            1..=3 => Some(self.internal[grapheme_index - 1]),
+            1..=3 => self.internal.get(grapheme_index.saturating_sub(1))
+                .copied(),
             4 => Some(source.len()),
             _ => None,
         }
@@ -816,7 +287,16 @@ fn compact_expected_position(
 ) -> Result<GraphemeCursorPosition, GraphemeCursorError> {
     let byte_offset = match grapheme_index {
         0 => 0,
-        1..=3 => internal[grapheme_index - 1],
+        1..=3 => {
+            let Some(&offset) = internal.get(grapheme_index.saturating_sub(1))
+            else {
+                return Err(GraphemeCursorError::CursorOutOfBounds {
+                    grapheme_count: 4,
+                    grapheme_index,
+                });
+            };
+            offset
+        },
         4 => 4,
         _ => {
             return Err(GraphemeCursorError::CursorOutOfBounds {
@@ -832,8 +312,8 @@ fn compact_expected_position(
                 grapheme_index,
             });
         }
-        let suffix_graphemes = 4 - grapheme_index;
-        let suffix_bytes = 4 - byte_offset;
+        let suffix_graphemes = 4usize.saturating_sub(grapheme_index);
+        let suffix_bytes = 4usize.saturating_sub(byte_offset);
         if byte_offset < grapheme_index || suffix_bytes < suffix_graphemes {
             return Err(GraphemeCursorError::InternalBoundaryCapacityMismatch {
                 byte_offset,
@@ -860,12 +340,10 @@ fn compact_expected_selection(
     } else {
         compact_expected_position(internal, focus_index)?
     };
-    let ordered = if focus_index > anchor_index {
-        focus.byte_offset > anchor.byte_offset
-    } else if focus_index < anchor_index {
-        focus.byte_offset < anchor.byte_offset
-    } else {
-        true
+    let ordered = match focus_index.cmp(&anchor_index) {
+        Ordering::Greater => focus.byte_offset > anchor.byte_offset,
+        Ordering::Less => focus.byte_offset < anchor.byte_offset,
+        Ordering::Equal => true,
     };
     if !ordered {
         return Err(GraphemeCursorError::SelectionBoundaryOrderMismatch {
@@ -939,12 +417,556 @@ fn compact_expected_step(
 }
 
 #[test]
+fn composed_decomposed_and_emoji_text_resolves_every_cursor_boundary() {
+    let provider = UnicodeGraphemeSegmentation;
+    let source = "\u{c1}e\u{301}\u{1f469}\u{200d}\u{1f52c}Z";
+    let expected = [
+        0,
+        "\u{c1}".len(),
+        "\u{c1}e\u{301}".len(),
+        "\u{c1}e\u{301}\u{1f469}\u{200d}\u{1f52c}".len(),
+        source.len(),
+    ];
+    for (grapheme_index, byte_offset) in expected.into_iter().enumerate() {
+        let resolved =
+            resolve_grapheme_cursor_position(&provider, source, grapheme_index);
+        assert_eq!(
+            resolved,
+            Ok(GraphemeCursorPosition {
+                byte_offset,
+                grapheme_index,
+            }),
+        );
+    }
+}
+
+#[test]
+fn empty_text_has_one_valid_cursor_position() {
+    let provider = UnicodeGraphemeSegmentation;
+    assert_eq!(
+        resolve_grapheme_cursor_position(&provider, "", 0),
+        Ok(GraphemeCursorPosition {
+            byte_offset: 0,
+            grapheme_index: 0,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_position(&provider, "", 1),
+        Err(GraphemeCursorError::CursorOutOfBounds {
+            grapheme_count: 0,
+            grapheme_index: 1,
+        }),
+    );
+}
+
+#[test]
+fn impossible_grapheme_count_rejects_before_boundary_access() {
+    let source = "\u{e9}x";
+    let provider = ImpossibleGraphemeCountProvider {
+        byte_offset_called: Cell::new(false),
+    };
+    assert_eq!(
+        resolve_grapheme_cursor_position(&provider, source, 0),
+        Err(GraphemeCursorError::GraphemeCountExceedsSourceBytes {
+            grapheme_count: source.len() + 1,
+            source_bytes: source.len(),
+        }),
+    );
+    assert!(!provider.byte_offset_called.get());
+}
+
+#[test]
+fn internal_cursor_boundary_is_resolved_once() {
+    let provider = ChangingInternalBoundaryProvider {
+        internal_calls: Cell::new(0),
+    };
+    assert_eq!(
+        resolve_grapheme_cursor_position(&provider, "\u{e9}x", 1),
+        Ok(GraphemeCursorPosition {
+            byte_offset: "\u{e9}".len(),
+            grapheme_index: 1,
+        }),
+    );
+    assert_eq!(provider.internal_calls.get(), 1);
+}
+
+#[test]
+fn provider_anchor_failures_precede_caller_bounds() {
+    let source = "\u{e9}x";
+    assert_eq!(
+        resolve_grapheme_cursor_position(
+            &BrokenBoundaryProvider {
+                mode: BrokenBoundaryMode::UnderreportedCount,
+            },
+            source,
+            1,
+        ),
+        Err(GraphemeCursorError::BoundaryAnchorMismatch {
+            expected: source.len(),
+            grapheme_index: 0,
+            observed: 0,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_position(
+            &BrokenBoundaryProvider {
+                mode: BrokenBoundaryMode::ShiftedFirst,
+            },
+            source,
+            3,
+        ),
+        Err(GraphemeCursorError::BoundaryAnchorMismatch {
+            expected: 0,
+            grapheme_index: 0,
+            observed: "\u{e9}".len(),
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_position(
+            &BrokenBoundaryProvider {
+                mode: BrokenBoundaryMode::TruncatedFinal,
+            },
+            source,
+            3,
+        ),
+        Err(GraphemeCursorError::BoundaryAnchorMismatch {
+            expected: source.len(),
+            grapheme_index: 2,
+            observed: "\u{e9}".len(),
+        }),
+    );
+}
+
+#[test]
+fn invalid_and_missing_internal_boundaries_are_typed_failures() {
+    let source = "\u{e9}x";
+    assert_eq!(
+        resolve_grapheme_cursor_position(
+            &BrokenBoundaryProvider {
+                mode: BrokenBoundaryMode::InvalidUtf8,
+            },
+            source,
+            1,
+        ),
+        Err(GraphemeCursorError::InvalidBoundary {
+            byte_offset: 1,
+            grapheme_index: 1,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_position(
+            &BrokenBoundaryProvider {
+                mode: BrokenBoundaryMode::MissingInternal,
+            },
+            source,
+            1,
+        ),
+        Err(GraphemeCursorError::BoundaryUnavailable { grapheme_index: 1 }),
+    );
+    for (mode, byte_offset) in [
+        (BrokenBoundaryMode::InternalAtStart, 0),
+        (BrokenBoundaryMode::InternalAtEnd, source.len()),
+    ] {
+        assert_eq!(
+            resolve_grapheme_cursor_position(
+                &BrokenBoundaryProvider { mode },
+                source,
+                1,
+            ),
+            Err(GraphemeCursorError::InternalBoundaryAtSourceEdge {
+                byte_offset,
+                grapheme_index: 1,
+            }),
+        );
+    }
+}
+
+#[test]
+fn internal_boundary_requires_byte_capacity_on_both_sides() {
+    let source = "abcd";
+    for (internal_index, internal_byte) in [(3, 1), (1, 3)] {
+        let provider = ImpossibleInternalCapacityProvider {
+            internal_byte,
+            internal_index,
+        };
+        assert_eq!(
+            resolve_grapheme_cursor_position(
+                &provider,
+                source,
+                internal_index,
+            ),
+            Err(GraphemeCursorError::InternalBoundaryCapacityMismatch {
+                byte_offset: internal_byte,
+                grapheme_count: 4,
+                grapheme_index: internal_index,
+                source_bytes: source.len(),
+            }),
+        );
+    }
+}
+
+#[test]
+fn valid_provider_reports_caller_positions_after_the_end_as_out_of_bounds() {
+    let provider = UnicodeGraphemeSegmentation;
+    assert_eq!(
+        resolve_grapheme_cursor_position(&provider, "a\u{e9}", 3),
+        Err(GraphemeCursorError::CursorOutOfBounds {
+            grapheme_count: 2,
+            grapheme_index: 3,
+        }),
+    );
+}
+
+#[test]
+fn bilingual_inventory_exposes_only_start_and_end_cursor_positions() {
+    let provider = UnicodeGraphemeSegmentation;
+    for required in REQUIRED_TEXT_GRAPHEMES {
+        assert_eq!(
+            resolve_grapheme_cursor_position(&provider, required.grapheme, 0),
+            Ok(GraphemeCursorPosition {
+                byte_offset: 0,
+                grapheme_index: 0,
+            }),
+            "start boundary for {:?}",
+            required.grapheme,
+        );
+        assert_eq!(
+            resolve_grapheme_cursor_position(&provider, required.grapheme, 1),
+            Ok(GraphemeCursorPosition {
+                byte_offset: required.grapheme.len(),
+                grapheme_index: 1,
+            }),
+            "end boundary for {:?}",
+            required.grapheme,
+        );
+        assert_eq!(
+            resolve_grapheme_cursor_position(&provider, required.grapheme, 2),
+            Err(GraphemeCursorError::CursorOutOfBounds {
+                grapheme_count: 1,
+                grapheme_index: 2,
+            }),
+            "post-end rejection for {:?}",
+            required.grapheme,
+        );
+    }
+}
+
+#[test]
+fn selection_preserves_forward_reverse_and_collapsed_endpoint_order() {
+    let provider = UnicodeGraphemeSegmentation;
+    let source = "\u{c1}e\u{301}\u{1f469}\u{200d}\u{1f52c}Z";
+    let position =
+        |grapheme_index: usize, byte_offset: usize| GraphemeCursorPosition {
+            byte_offset,
+            grapheme_index,
+        };
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, source, 1, 3),
+        Ok(GraphemeCursorSelection {
+            anchor: position(1, "\u{c1}".len()),
+            focus: position(
+                3,
+                "\u{c1}e\u{301}\u{1f469}\u{200d}\u{1f52c}".len(),
+            ),
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, source, 3, 1),
+        Ok(GraphemeCursorSelection {
+            anchor: position(
+                3,
+                "\u{c1}e\u{301}\u{1f469}\u{200d}\u{1f52c}".len(),
+            ),
+            focus: position(1, "\u{c1}".len()),
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, source, 2, 2),
+        Ok(GraphemeCursorSelection {
+            anchor: position(2, "\u{c1}e\u{301}".len()),
+            focus: position(2, "\u{c1}e\u{301}".len()),
+        }),
+    );
+}
+
+#[test]
+fn collapsed_internal_selection_resolves_boundary_once() {
+    let provider = ChangingInternalBoundaryProvider {
+        internal_calls: Cell::new(0),
+    };
+    let position = GraphemeCursorPosition {
+        byte_offset: "\u{e9}".len(),
+        grapheme_index: 1,
+    };
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, "\u{e9}x", 1, 1),
+        Ok(GraphemeCursorSelection {
+            anchor: position,
+            focus: position,
+        }),
+    );
+    assert_eq!(provider.internal_calls.get(), 1);
+}
+
+#[test]
+fn selection_reports_anchor_then_focus_bounds_without_reordering() {
+    let provider = UnicodeGraphemeSegmentation;
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, "a\u{e9}", 3, 1),
+        Err(GraphemeCursorError::CursorOutOfBounds {
+            grapheme_count: 2,
+            grapheme_index: 3,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, "a\u{e9}", 1, 3),
+        Err(GraphemeCursorError::CursorOutOfBounds {
+            grapheme_count: 2,
+            grapheme_index: 3,
+        }),
+    );
+}
+
+#[test]
+fn empty_text_accepts_only_collapsed_zero_selection() {
+    let provider = UnicodeGraphemeSegmentation;
+    let zero = GraphemeCursorPosition {
+        byte_offset: 0,
+        grapheme_index: 0,
+    };
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, "", 0, 0),
+        Ok(GraphemeCursorSelection {
+            anchor: zero,
+            focus: zero,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, "", 0, 1),
+        Err(GraphemeCursorError::CursorOutOfBounds {
+            grapheme_count: 0,
+            grapheme_index: 1,
+        }),
+    );
+}
+
+#[test]
+fn bilingual_inventory_resolves_both_full_grapheme_selection_directions() {
+    let provider = UnicodeGraphemeSegmentation;
+    for required in REQUIRED_TEXT_GRAPHEMES {
+        let start = GraphemeCursorPosition {
+            byte_offset: 0,
+            grapheme_index: 0,
+        };
+        let end = GraphemeCursorPosition {
+            byte_offset: required.grapheme.len(),
+            grapheme_index: 1,
+        };
+        assert_eq!(
+            resolve_grapheme_cursor_selection(
+                &provider,
+                required.grapheme,
+                0,
+                1,
+            ),
+            Ok(GraphemeCursorSelection {
+                anchor: start,
+                focus: end,
+            }),
+            "forward selection for {:?}",
+            required.grapheme,
+        );
+        assert_eq!(
+            resolve_grapheme_cursor_selection(
+                &provider,
+                required.grapheme,
+                1,
+                0,
+            ),
+            Ok(GraphemeCursorSelection {
+                anchor: end,
+                focus: start,
+            }),
+            "reverse selection for {:?}",
+            required.grapheme,
+        );
+    }
+}
+
+#[test]
+fn selection_rejects_provider_boundaries_that_reverse_index_order() {
+    let provider = MisorderedSelectionBoundaryProvider;
+    let source = "abcdef";
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, source, 1, 2),
+        Err(GraphemeCursorError::SelectionBoundaryOrderMismatch {
+            anchor_byte: 4,
+            anchor_index: 1,
+            focus_byte: 2,
+            focus_index: 2,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, source, 2, 1),
+        Err(GraphemeCursorError::SelectionBoundaryOrderMismatch {
+            anchor_byte: 2,
+            anchor_index: 2,
+            focus_byte: 4,
+            focus_index: 1,
+        }),
+    );
+}
+
+#[test]
+fn multi_boundary_queries_reject_impossible_byte_distance() {
+    let provider = CompressedBoundaryProvider;
+    let source = "abcdefgh";
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, source, 1, 3),
+        Err(GraphemeCursorError::BoundaryDistanceTooSmall {
+            byte_distance: 1,
+            grapheme_distance: 2,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, source, 3, 1),
+        Err(GraphemeCursorError::BoundaryDistanceTooSmall {
+            byte_distance: 1,
+            grapheme_distance: 2,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, source, 1, 2),
+        Err(GraphemeCursorError::BoundaryDistanceTooSmall {
+            byte_distance: 1,
+            grapheme_distance: 2,
+        }),
+    );
+}
+
+#[test]
+fn signed_steps_resolve_exact_grapheme_boundaries_without_clamping() {
+    let provider = UnicodeGraphemeSegmentation;
+    let source = "\u{c1}e\u{301}\u{1f469}\u{200d}\u{1f52c}Z";
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, source, 2, 1),
+        Ok(GraphemeCursorPosition {
+            byte_offset: "\u{c1}e\u{301}\u{1f469}\u{200d}\u{1f52c}".len(),
+            grapheme_index: 3,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, source, 2, -2),
+        Ok(GraphemeCursorPosition {
+            byte_offset: 0,
+            grapheme_index: 0,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, source, 4, 1),
+        Err(GraphemeCursorError::CursorStepOutOfBounds {
+            grapheme_count: 4,
+            origin_index: 4,
+            step: 1,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, source, 0, -1),
+        Err(GraphemeCursorError::CursorStepOutOfBounds {
+            grapheme_count: 4,
+            origin_index: 0,
+            step: -1,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, source, 5, 0),
+        Err(GraphemeCursorError::CursorOutOfBounds {
+            grapheme_count: 4,
+            grapheme_index: 5,
+        }),
+    );
+}
+
+#[test]
+fn signed_steps_reject_provider_boundaries_that_do_not_advance() {
+    let source = "abcdef";
+    for (origin_byte, target_byte) in [(3, 3), (4, 3)] {
+        let provider = MisorderedStepBoundaryProvider {
+            first_internal: origin_byte,
+            second_internal: target_byte,
+        };
+        assert_eq!(
+            resolve_grapheme_cursor_step(&provider, source, 1, 1),
+            Err(GraphemeCursorError::StepBoundaryOrderMismatch {
+                origin_byte,
+                origin_index: 1,
+                target_byte,
+                target_index: 2,
+            }),
+        );
+    }
+
+    let provider = MisorderedStepBoundaryProvider {
+        first_internal: 3,
+        second_internal: 2,
+    };
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, source, 2, -1),
+        Err(GraphemeCursorError::StepBoundaryOrderMismatch {
+            origin_byte: 2,
+            origin_index: 2,
+            target_byte: 3,
+            target_index: 1,
+        }),
+    );
+}
+
+#[test]
+fn zero_step_reuses_the_resolved_origin_boundary() {
+    let provider = ChangingInternalBoundaryProvider {
+        internal_calls: Cell::new(0),
+    };
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, "\u{e9}x", 1, 0),
+        Ok(GraphemeCursorPosition {
+            byte_offset: "\u{e9}".len(),
+            grapheme_index: 1,
+        }),
+    );
+    assert_eq!(provider.internal_calls.get(), 1);
+}
+
+#[test]
+fn every_required_bilingual_grapheme_steps_between_its_two_boundaries() {
+    let provider = UnicodeGraphemeSegmentation;
+    for required in REQUIRED_TEXT_GRAPHEMES {
+        assert_eq!(
+            resolve_grapheme_cursor_step(&provider, required.grapheme, 0, 1),
+            Ok(GraphemeCursorPosition {
+                byte_offset: required.grapheme.len(),
+                grapheme_index: 1,
+            }),
+            "forward step for {:?}",
+            required.grapheme,
+        );
+        assert_eq!(
+            resolve_grapheme_cursor_step(&provider, required.grapheme, 1, -1),
+            Ok(GraphemeCursorPosition {
+                byte_offset: 0,
+                grapheme_index: 0,
+            }),
+            "backward step for {:?}",
+            required.grapheme,
+        );
+    }
+}
+#[test]
 fn compact_anchored_boundary_maps_match_independent_cursor_oracle() {
     let source = "abcd";
-    let mut maps = 0_usize;
-    let mut position_cases = 0_usize;
-    let mut selection_cases = 0_usize;
-    let mut step_cases = 0_usize;
+    let mut maps = 0usize;
+    let mut position_cases = 0usize;
+    let mut selection_cases = 0usize;
+    let mut step_cases = 0usize;
     for first in 0..=4 {
         for second in 0..=4 {
             for third in 0..=4 {
@@ -971,16 +993,13 @@ fn compact_anchored_boundary_maps_match_independent_cursor_oracle() {
                                 focus,
                             ),
                             compact_expected_selection(internal, anchor, focus),
-                            "selection map={:?} anchor={} focus={}",
-                            internal,
-                            anchor,
-                            focus,
+                            "map={internal:?} anchor={anchor} focus={focus}",
                         );
                         selection_cases += 1;
                     }
                 }
                 for origin in 0..=4 {
-                    for step in -5_isize..=5 {
+                    for step in -5isize..=5 {
                         assert_eq!(
                             resolve_grapheme_cursor_step(
                                 &provider,

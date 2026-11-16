@@ -57,7 +57,7 @@ fn accepted_material_layer_families_are_explicit() {
 #[test]
 fn stochastic_layer_replay_key_retains_all_accepted_inputs() {
     let key = StochasticLayerReplayKey {
-        document_seed: 17_u64,
+        document_seed: 17u64,
         material_preset: "ballpoint-a",
         profile_identity: "writer-profile-4",
         semantic_identity: "span-19",
@@ -105,27 +105,39 @@ fn plan_preserves_blend_order_and_physical_bounds_without_evaluation() {
                 randomness: MaterialLayerRandomness::Stochastic(key),
             },
         ],
-        physical_bounds: (210_000_u64, 297_000_u64),
+        physical_bounds: (210_000u64, 297_000u64),
     };
-    assert_eq!(plan.layers[0].kind, MaterialLayerKind::BaseInk);
-    assert_eq!(plan.layers[1].kind, MaterialLayerKind::EdgeVariation);
+    assert_eq!(plan.layers.first().map(|layer| layer.kind),
+        Some(MaterialLayerKind::BaseInk));
+    assert_eq!(plan.layers.get(1).map(|layer| layer.kind),
+        Some(MaterialLayerKind::EdgeVariation));
     assert_eq!(plan.physical_bounds, (210_000, 297_000));
 }
 
 fn next_index_permutation(values: &mut [usize]) -> bool {
-    let Some(pivot) = (0..values.len().saturating_sub(1))
-        .rev()
-        .find(|&index| values[index] < values[index + 1])
-    else {
+    let Some((pivot, _)) = values.windows(2).enumerate().rev()
+        .find(|(_, pair)| {
+        pair.first().zip(pair.get(1))
+            .is_some_and(|(left, right)| left < right)
+    }) else {
         return false;
     };
-    let successor = (pivot + 1..values.len())
-        .rev()
-        .find(|&index| values[pivot] < values[index])
-        .expect("nonterminal permutation has a successor");
+    let Some(after_pivot) = pivot.checked_add(1) else {
+        return false;
+    };
+    let Some(&pivot_value) = values.get(pivot) else {
+        return false;
+    };
+    let Some(successor) = (after_pivot..values.len()).rev().find(|&index| {
+        values.get(index).is_some_and(|&value| pivot_value < value)
+    }) else {
+        return false;
+    };
     values.swap(pivot, successor);
-    values[pivot + 1..].reverse();
-    true
+    values.get_mut(after_pivot..).is_some_and(|suffix| {
+        suffix.reverse();
+        true
+    })
 }
 
 #[test]
@@ -140,18 +152,22 @@ fn every_layer_order_and_randomness_mask_preserves_exact_authority() {
         MaterialLayerKind::Highlight,
         MaterialLayerKind::PaperInteraction,
     ];
-    let mut order = [0_usize, 1, 2, 3, 4, 5];
-    let mut cases = 0_u32;
-    let mut permutations = 0_u16;
+    let mut order = [0usize, 1, 2, 3, 4, 5];
+    let mut cases = 0u32;
+    let mut permutations = 0u16;
     loop {
         permutations = permutations.saturating_add(1);
-        for stochastic_mask in 0_u8..64 {
+        for stochastic_mask in 0u8..64 {
             let layers = order
                 .iter()
                 .map(|&source_index| {
-                    let source = source_index as u16;
+                    let source = u16::try_from(source_index)
+                        .unwrap_or(u16::MAX);
+                    assert_eq!(usize::from(source), source_index);
+                    let kind = kinds.get(source_index).copied();
+                    assert!(kind.is_some(), "layer kind absent");
                     let randomness = if stochastic_mask
-                        & (1_u8 << source_index)
+                        & (1u8 << source_index)
                         == 0
                     {
                         MaterialLayerRandomness::Deterministic
@@ -166,35 +182,39 @@ fn every_layer_order_and_randomness_mask_preserves_exact_authority() {
                     Layer {
                         clip_geometry: 5_000 + source,
                         inputs: 6_000 + source,
-                        kind: kinds[source_index],
+                        kind: kind.unwrap_or(MaterialLayerKind::BaseInk),
                         randomness,
                     }
                 })
                 .collect::<Vec<_>>();
             let plan = MaterialLayerPlan {
                 layers,
-                physical_bounds: (210_000_u32, 297_000_u32),
+                physical_bounds: (210_000u32, 297_000u32),
             };
             assert_eq!(plan.physical_bounds, (210_000, 297_000));
+            assert_eq!(plan.layers.len(), order.len());
             for (position, &source_index) in order.iter().enumerate() {
-                let source = source_index as u16;
-                let layer = &plan.layers[position];
+                let source = u16::try_from(source_index).unwrap_or(u16::MAX);
+                assert_eq!(usize::from(source), source_index);
+                let Some(layer) = plan.layers.get(position) else {
+                    continue;
+                };
                 assert_eq!(
-                    layer.kind,
-                    kinds[source_index],
+                    Some(layer.kind),
+                    kinds.get(source_index).copied(),
                     "kind order {order:?} mask {stochastic_mask:#08b}",
                 );
                 assert_eq!(layer.clip_geometry, 5_000 + source);
                 assert_eq!(layer.inputs, 6_000 + source);
                 match &layer.randomness {
                     MaterialLayerRandomness::Deterministic => assert_eq!(
-                        stochastic_mask & (1_u8 << source_index),
+                        stochastic_mask & (1u8 << source_index),
                         0,
                         "deterministic source {source_index}",
                     ),
                     MaterialLayerRandomness::Stochastic(key) => {
                         assert_ne!(
-                            stochastic_mask & (1_u8 << source_index),
+                            stochastic_mask & (1u8 << source_index),
                             0,
                             "stochastic source {source_index}",
                         );
