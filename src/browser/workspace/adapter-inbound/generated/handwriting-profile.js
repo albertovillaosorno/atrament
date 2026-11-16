@@ -456,45 +456,43 @@ export function createHandwritingProfileEditor(context) {
             ? MAX_CATALOG_BYTES : MAX_JSON_BYTES);
         return text;
     }
+    // Explicit overrides copy the currently displayed global proposal,
+    // including unsaved field edits. Never snapshot stale saved statistics or
+    // coerce a malformed numeric spelling into a different integer.
+    function pendingParameter(parameter) {
+        const next = { ...parameter };
+        const draft = drafts.get(parameter);
+        for (const field of FIELDS) {
+            const raw = draft?.[field];
+            if (raw === undefined)
+                continue;
+            const value = Number(raw);
+            const dim = dimensions.find((d) => d.key === parameter.dimension);
+            const lower = field === "standard_deviation"
+                ? 0 : dim?.minimum ?? 0;
+            const upper = field === "standard_deviation"
+                ? (dim?.maximum ?? 0) - (dim?.minimum ?? 0)
+                : dim?.maximum ?? 0;
+            if (!/^-?[0-9]+$/.test(raw)
+                || !Number.isSafeInteger(value)
+                || value < lower || value > upper) {
+                throw new Error("Fix out-of-range statistical fields");
+            }
+            next[field] = value;
+        }
+        return next;
+    }
     function candidate() {
         if (profile === null) {
             throw new Error("Missing native handwriting profile");
         }
-        const seedValue = unsigned64(seed.value);
-        const mapParameters = (parameters) => (parameters.map((parameter) => {
-            const next = { ...parameter };
-            const draft = drafts.get(parameter);
-            for (const field of FIELDS) {
-                const raw = draft?.[field];
-                if (raw !== undefined) {
-                    const value = Number(raw);
-                    const key = parameter.dimension;
-                    const dim = dimensions.find((d) => d.key === key);
-                    const lower = field === "standard_deviation"
-                        ? 0 : dim?.minimum ?? 0;
-                    const upper = field === "standard_deviation"
-                        ? (dim?.maximum ?? 0) - (dim?.minimum ?? 0)
-                        : dim?.maximum ?? 0;
-                    // The numeric input may expose exponent or signed-plus
-                    // spellings. Never coerce them into different integers
-                    // before asking Rust to validate the proposal.
-                    if (!/^-?[0-9]+$/.test(raw)
-                        || !Number.isSafeInteger(value)
-                        || value < lower || value > upper) {
-                        throw new Error("Fix out-of-range statistical fields");
-                    }
-                    next[field] = value;
-                }
-            }
-            return next;
-        }));
         return {
             ...profile,
-            seed: seedValue,
-            globals: mapParameters(profile.globals),
+            seed: unsigned64(seed.value),
+            globals: profile.globals.map(pendingParameter),
             glyphs: profile.glyphs.map((glyph) => ({
                 grapheme: glyph.grapheme,
-                parameters: mapParameters(glyph.parameters),
+                parameters: glyph.parameters.map(pendingParameter),
             })),
         };
     }
@@ -681,7 +679,16 @@ export function createHandwritingProfileEditor(context) {
         const inherited = globalParameter(dimensionSelect.value);
         if (inherited === undefined)
             return;
-        profile.glyphs.push({ grapheme, parameters: [{ ...inherited }] });
+        let initial;
+        try {
+            initial = pendingParameter(inherited);
+        }
+        catch {
+            status.textContent = "Fix invalid global statistics before "
+                + "creating an override.";
+            return;
+        }
+        profile.glyphs.push({ grapheme, parameters: [initial] });
         selectedGlyph = grapheme;
         newGlyph.value = "";
         refreshGlyphOptions();
@@ -707,7 +714,16 @@ export function createHandwritingProfileEditor(context) {
             || selectedParameter()) {
             return;
         }
-        glyph.parameters.push({ ...inherited });
+        let initial;
+        try {
+            initial = pendingParameter(inherited);
+        }
+        catch {
+            status.textContent = "Fix invalid global statistics before "
+                + "creating an override.";
+            return;
+        }
+        glyph.parameters.push(initial);
         display();
         status.textContent = "Unsaved glyph dimension override.";
     });

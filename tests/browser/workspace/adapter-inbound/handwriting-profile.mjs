@@ -486,6 +486,79 @@ test("handwriting retains exact NFD glyph edits", async () => {
     }
 });
 
+test("new glyphs and overrides copy unsaved native global values",
+    async () => {
+    const b = mountBackend();
+    try {
+        await b.editor.start("private-session-credential");
+        edit(b.elements, "handwriting-dimension", "width", "change");
+        edit(b.elements, "handwriting-minimum", "1900");
+        edit(b.elements, "handwriting-maximum", "2600");
+        edit(b.elements, "handwriting-mean", "2250");
+        edit(b.elements, "handwriting-median", "2250");
+        edit(b.elements, "handwriting-standard_deviation", "100");
+        edit(b.elements, "handwriting-scope", "glyph", "change");
+        edit(b.elements, "handwriting-new-glyph", "ñ");
+        b.elements.get("handwriting-add-glyph").dispatch("click");
+        assert.equal(b.elements.get("handwriting-mean").value, "2250",
+            "the new explicit width override should clone pending globals");
+        edit(b.elements, "handwriting-scope", "global", "change");
+        edit(b.elements, "handwriting-dimension", "height", "change");
+        edit(b.elements, "handwriting-minimum", "2900");
+        edit(b.elements, "handwriting-maximum", "3500");
+        edit(b.elements, "handwriting-mean", "3200");
+        edit(b.elements, "handwriting-median", "3200");
+        edit(b.elements, "handwriting-standard_deviation", "100");
+        edit(b.elements, "handwriting-scope", "glyph", "change");
+        b.elements.get("handwriting-add-override").dispatch("click");
+        assert.equal(b.elements.get("handwriting-mean").value, "3200",
+            "an explicit dimension override must clone pending globals");
+        b.elements.get("handwriting-save").dispatch("click");
+        await tick();
+        assert.equal(b.links.length, 1);
+        const saved = JSON.parse(b.requests.at(-1).body);
+        const glyph = saved.glyphs.find((item) => item.grapheme === "ñ");
+        assert.equal(glyph.parameters.find((p) =>
+            p.dimension === "width").mean, 2250);
+        assert.equal(glyph.parameters.find((p) =>
+            p.dimension === "height").mean, 3200);
+    } finally {
+        b.restore();
+    }
+});
+
+test("invalid pending global values cannot create glyph overrides",
+    async () => {
+    const b = mountBackend();
+    try {
+        await b.editor.start("private-session-credential");
+        edit(b.elements, "handwriting-dimension", "height", "change");
+        edit(b.elements, "handwriting-mean", "3e3");
+        edit(b.elements, "handwriting-scope", "glyph", "change");
+        edit(b.elements, "handwriting-new-glyph", "ñ");
+        b.elements.get("handwriting-add-glyph").dispatch("click");
+        assert.equal(b.elements.get("handwriting-glyph").children.length, 0);
+        assert.match(b.elements.get("handwriting-status").textContent,
+            /invalid|out.of.range/i);
+        edit(b.elements, "handwriting-scope", "global", "change");
+        edit(b.elements, "handwriting-mean", "3000");
+        edit(b.elements, "handwriting-scope", "glyph", "change");
+        b.elements.get("handwriting-add-glyph").dispatch("click");
+        assert.equal(b.elements.get("handwriting-glyph").children.length, 1);
+        edit(b.elements, "handwriting-scope", "global", "change");
+        edit(b.elements, "handwriting-dimension", "width", "change");
+        edit(b.elements, "handwriting-mean", "1e3");
+        edit(b.elements, "handwriting-scope", "glyph", "change");
+        b.elements.get("handwriting-add-override").dispatch("click");
+        assert.equal(b.elements.get("handwriting-mean").disabled, true,
+            "invalid new override must not enter the glyph draft");
+        assert.equal(b.requests.length, 2,
+            "refused edits must not query the backend or save files");
+    } finally {
+        b.restore();
+    }
+});
+
 test("handwriting editor rejects unsafe input and loads JSON", async () => {
     let rejects = true;
     const b = mountBackend({
