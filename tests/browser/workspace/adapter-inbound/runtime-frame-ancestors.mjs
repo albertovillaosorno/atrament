@@ -13423,7 +13423,10 @@ test(
                 })()`,
                 resultOwnership: "none",
                 target: { context: tab.context },
-            }, FIREFOX_BIDI_READY_TIMEOUT_MS);
+            // Generating and serializing hundreds of complete authored
+            // glyph paths is not a browser startup/readiness probe. Allow
+            // the existing bounded per-case budget for this bulk action.
+            }, FIREFOX_CASE_TIMEOUT_MS);
             assert.equal(response.type, "success", JSON.stringify(response));
             assert.equal(response.result.type, "string");
             const actual = JSON.parse(response.result.value);
