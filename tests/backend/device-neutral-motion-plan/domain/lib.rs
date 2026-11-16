@@ -45,37 +45,43 @@ use atrament_device_neutral_motion_plan::{
 type Segment = MotionSegment<u16, &'static str, u16, &'static str, u16>;
 type Operation = MotionPlanOperation<&'static str, &'static str, Segment>;
 
+const fn segment_for_operation(operation: &Operation) -> Option<&Segment> {
+    match operation {
+        MotionPlanOperation::Segment(value) => Some(value),
+        MotionPlanOperation::Checkpoint(_)
+        | MotionPlanOperation::Pause(_) => None,
+    }
+}
+
 #[test]
 fn ordered_motion_retains_contact_geometry_dynamics_and_semantic_origin() {
     let operations: [Operation; 2] = [
         MotionPlanOperation::Segment(MotionSegment {
-            acceleration: 40_u16,
+            acceleration: 40u16,
             contact_state: MotionContactState::PenUp,
             geometry: "move-to-title",
             pressure: None,
             semantic_origin: "title-17",
-            speed: 120_u16,
+            speed: 120u16,
         }),
         MotionPlanOperation::Segment(MotionSegment {
-            acceleration: 25_u16,
+            acceleration: 25u16,
             contact_state: MotionContactState::PenDown,
             geometry: "title-stroke-1",
-            pressure: Some(640_u16),
+            pressure: Some(640u16),
             semantic_origin: "title-17",
-            speed: 70_u16,
+            speed: 70u16,
         }),
     ];
-    let MotionPlanOperation::Segment(first) = &operations[0] else {
-        panic!("first operation must stay a segment");
-    };
-    let MotionPlanOperation::Segment(second) = &operations[1] else {
-        panic!("second operation must stay a segment");
-    };
-    assert_eq!(first.contact_state, MotionContactState::PenUp);
-    assert_eq!(second.contact_state, MotionContactState::PenDown);
-    assert_eq!(second.geometry, "title-stroke-1");
-    assert_eq!(second.pressure, Some(640));
-    assert_eq!(second.semantic_origin, "title-17");
+    let first = operations.first().and_then(segment_for_operation);
+    let second = operations.get(1).and_then(segment_for_operation);
+    assert_eq!(first.map(|value| value.contact_state),
+        Some(MotionContactState::PenUp));
+    assert_eq!(second.map(|value| value.contact_state),
+        Some(MotionContactState::PenDown));
+    assert_eq!(second.map(|value| value.geometry), Some("title-stroke-1"));
+    assert_eq!(second.map(|value| value.pressure), Some(Some(640)));
+    assert_eq!(second.map(|value| value.semantic_origin), Some("title-17"));
 }
 
 #[test]
@@ -136,7 +142,7 @@ fn plan_retains_revision_capability_pen_bounds_identity_and_duration() {
             capability_profile: "single-pen-live-v1",
             pen_identity: "calibrated-pen-blue",
         },
-        estimated_duration: Some(93_u32),
+        estimated_duration: Some(93u32),
         operations: Vec::<Operation>::new(),
         plan_identity: "plan-identity-8",
         revision_identity: "revision-22",
