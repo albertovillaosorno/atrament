@@ -109,6 +109,9 @@ export async function readBoundedPaperExport(
                 }
                 continue;
             }
+            // Only consecutive empty reads signal a stalled stream. A
+            // progressing response can contain intermittent empty chunks.
+            emptyChunks = 0;
             received += value.byteLength;
             if (received > MAX_PAPER_EXPORT_BYTES) {
                 throw new Error("Native paper export exceeds byte limit");

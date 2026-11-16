@@ -328,6 +328,33 @@ test("paper export cancels bad announced length before reading bytes", async () 
     assert.equal(pulls, 0, "declared overlong body is not consumed");
 });
 
+test("paper export allows intermittent empty chunks after real progress", async () => {
+    let cancelled = false;
+    const bytes = Uint8Array.from({ length: 9 }, (_, index) => index + 1);
+    let step = 0;
+    const reply = new Response(new ReadableStream({
+        pull(stream) {
+            if (step === bytes.length * 9) {
+                stream.close();
+                return;
+            }
+            if (step % 9 === 8) {
+                stream.enqueue(bytes.subarray(Math.floor(step / 9),
+                    Math.floor(step / 9) + 1));
+            } else {
+                stream.enqueue(new Uint8Array());
+            }
+            step += 1;
+        },
+        cancel() { cancelled = true; },
+    }), { headers: { "Content-Length": String(bytes.length) } });
+    const result = await readBoundedPaperExport(reply, "image/png");
+    assert.deepEqual(new Uint8Array(await result.arrayBuffer()), bytes);
+    assert.equal(cancelled, false);
+    assert.equal(step, bytes.length * 9,
+        "empty chunks across successful reads cannot exhaust a stall budget");
+});
+
 test("paper export refuses infinite empty chunks within a finite budget", async () => {
     let cancelled = false;
     let pulls = 0;
