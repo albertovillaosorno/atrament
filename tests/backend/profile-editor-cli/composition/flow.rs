@@ -8505,7 +8505,7 @@ fn numeric_joining_is_contextual_and_never_ties_sentence_punctuation()
         ("+123", vec![0, 1, 2]),
         ("-12.3", vec![0, 1, 2, 3]),
         ("−12", vec![0, 1]),
-        ("a-12", vec![]),
+        ("a-12", vec![2]),
         ("(−12", vec![1, 2]),
         ("a=-12", vec![1, 2, 3]),
         ("$-123", vec![1, 2, 3]),
@@ -8739,8 +8739,8 @@ fn numeric_measurement_suffixes_keep_the_complete_value_when_it_fits()
         ("12°", &[0]),
         ("12.5%", &[0, 1, 2]),
         ("12e3°C", &[0, 1, 2]),
-        ("12x", &[]),
-        ("123C", &[]),
+        ("12x", &[0]),
+        ("123C", &[0, 1]),
         ("12%abc", &[0]),
     ] {
         let joined = super::numeric_separator_joins(&glyphs(source));
@@ -8975,8 +8975,8 @@ fn superscript_numeric_powers_keep_exact_measured_graphemes()
         (concat!("10\u{2070}\u{b9}\u{b2}\u{b3}\u{2074}",
             "\u{2075}\u{2076}\u{2077}\u{2078}\u{2079}"),
             &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-        ("10\u{207b}", &[]),
-        ("10\u{207a}x", &[]),
+        ("10\u{207b}", &[0]),
+        ("10\u{207a}x", &[0]),
         ("a10\u{207b}\u{b3}", &[1, 2, 3]),
         ("10\u{207b}\u{b3}x", &[0, 1, 2]),
         ("x\u{207b}\u{b3}", &[0, 1]),
@@ -9119,7 +9119,7 @@ fn authored_letter_powers_and_subscripts_keep_measured_bases()
         ("H\u{2082}O", &[0]),
         ("x\u{2081}\u{2082}", &[0, 1]),
         ("N\u{208b}\u{2082}", &[0, 1]),
-        ("10\u{2082}", &[1]),
+        ("10\u{2082}", &[0, 1]),
         ("\u{3b1}\u{207a}\u{b3}", &[0, 1]),
         ("n\u{303}\u{2081}", &[0]),
         ("x\u{b2}\u{2081}", &[0, 1]),
@@ -9315,20 +9315,21 @@ fn authored_multidigit_bases_keep_complete_parenthesized_scripts()
             return Err(format!("{source:?}: numeric base split from script"));
         }
     }
-    // Bare Unicode numeric subscripts still attach only to the final
-    // base digit; complete parenthesized groups admit the whole base.
+    // Bare Unicode numeric subscripts attach to the final digit; the
+    // preceding integer digits independently form a fitting token.
     let bare = super::measured_word("10\u{2082}", None)?.0;
-    if super::numeric_separator_joins(&bare) != [false, true] {
-        return Err("bare numeric subscript acquired an extra tie".into());
+    if super::numeric_separator_joins(&bare) != [true, true] {
+        return Err("bare numeric subscript lost its base".into());
     }
     for source in [
         "123^(2", "123\u{207d}\u{b2}",
         "123\u{208d}\u{2082}",
     ] {
         let glyphs = super::measured_word(source, None)?.0;
-        if super::numeric_separator_joins(&glyphs)
-            .iter().any(|joined| *joined) {
-            return Err(format!("{source:?}: incomplete script tied digits"));
+        let joins = super::numeric_separator_joins(&glyphs);
+        if !joins[..2].iter().all(|joined| *joined)
+            || joins[2..].iter().any(|joined| *joined) {
+            return Err(format!("{source:?}: incomplete script tied to base"));
         }
     }
     // The longest admitted ASCII source is still scanned linearly.
@@ -9340,8 +9341,9 @@ fn authored_multidigit_bases_keep_complete_parenthesized_scripts()
     }
     let incomplete = format!("{}^(2", "1".repeat(4_092));
     let incomplete_glyphs = super::measured_word(&incomplete, None)?.0;
-    if super::numeric_separator_joins(&incomplete_glyphs)
-        .iter().any(|joined| *joined) {
+    let joins = super::numeric_separator_joins(&incomplete_glyphs);
+    if !joins[..4_091].iter().all(|joined| *joined)
+        || joins[4_091..].iter().any(|joined| *joined) {
         return Err("full-size incomplete script unexpectedly bound".into());
     }
 
@@ -9456,6 +9458,46 @@ fn scientific_multiplication_powers_bind_complete_authored_notation()
 }
 
 #[test]
+fn fitting_bare_integer_ink_moves_intact_before_wrapping()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 29_000, height: 72_000,
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        for (source, expected) in [
+            ("abc12345", &["abc", "12345"][..]),
+            ("abc12345x", &["abc", "12345x"]),
+            ("abcd123C", &["abcd", "123C"]),
+        ] {
+            let (rows, ornaments, pages) = super::layout_flow_with_region(
+                &FlowSource::new(format, source)?,
+                &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            let texts = rows.iter().map(|row| row.text.as_str())
+                .collect::<Vec<_>>();
+            assert_eq!(pages, 1);
+            assert!(ornaments.is_empty());
+            assert_eq!(texts, expected, "{source} {format:?}");
+            assert_eq!(texts.concat(), source);
+        }
+        let narrow = super::FlowRegion {
+            width: 9_000, height: 80_000, ..region
+        };
+        let (rows, _, _) = super::layout_flow_with_region(
+            &FlowSource::new(format, "12345")?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(), Some(narrow),
+        )?;
+        assert_eq!(rows.iter().map(|row| row.text.as_str())
+            .collect::<Vec<_>>(), ["1", "2", "3", "4", "5"]);
+    }
+    Ok(())
+}
+
+#[test]
 fn bounded_numeric_join_scan_handles_full_size_number_once()
 -> Result<(), String> {
     // The 4,096-byte source cap permits a single long numeric word.
@@ -9477,10 +9519,11 @@ fn bounded_numeric_join_scan_handles_full_size_number_once()
     glyphs[0] = ("1", 4_000, 4_000);
     glyphs[2_049] = (".", 4_000, 4_000);
     let joins = super::numeric_separator_joins(&glyphs);
-    assert!(joins[..2_047].iter().all(|joined| !*joined));
+    assert!(joins[..2_047].iter().all(|joined| *joined));
     assert!(!joins[2_047]);
     assert!(!joins[2_048]);
     assert!(!joins[2_049]);
+    assert!(joins[2_050..].iter().all(|joined| *joined));
     Ok(())
 }
 

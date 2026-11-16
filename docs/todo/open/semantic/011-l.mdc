@@ -5301,3 +5301,18 @@ previous valid output. The grouping is advisory and synthesizes no glyph.
 
 This only improves CLI nominal line breaking. It does not implement parsed
 mathematics, saved notebook semantic content or complete notebook Export.
+
+## Complete bare-integer row grouping (partial) — 2026-11-15
+
+The export-only Rust flow compiler now joins adjacent ASCII digits in an
+otherwise bare integer, even inside a longer word. When all the measured
+number ink fits the next row, `abc12345` no longer splits its digits across
+physical lines. In a narrower rectangle the existing single-grapheme
+fallback retains the exact authored text rather than refusing it.
+
+All 153 focused Rust flow tests pass, including numeric-script context and
+physical-width regressions for plain-text and Markdown input. A separate
+native-process test proves PDF and transparent PNG bytes match explicitly
+placed rows and that an omitted digit stroke cannot overwrite valid output.
+This is advisory CLI wrapping, not parsed numeric semantics, glyph creation,
+or a completed saved-notebook Export journey.

@@ -2349,9 +2349,9 @@ fn scientific_multiplier_end(
     Some(digits)
 }
 
-// A bounded ASCII number (including decimal and thousands separators,
-// clock colons, digit fractions/dates and numeric ranges) is one advisory
-// ink cluster when it fits. Numeric comparison prefixes also bind the
+// A bounded ASCII number (including bare integers, decimal and thousands
+// separators, clock colons, digit fractions/dates and numeric ranges) is one
+// advisory ink cluster when it fits. Numeric comparison prefixes also bind the
 // following number, including leading decimals and complete exponents.
 // Authored numeric caret and Unicode superscript powers also bind a base.
 // Only separators surrounded by ASCII digits join a numeric run;
@@ -2422,8 +2422,12 @@ fn numeric_separator_joins(glyphs: &[MeasuredGrapheme<'_>]) -> Vec<bool> {
             .is_some_and(|item| ascii_digit(item.0)) {
             cursor = cursor.saturating_add(1);
         }
+        // Even a bare multi-digit integer should move as one measured
+        // token when it fits. A shorter real region still allows exact
+        // single-grapheme fallback instead of refusing the number.
         let mut has_separator = comparison_start.is_some()
-            || unary_sign || leading_decimal;
+            || unary_sign || leading_decimal
+            || cursor.saturating_sub(start) > 1;
         while glyphs.get(cursor).is_some_and(|item| {
             matches!(item.0, "." | "," | ":" | "/" | "⁄"
                 | "-" | "−" | "–")
